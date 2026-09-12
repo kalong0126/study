@@ -1,0 +1,129 @@
+# ============================================================================
+# 二年级快乐学习台 · 后端配置
+# ----------------------------------------------------------------------------
+# 说明：
+#   1. 带 ${XXX} 的值会从环境变量注入，便于密钥不进 git。
+#   2. 改完配置需要重启服务（npm run dev 会自动重启）。
+#   3. 密钥只会出现在后端日志的脱敏位置，永远不会下发给前端。
+# ============================================================================
+
+server:
+  # 浏览器访问端口。可用环境变量 APP_PORT 覆盖（.env 里改就行）
+  port: ${APP_PORT:-8788}
+  host: 0.0.0.0
+  # 允许的前端来源。留空数组 = 允许所有（家庭内网用）。
+  # 想收紧就填，例如 ["http://192.168.1.10:8080"]
+  corsOrigins: []
+  auth:
+    # 内网部署默认关闭。将来若要暴露公网，改成 true 并设置两个 PIN。
+    enabled: false
+    childPin: "1234"
+    parentPin: "8888"
+    sessionDays: 30
+
+# ---------------------------------------------------------------------------
+# 数据库
+# ---------------------------------------------------------------------------
+db:
+  # sqlite：单文件、零运维，开箱即用（家庭内网推荐）
+  # mysql ：需要先起 MySQL，见 deploy/docker-compose.yml
+  # 也可用环境变量覆盖：DB_DRIVER / DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
+  driver: ${DB_DRIVER:-sqlite}
+
+  sqlite:
+    file: ./data/grade2.db
+
+  mysql:
+    host: ${DB_HOST:-127.0.0.1}
+    port: ${DB_PORT:-3306}
+    database: ${DB_NAME:-grade2}
+    user: ${DB_USER:-grade2}
+    password: ${DB_PASSWORD}
+    connectionLimit: 10
+
+# ---------------------------------------------------------------------------
+# 大模型（OpenAI 兼容接口）
+# ---------------------------------------------------------------------------
+# 三个用途，各自可以指定不同的模型，甚至来自不同厂商：
+#   story   → 生成童话（纯文本模型即可，越便宜越好）
+#   mark    → 手写判卷（**必须支持视觉/看图**，纯文本模型会直接失败）
+#   suggest → 组词候选建议（纯文本）
+#
+# 回落规则：某用途的 *BaseUrl / *ApiKey 留空 → 自动用下面的全局 baseUrl / apiKey。
+# 所以「同一家厂商换模型」只需改模型名；「不同厂商各用各的 key」才需要单独配。
+#
+# 对应的环境变量（写在 .env 里更方便，不用改这个文件）：
+#   LLM_BASE_URL / LLM_API_KEY
+#   LLM_STORY_MODEL / LLM_STORY_BASE_URL / LLM_STORY_API_KEY
+#   LLM_MARK_MODEL  / LLM_MARK_BASE_URL  / LLM_MARK_API_KEY
+#   LLM_SUGGEST_MODEL / LLM_SUGGEST_BASE_URL / LLM_SUGGEST_API_KEY
+# ---------------------------------------------------------------------------
+llm:
+  # —— 全局默认 provider：没单独配的用途都走它 ——
+  baseUrl: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+  apiKey: ${LLM_API_KEY}
+
+  # —— 各用途的模型名 ——
+  storyModel: ${LLM_STORY_MODEL:-deepseek-chat}
+  # 可选视觉模型：qwen-vl-max / glm-4v-plus / gpt-4o / doubao-1.5-vision-pro
+  markModel: ${LLM_MARK_MODEL:-qwen-vl-max}
+  suggestModel: ${LLM_SUGGEST_MODEL:-deepseek-chat}
+
+  # —— 各用途可选的独立 provider（留空 = 回落到全局）——
+  storyBaseUrl: ${LLM_STORY_BASE_URL:-}
+  storyApiKey: ${LLM_STORY_API_KEY:-}
+  markBaseUrl: ${LLM_MARK_BASE_URL:-}
+  markApiKey: ${LLM_MARK_API_KEY:-}
+  suggestBaseUrl: ${LLM_SUGGEST_BASE_URL:-}
+  suggestApiKey: ${LLM_SUGGEST_API_KEY:-}
+
+  timeoutMs:
+    story: 60000
+    mark: 90000
+    suggest: 45000
+  retries: 1
+  temperature:
+    story: 0.9
+    mark: 0
+    suggest: 0.5
+
+# ---------------------------------------------------------------------------
+# 语音合成
+# ---------------------------------------------------------------------------
+tts:
+  # edge = 微软 Edge 朗读接口（免费）。抽象层已留好，将来可加 aliyun / tencent / local
+  provider: edge
+  # 童声候选：zh-CN-XiaoyiNeural(女童音) / zh-CN-YunxiNeural(男童音) / zh-CN-XiaoxiaoNeural
+  voice: zh-CN-XiaoyiNeural
+  # 小朋友听，语速放慢一点
+  rate: "-12%"
+  volume: "+0%"
+  pitch: "+0Hz"
+  cacheDir: ./data/tts
+  cacheMaxMB: 512
+  # 单次合成的文本长度上限（超过会截断，防止有人塞长文）
+  maxTextLen: 300
+
+# ---------------------------------------------------------------------------
+# 日志
+# ---------------------------------------------------------------------------
+logging:
+  level: info
+  dir: ./logs
+  keepDays: 14
+  # 这些字段在写日志时会被替换成 [Redacted]
+  redact:
+    - apiKey
+    - password
+    - authorization
+    - key
+
+# ---------------------------------------------------------------------------
+# 备份（数据搬进数据库后，备份是必需的）
+# ---------------------------------------------------------------------------
+backup:
+  enabled: true
+  # 每天凌晨 3 点
+  cron: "0 3 * * *"
+  dir: ./data/backup
+  keepDays: 30

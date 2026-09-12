@@ -1,0 +1,3419 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#EAF6FF" />
+<title>二年级快乐学习台 · 语文 · 数学 · 童话</title>
+<!--
+  二年级上册 趣味学习工作台
+  单文件 HTML + LocalStorage 持久化，全部 CSS / JS 内联，零构建、零依赖框架。
+  唯一外部资源：拼音库 pinyin-pro（用户指定 CDN 引入），已带双源回退 + 离线降级：
+    1) https://unpkg.com/pinyin-pro@3.29.4/dist/index.js
+    2) https://cdn.jsdelivr.net/npm/pinyin-pro@3.29.4/dist/index.js
+  若两者均不可用，故事仍可阅读，只是不显示拼音注音。
+  家长配置（Base URL / API Key / 模型）仅保存在本机浏览器 LocalStorage，不上传任何服务器。
+
+  屏上听写（手写 + AI 批改）：
+    · 双层 Canvas 手写板——格线层与笔迹层分离，导出时只取笔迹层合成白底 PNG，避免田字格线干扰识别；
+    · 通过 OpenAI 兼容的多模态接口（messages.content 数组 + image_url）判卷，要求模型返回 JSON；
+    · 判卷模型在家长面板单独配置，需支持图片识别；未配置/不支持时自动降级为家长人工判定，不会卡住孩子。
+-->
+<style>
+:root{
+  --bg1:#EAF6FF; --bg2:#FFF4FA;
+  --line:#E6EEF7; --line2:#F0F5FB;
+  --ink:#37485C; --ink2:#6C8098; --ink3:#9AAABC;
+  --blue:#8ECDF5; --blue-d:#4FA3DC;
+  --green:#A8E6CF; --green-d:#3FBF8F;
+  --yellow:#FFD93D; --yellow-d:#E8A800;
+  --pink:#FFB7C5; --pink-d:#FF7FA0;
+  --purple:#C9BCFF; --purple-d:#8E7BEF;
+  --red:#FF7A7A; --red-d:#E95252;
+  --radius:20px;
+  --shadow:0 8px 24px rgba(120,160,205,.14);
+  --shadow-s:0 3px 10px rgba(120,160,205,.10);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",Roboto,sans-serif;
+  color:var(--ink); font-size:16px; line-height:1.6;
+  background:linear-gradient(165deg,var(--bg1) 0%,#F3F8FF 45%,var(--bg2) 100%);
+  background-attachment:fixed; min-height:100vh;
+  padding-bottom:92px;
+  overflow-x:hidden;
+}
+button{font-family:inherit}
+/* ---------- 顶部 ---------- */
+.topbar{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.84);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(230,238,247,.9)}
+.hd{max-width:1080px;margin:0 auto;width:100%;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:18px;letter-spacing:.5px;white-space:nowrap}
+.brand .logo{width:38px;height:38px;flex:none;border-radius:13px;background:linear-gradient(135deg,#8ECDF5,#A8E6CF);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(120,190,235,.4)}
+.brand .logo svg{width:22px;height:22px}
+.spacer{flex:1 1 auto;min-width:0}
+.stat-pill{display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#EAF7FF,#E9FBF3);border:1px solid #DCEEF9;border-radius:999px;padding:6px 14px;font-size:13.5px;font-weight:700;color:var(--blue-d);white-space:nowrap}
+.stat-pill b{font-size:16px;color:var(--blue-d)}
+.energy{display:flex;align-items:center;gap:9px;min-width:172px}
+.energy .bar{position:relative;flex:1;height:14px;border-radius:999px;background:#EDF3FA;overflow:hidden;box-shadow:inset 0 1px 3px rgba(120,160,205,.16)}
+.energy .fill{position:absolute;inset:0;width:0%;border-radius:999px;background:linear-gradient(90deg,#FFD93D,#FFB74D);transition:width .6s cubic-bezier(.3,1.4,.5,1)}
+.energy .stars{display:flex;gap:2px}
+.energy .stars svg{width:15px;height:15px}
+.icon-btn{width:44px;height:44px;flex:none;border:1px solid var(--line);background:#fff;border-radius:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink2);transition:.2s}
+.icon-btn:hover{background:#F5FAFF;color:var(--blue-d);transform:translateY(-1px)}
+.icon-btn svg{width:20px;height:20px}
+/* ---------- 导航 ---------- */
+.nav{max-width:1080px;margin:0 auto;display:flex;gap:6px;justify-content:center;padding:0 16px 10px}
+.nav button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:72px;min-height:48px;padding:7px 14px;border:none;border-radius:15px;background:transparent;color:var(--ink2);font-size:12.5px;font-weight:600;cursor:pointer;transition:.22s;position:relative}
+.nav button svg{width:22px;height:22px;transition:.22s}
+.nav button:hover{background:#F3F9FF;color:var(--blue-d)}
+.nav button.active{background:linear-gradient(135deg,#DFF1FF,#E7FBF3);color:var(--blue-d);box-shadow:var(--shadow-s)}
+.nav button.active svg{transform:translateY(-1px) scale(1.06)}
+.nav .badge{position:absolute;top:4px;right:12px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--red);color:#fff;font-size:10.5px;font-weight:800;line-height:17px;text-align:center;display:none}
+.nav .badge.on{display:block}
+/* ---------- 主体 ---------- */
+.wrap{max-width:1080px;margin:0 auto;padding:16px}
+.view{display:none;animation:fadeUp .32s ease both}
+.view.active{display:block}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.card{background:#fff;border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);border:1px solid rgba(230,238,247,.85);margin-bottom:16px}
+.card-hd{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.card-hd .ico{width:34px;height:34px;flex:none;border-radius:11px;display:flex;align-items:center;justify-content:center}
+.card-hd .ico svg{width:19px;height:19px}
+.card-hd h2{margin:0;font-size:17.5px;font-weight:800;letter-spacing:.4px}
+.card-hd .sub{font-size:12.5px;color:var(--ink3);font-weight:500}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+/* ---------- 任务列表 ---------- */
+.task{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:16px;background:#FAFCFF;border:1.5px solid var(--line2);margin-bottom:10px;cursor:pointer;transition:.2s;min-height:56px}
+.task:hover{background:#F4FAFF;border-color:#DDEDFA;transform:translateX(2px)}
+.task.pending{border-left:5px solid #FFB74D;background:#FFFCF5}
+.task.done{opacity:.72;background:#F6FDF9;border-left:5px solid var(--green-d)}
+.task .t-ico{width:38px;height:38px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid var(--line)}
+.task .t-ico svg{width:20px;height:20px}
+.task .t-main{flex:1;min-width:0}
+.task .t-name{font-weight:700;font-size:15px}
+.task .t-desc{font-size:12.5px;color:var(--ink3)}
+.task .t-chip{flex:none;font-size:12px;font-weight:800;padding:4px 11px;border-radius:999px;background:#FFF1D9;color:#C97F00}
+.task.done .t-chip{background:#E4F9EE;color:#2E9C72}
+.task .t-check{width:24px;height:24px;flex:none}
+/* ---------- 按钮 ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:0 18px;border-radius:14px;border:1.5px solid var(--line);background:#fff;color:var(--ink);font-size:15px;font-weight:700;cursor:pointer;transition:.2s}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--shadow-s)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn svg{width:18px;height:18px}
+.btn.primary{background:linear-gradient(135deg,#8ECDF5,#6FBEF0);border-color:#7CC4EF;color:#fff}
+.btn.green{background:linear-gradient(135deg,#A8E6CF,#7FDCB8);border-color:#8FE0C2;color:#166B4C}
+.btn.yellow{background:linear-gradient(135deg,#FFE066,#FFD93D);border-color:#F5CC2E;color:#8A6100}
+.btn.pink{background:linear-gradient(135deg,#FFC6D1,#FFA8BA);border-color:#FFB3C3;color:#9B2E48}
+.btn.purple{background:linear-gradient(135deg,#D5CBFF,#BCAEFF);border-color:#C9BCFF;color:#4B3A9E}
+.btn.ghost{background:#F8FBFF}
+.btn.sm{min-height:38px;padding:0 14px;font-size:13.5px;border-radius:12px}
+.btn.sm svg{width:16px;height:16px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+/* ---------- 口算 ---------- */
+.m-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.m-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:15px;background:#FAFCFF;border:1.5px solid var(--line2);transition:.2s}
+.m-row.ok{background:#F2FDF8;border-color:#BCEEDA}
+.m-row.bad{background:#FFF5F5;border-color:#FFD0D0}
+.m-no{flex:none;width:24px;height:24px;border-radius:8px;background:#EAF3FB;color:var(--ink2);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.m-q{font-size:19px;font-weight:800;letter-spacing:.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.m-in{width:78px;height:44px;flex:none;font-size:20px;font-weight:800;text-align:center;border:2px solid #DDE9F5;border-radius:12px;background:#fff;color:var(--ink);font-family:inherit;outline:none;transition:.2s;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
+.m-in:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(142,205,245,.22)}
+.m-in::-webkit-outer-spin-button,.m-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.m-in.ok{border-color:var(--green-d);background:#EDFCF5;color:#2C9C74}
+.m-in.bad{border-color:var(--red-d);background:#FFF0F0;color:#D94848}
+.m-mark{flex:none;width:26px;height:26px;display:flex;align-items:center;justify-content:center}
+.m-mark svg{width:24px;height:24px}
+.progress-line{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink2);font-weight:700}
+.progress-line .bar{flex:1;height:10px;border-radius:999px;background:#EDF3FA;overflow:hidden}
+.progress-line .fill{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#8ECDF5,#A8E6CF);transition:width .5s ease}
+/* ---------- 生字 ---------- */
+.sel{min-height:44px;padding:0 14px;border-radius:13px;border:1.5px solid var(--line);background:#fff;font-size:15px;font-family:inherit;font-weight:600;color:var(--ink);outline:none;max-width:100%;cursor:pointer}
+.sel:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(142,205,245,.2)}
+.zi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:12px;margin-top:16px}
+.zi{background:#FAFCFF;border:1.5px solid var(--line2);border-radius:18px;padding:8px;display:flex;flex-direction:column;align-items:center;gap:6px;transition:.2s}
+.zi.mastered{background:#F1FDF8;border-color:#B7EBD6}
+.zi.failed{background:#FFF6F6;border-color:#FFD5D5}
+.zi-face{width:100%;min-height:64px;border:none;border-radius:14px;background:linear-gradient(160deg,#FFFFFF,#F1F8FF);font-size:34px;font-weight:800;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.2s;font-family:"Kaiti SC","KaiTi","STKaiti",inherit;line-height:1}
+.zi-face:hover{background:linear-gradient(160deg,#EAF6FF,#E4F7EF)}
+.zi-face:active{transform:scale(.95)}
+.zi-face{position:relative}
+.zi-grid.masked .zi-face .zi-char{visibility:hidden}
+.zi-grid.masked .zi-face::after{content:"?";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#8E7BEF;font-size:.82em}
+.zi-btns{display:flex;gap:6px;width:100%}
+.zi-b{flex:1;min-height:34px;border-radius:10px;border:1.5px solid var(--line);background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink3);transition:.18s}
+.zi-b svg{width:16px;height:16px}
+.zi-b:hover{transform:translateY(-1px)}
+.zi-b.on-ok{background:#DDFAEC;border-color:#8FE0C2;color:#1E8A61}
+.zi-b.on-no{background:#FFE9E9;border-color:#FFBDBD;color:#D94848}
+.zi-stat{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--ink2);font-weight:700;margin-top:12px}
+.zi-stat .dot{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:5px}
+/* ---------- 屏上听写（手写 + AI 批改） ---------- */
+.hw-box{margin-top:16px;border:2px dashed #CFE3F7;border-radius:18px;padding:14px;background:linear-gradient(160deg,#FBFDFF,#F3FAFF)}
+.hw-hd{display:flex;align-items:center;gap:10px}
+.hw-ico{width:32px;height:32px;flex:none;border-radius:11px;background:#EAF3FF;color:var(--blue-d);display:flex;align-items:center;justify-content:center}
+.hw-ico svg{width:18px;height:18px}
+.hw-hd .t{font-weight:800;font-size:15px;color:var(--ink);display:block;line-height:1.35}
+.hw-hd .s{font-size:12.5px;color:var(--ink3);font-weight:600;display:block;line-height:1.4}
+.hw-idle{padding:14px 2px 4px;text-align:center}
+.hw-idle p{margin:0 0 13px;font-size:13.5px;color:var(--ink2);line-height:1.8;text-align:left}
+.hw-stage{display:none}
+.hw-stage.on{display:block}
+.hw-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
+.hw-idx{font-weight:800;font-size:13.5px;color:var(--blue-d);background:#E9F4FF;border-radius:999px;padding:5px 12px;white-space:nowrap}
+.hw-pin{font-size:19px;font-weight:800;color:var(--purple-d);letter-spacing:1.2px;white-space:nowrap}
+.hw-board{width:100%;max-width:400px;margin:0 auto}
+/* 边框用 inset box-shadow 绘制：不占布局，content 区为严格正方形，画布不会被拉伸 */
+.hw-sq{position:relative;width:100%;height:0;padding-bottom:100%;background:#fff;border-radius:16px;overflow:hidden;box-shadow:inset 0 0 0 2.5px #E9BFBF,0 5px 16px rgba(180,140,140,.16)}
+.hw-sq canvas{position:absolute;left:0;top:0;width:100%;height:100%;display:block}
+.hw-ink{touch-action:none;cursor:crosshair}
+.hw-tools{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.hw-tools .btn{flex:1 1 auto;justify-content:center;min-width:120px}
+.hw-box .btn[disabled]{opacity:.55;cursor:default;pointer-events:none}
+.hw-res{margin-top:12px;border-radius:14px;padding:11px 13px;font-size:13.5px;font-weight:700;line-height:1.75;display:none}
+.hw-res.on{display:block}
+.hw-res.ok{background:#EFFCF6;border:1.5px solid #A8E6CF;color:#1E8A61}
+.hw-res.no{background:#FFF4F4;border:1.5px solid #FFD0D0;color:#C94848}
+.hw-res .cm{display:block;font-weight:600;color:var(--ink2);margin-top:5px}
+.hw-res .raw{display:block;font-weight:500;font-size:12px;color:var(--ink3);margin-top:6px;word-break:break-word}
+.hw-sum{margin-top:12px;border-radius:14px;padding:12px 14px;background:linear-gradient(160deg,#FFFDF3,#F6FBFF);border:1.5px solid #F3E7C8;font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.8;display:none}
+.hw-sum.on{display:block}
+.hw-dots{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.hw-dot{width:13px;height:13px;border-radius:4px;background:#E7EEF7}
+.hw-dot.ok{background:#8FE0C2}
+.hw-dot.no{background:#FFB3B3}
+.hw-dot.cur{outline:2.5px solid var(--blue-d);outline-offset:1.5px}
+/* ---------- 故事 ---------- */
+.story-box{background:linear-gradient(160deg,#FFFDF7,#F6FBFF);border:1.5px dashed #D8E8F6;border-radius:18px;padding:20px;min-height:220px}
+.story-title{font-size:19px;font-weight:800;color:var(--purple-d);margin:0 0 12px;letter-spacing:.5px}
+.story-text{font-size:30px;line-height:2.75;letter-spacing:.05em;color:#2F4257;word-break:break-word;font-family:"Kaiti SC","KaiTi","STKaiti",inherit}
+.story-text p{margin:0 0 14px}
+.story-text ruby{ruby-position:over;ruby-align:center;margin:0 2px}
+.story-text rt{font-size:.42em;color:var(--blue-d);font-weight:700;letter-spacing:0;line-height:1.15}
+.story-text .punct{color:#8FA6BD}
+.story-empty{display:flex;flex-direction:column;align-items:center;gap:10px;padding:30px 10px;color:var(--ink3);font-size:14.5px;text-align:center}
+.story-empty svg{width:54px;height:54px;opacity:.55}
+.timer-box{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#F7FBFF;border:1.5px solid var(--line2);border-radius:16px;padding:12px 16px;margin-top:14px}
+.timer-clock{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:2px;color:var(--blue-d);min-width:120px}
+.timer-clock.run{color:var(--green-d)}
+.hist{display:flex;flex-direction:column;gap:8px;max-height:230px;overflow-y:auto}
+.hist-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:13px;background:#FAFCFF;border:1px solid var(--line2);font-size:13.5px;transition:.2s}
+.hist-item:hover{background:#F3F9FF}
+.hist-item .h-t{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-item .h-d{flex:none;font-size:11.5px;color:var(--ink3)}
+.hist-item .h-x{flex:none;width:30px;height:30px;border:none;background:transparent;border-radius:9px;color:var(--ink3);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.hist-item .h-x:hover{background:#FFECEC;color:var(--red-d)}
+.hist-item .h-x svg{width:15px;height:15px}
+/* ---------- 错题本 ---------- */
+.wb-tabs{display:flex;gap:8px;margin-bottom:14px}
+.wb-tab{flex:1;min-height:44px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font-weight:700;font-size:14.5px;color:var(--ink2);cursor:pointer;transition:.2s;display:flex;align-items:center;justify-content:center;gap:7px}
+.wb-tab.on{background:linear-gradient(135deg,#FFEFF3,#FFF6E5);border-color:#FFCFDA;color:#C4486B}
+.wb-tab .n{background:#FFE3E3;color:#D64545;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:800}
+.wb-list{display:flex;flex-direction:column;gap:10px}
+.wb-item{padding:13px 15px;border-radius:15px;background:#FFFBFC;border:1.5px solid #FFE4E9;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.wb-item .w-q{font-size:18px;font-weight:800;letter-spacing:.5px;white-space:nowrap}
+.wb-item .w-char{width:52px;height:52px;flex:none;border-radius:14px;background:#fff;border:2px solid #FFE0E6;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800;font-family:"Kaiti SC","KaiTi",inherit;cursor:pointer}
+.wb-item .w-meta{flex:1;min-width:120px}
+.wb-item .w-lab{font-size:11.5px;color:var(--ink3);font-weight:700}
+.wb-item .w-py{font-size:13.5px;color:var(--blue-d);font-weight:700}
+.wb-empty{padding:34px 12px;text-align:center;color:var(--ink3);font-size:14px}
+.wb-empty svg{width:46px;height:46px;opacity:.5;display:block;margin:0 auto 8px}
+.wb-challenge{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;margin-top:8px;padding-top:10px;border-top:1px dashed #FFD8DF}
+/* ---------- 家长面板 ---------- */
+.panel-toggle{display:flex;align-items:center;gap:11px;width:100%;min-height:52px;padding:0;border:none;background:transparent;cursor:pointer;color:var(--ink);font-family:inherit;text-align:left}
+.panel-toggle .ico{width:34px;height:34px;flex:none;border-radius:11px;background:#F0F5FF;display:flex;align-items:center;justify-content:center;color:var(--blue-d)}
+.panel-toggle .ico svg{width:18px;height:18px}
+.panel-toggle .tt{font-size:16.5px;font-weight:800}
+.panel-toggle .hint{font-size:12.5px;color:var(--ink3);display:block;font-weight:500}
+.panel-toggle .chev{margin-left:auto;transition:.28s;color:var(--ink3)}
+.panel-toggle .chev svg{width:20px;height:20px;display:block}
+.panel.open .chev{transform:rotate(180deg)}
+.panel-body{display:none;padding-top:14px;border-top:1px solid var(--line2);margin-top:12px}
+.panel.open .panel-body{display:block;animation:fadeUp .28s ease both}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:13px;font-weight:800;color:var(--ink2);margin-bottom:6px}
+.inp{width:100%;min-height:46px;padding:0 14px;border-radius:13px;border:1.5px solid var(--line);background:#fff;font-size:16px;font-family:inherit;color:var(--ink);outline:none;transition:.2s}
+.inp:focus{border-color:var(--blue);box-shadow:0 0 0 4px rgba(142,205,245,.2)}
+.pw{display:flex;gap:8px}
+.pw .inp{flex:1;min-width:0}
+.tip{font-size:12.5px;color:var(--ink3);line-height:1.7;background:#F8FBFF;border-left:3px solid var(--blue);border-radius:0 10px 10px 0;padding:9px 12px;margin:12px 0 0}
+.demo-tag{display:inline-block;font-size:10.5px;font-weight:800;color:#C97F00;background:#FFF3DA;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:middle}
+/* ---------- 运行日志 ---------- */
+.log-wrap{margin-top:14px;border:1.5px solid var(--line);border-radius:14px;background:#FBFDFF;overflow:hidden}
+.log-hd{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#F4F9FF;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.log-hd .lt{font-size:13.5px;font-weight:800;color:var(--ink2);margin-right:auto;display:flex;align-items:center;gap:7px}
+.log-hd .badge{font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;background:#E8F1FA;color:var(--blue-d)}
+.log-hd .badge.err{background:#FFECEC;color:var(--red-d)}
+.log-hd .badge.ok{background:#E7F8F0;color:var(--green-d)}
+.log-btn{min-height:36px;padding:0 12px;border-radius:10px;border:1.5px solid var(--line);background:#fff;color:var(--ink2);font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.log-btn:hover{border-color:var(--blue);color:var(--blue-d)}
+.log-list{max-height:290px;overflow-y:auto;padding:4px 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.log-list.expanded{max-height:66vh}
+.log-empty{padding:20px 14px;text-align:center;font-size:12.5px;color:var(--ink3);line-height:1.8}
+.log-row{display:flex;gap:8px;align-items:flex-start;padding:7px 12px;border-bottom:1px dashed var(--line2);font-size:12.5px;line-height:1.6;cursor:pointer}
+.log-row:last-child{border-bottom:none}
+.log-row:hover{background:#F7FBFF}
+.log-row .tm{color:var(--ink3);flex:none;font-size:11.5px;padding-top:1px}
+.log-row .dt{width:7px;height:7px;border-radius:50%;flex:none;margin-top:5px;background:#B9CBDD}
+.log-row.info .dt{background:var(--blue)}
+.log-row.ok .dt{background:var(--green-d)}
+.log-row.warn .dt{background:var(--yellow-d)}
+.log-row.err .dt{background:var(--red-d)}
+.log-row .tx{flex:1;min-width:0;color:var(--ink);word-break:break-word}
+.log-row.err .tx{color:#B23B3B}
+.log-row .dts{display:none;margin-top:5px;padding:7px 9px;background:#F4F8FC;border-radius:8px;color:var(--ink2);font-size:11.5px;line-height:1.65;white-space:pre-wrap;word-break:break-all}
+.log-row.open .dts{display:block}
+.log-diag{margin-top:10px;border-radius:12px;padding:11px 13px;font-size:12.5px;line-height:1.75;border:1.5px solid #FFD9D9;background:#FFF7F7;color:#A84040}
+.log-diag b{color:#8C2F2F}
+.log-diag .fix{margin-top:7px;padding-top:7px;border-top:1px dashed #FFD9D9;color:#4A6076}
+.log-diag .fix code{background:#fff;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:11.5px}
+/* ---------- 提示 / 特效 ---------- */
+#fxCanvas{position:fixed;inset:0;pointer-events:none;z-index:9999}
+#toast{position:fixed;left:50%;bottom:110px;transform:translate(-50%,20px);background:rgba(55,72,92,.94);color:#fff;font-size:14.5px;font-weight:600;padding:11px 20px;border-radius:14px;opacity:0;pointer-events:none;transition:.32s;z-index:10000;max-width:86vw;text-align:center}
+#toast.on{opacity:1;transform:translate(-50%,0)}
+.banner{position:fixed;inset:0;z-index:10001;display:none;align-items:center;justify-content:center;flex-direction:column;gap:8px;pointer-events:none}
+.banner.on{display:flex;animation:bannerIn .5s cubic-bezier(.2,1.5,.5,1) both}
+@keyframes bannerIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.banner .b-t{font-size:42px;font-weight:900;color:#fff;text-shadow:0 4px 0 #FFB74D,0 8px 24px rgba(255,183,77,.6);letter-spacing:3px}
+.banner .b-s{font-size:17px;font-weight:800;color:#fff;background:rgba(255,140,90,.92);padding:7px 22px;border-radius:999px}
+/* 全对满分：更大更亮的金色横幅 */
+.banner.gold .b-t{font-size:52px;color:#FFFBEA;text-shadow:0 4px 0 #E8A800,0 10px 30px rgba(232,168,0,.7),0 0 48px rgba(255,217,61,.85);letter-spacing:5px}
+.banner.gold .b-s{background:linear-gradient(135deg,#FFD93D,#FF9F45);color:#7A4600;font-size:18px}
+@media (max-width:900px){ .grid3{grid-template-columns:1fr} .grid2{grid-template-columns:1fr} }
+@media (max-width:819px){
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+  .nav{position:fixed;left:0;right:0;bottom:0;max-width:none;margin:0;padding:7px 4px calc(7px + env(safe-area-inset-bottom));background:rgba(255,255,255,.97);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);justify-content:space-around;gap:0;z-index:60;box-shadow:0 -4px 18px rgba(120,160,205,.10)}
+  .nav button{min-width:0;flex:1;padding:6px 2px;border-radius:13px}
+  .nav .badge{right:calc(50% - 24px)}
+  .hd{padding:9px 12px;gap:9px}
+  .brand{font-size:16px}
+  .brand .logo{width:33px;height:33px;border-radius:11px}
+  .energy{order:5;flex:1 1 100%;min-width:0}
+  .wrap{padding:12px}
+  .card{padding:15px;border-radius:18px}
+  /* 小朋友手小，移动端把点击区再放大一点（次要按钮也保证 ≥44px） */
+  .btn{min-height:46px}
+  .btn.sm{min-height:46px}
+  .sel,.inp{min-height:46px}
+  .icon-btn{width:46px;height:46px}
+  .m-list{grid-template-columns:1fr}
+  .story-text{font-size:24px;line-height:2.6}
+  .zi-grid{grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
+  .zi-face{font-size:29px;min-height:56px}
+  .hw-box{padding:12px;border-radius:16px}
+  .hw-board{max-width:100%}
+  .hw-tools .btn{flex:1 1 100%;min-height:48px}
+  .hw-pin{font-size:18px}
+  .timer-clock{font-size:26px;min-width:104px}
+  #toast{bottom:calc(96px + env(safe-area-inset-bottom))}
+  .banner .b-t{font-size:32px}
+  .banner.gold .b-t{font-size:36px;letter-spacing:3px}
+}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+</style>
+</head>
+<body>
+<canvas id="fxCanvas"></canvas>
+<div id="toast"></div>
+<div class="banner" id="banner"><div class="b-t">你太棒了！🎉</div><div class="b-s">今日 4 项任务全部完成</div></div>
+
+<div class="topbar">
+  <header class="hd">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z" fill="#fff"/><path d="M6 10.6V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-5.4l-6 3.2-6-3.2Z" fill="#fff" opacity=".78"/></svg>
+      </span>
+      <span>二年级快乐学习台</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="stat-pill" id="statPill">今日已完成 <b id="doneCount">0</b> / 4 项任务</div>
+    <div class="energy">
+      <span class="stars" id="engStars"></span>
+      <div class="bar"><div class="fill" id="engFill"></div></div>
+    </div>
+    <button class="icon-btn" id="btnGoPanel" title="家长控制面板" aria-label="家长控制面板">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.1"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1Z"/></svg>
+    </button>
+  </header>
+  <nav class="nav" id="nav">
+    <button data-view="home" class="active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M9.5 20v-5.5h5V20"/></svg>
+      <span>今日</span>
+    </button>
+    <button data-view="math">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 8.5h8M8 12h2.5M13.5 12H16M8 15.5h2.5M13.5 15.5H16"/></svg>
+      <span>口算</span>
+      <span class="badge" id="navMathBadge"></span>
+    </button>
+    <button data-view="chinese">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h7v13H4zM13 5.5h7v13h-7z"/><path d="M6.5 9h2M6.5 12h2M15.5 9h2M15.5 12h2"/></svg>
+      <span>语文</span>
+    </button>
+    <button data-view="story">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 3.5h5.5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5.5a2 2 0 0 0-2-2h-5.5v17H18a2 2 0 0 1 2 2z"/></svg>
+      <span>童话</span>
+    </button>
+    <button data-view="wrong">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 21 19.5H3z"/><path d="M12 10v3.6M12 16.4v.1"/></svg>
+      <span>错题本</span>
+      <span class="badge" id="navWrongBadge"></span>
+    </button>
+  </nav>
+</div>
+
+<main class="wrap">
+
+  <!-- ============ 今日 ============ -->
+  <section class="view active" id="view-home">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#FFF6E0;color:#C97F00">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v2M12 18.5v2M4.2 12h2M17.8 12h2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M17.7 6.3l-1.4 1.4M7.7 16.3l-1.4 1.4"/><circle cx="12" cy="12" r="3.4"/></svg>
+        </span>
+        <div>
+          <h2>今天要处理</h2>
+          <span class="sub" id="homeSub">还有 4 项没完成，加油！</span>
+        </div>
+      </div>
+      <div id="taskList"></div>
+      <div class="progress-line" style="margin-top:6px">
+        <span>能量值</span>
+        <div class="bar"><div class="fill" id="taskFill"></div></div>
+        <span id="taskFillTxt">0%</span>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-hd">
+          <span class="ico" style="background:#EAF3FB;color:var(--blue-d)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg>
+          </span>
+          <div><h2>快速开始</h2><span class="sub">选一个马上玩起来</span></div>
+        </div>
+        <div class="row">
+          <button class="btn primary" data-jump="math"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg>每日口算</button>
+          <button class="btn green" data-jump="chinese"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h7v13H4zM13 5.5h7v13h-7z"/></svg>听写生字</button>
+          <button class="btn purple" data-jump="story"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 3.5h5.5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5.5a2 2 0 0 0-2-2h-5.5v17H18a2 2 0 0 1 2 2z"/></svg>读童话</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-hd">
+          <span class="ico" style="background:#E9FBF3;color:var(--green-d)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4.5 6v6c0 4.6 3.2 8.4 7.5 9.4 4.3-1 7.5-4.8 7.5-9.4V6z"/></svg>
+          </span>
+          <div><h2>数据安全</h2><span class="sub">建议每周导出一次备份</span></div>
+        </div>
+        <div class="row">
+          <button class="btn ghost sm" id="btnExport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v11M7.5 10 12 14.5 16.5 10"/><path d="M4 18.5h16"/></svg>导出 JSON 备份</button>
+          <button class="btn ghost sm" id="btnImport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14.5v-11M7.5 8 12 3.5 16.5 8"/><path d="M4 18.5h16"/></svg>导入恢复</button>
+          <button class="btn ghost sm" id="btnClearDemo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M10 7V5h4v2M8 7l.8 12h6.4L16 7"/></svg>清空示例数据</button>
+        </div>
+        <input type="file" id="importFile" accept=".json,application/json" style="display:none" />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#FBF0FF;color:var(--purple-d)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14.6 9l6 .9-4.3 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.4 9.9l6-.9z"/></svg>
+        </span>
+        <div><h2>学习小档案</h2><span class="sub">你的成长看得见</span></div>
+      </div>
+      <div class="grid3" id="statCards"></div>
+    </div>
+
+    <!-- 家长控制面板 -->
+    <div class="card panel" id="panel">
+      <button class="panel-toggle" id="panelToggle" aria-expanded="false">
+        <span class="ico" style="background:#F0F5FF;color:var(--blue-d)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5h16M4 12h16M4 17.5h16"/><circle cx="9" cy="6.5" r="2" fill="#fff"/><circle cx="15" cy="12" r="2" fill="#fff"/><circle cx="8" cy="17.5" r="2" fill="#fff"/></svg>
+        </span>
+        <span>
+          <span class="tt">家长控制面板</span>
+          <span class="hint">配置大模型 API · 家长可选</span>
+        </span>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5 12 15.5 18 9.5"/></svg></span>
+      </button>
+      <div class="panel-body">
+        <div class="field">
+          <label for="cfgBaseUrl">API 基础路径（Base URL）</label>
+          <input class="inp" id="cfgBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="cfgApiKey">API 密钥（API Key）</label>
+          <div class="pw">
+            <input class="inp" id="cfgApiKey" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" />
+            <button class="btn ghost" id="btnToggleKey" style="flex:none" type="button">显示</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cfgModel">选择大模型</label>
+          <select class="sel" id="cfgModel" style="width:100%"></select>
+          <input class="inp" id="cfgModelCustom" type="text" placeholder="填写自定义模型名称" style="display:none;margin-top:9px" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field">
+          <label for="cfgMarkModel">判卷模型（手写听写批改用）</label>
+          <select class="sel" id="cfgMarkModel" style="width:100%"></select>
+          <input class="inp" id="cfgMarkModelCustom" type="text" placeholder="填写自定义判卷模型名称" style="display:none;margin-top:9px" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="tip">
+          <b>判卷模型怎么选：</b>手写批改需要把小朋友写的字拍成图片发给大模型，所以这里必须选一个<b>能看图</b>的模型，例如 <code>gpt-4o</code>、<code>gpt-4o-mini</code>、<code>qwen-vl-max</code>、<code>glm-4v-plus</code>、<code>doubao-1.5-vision-pro</code>。<br />
+          保持「与上方模型相同」时，如果上方模型不支持图片（如 deepseek-chat），批改会失败并自动转为家长人工判定。
+        </p>
+        <div class="row" style="margin-top:4px">
+          <button class="btn primary" id="btnSaveCfg" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 6.5"/></svg>保存配置</button>
+          <button class="btn ghost" id="btnTestCfg" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4.5 13.5H11l-1 8.5 8.5-11.5H12z"/></svg>测试连接</button>
+          <button class="btn ghost" id="btnDiag" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21M11 8v6M11 16.5v.1"/></svg>网络自检</button>
+        </div>
+
+        <!-- 运行日志（排查连接问题用） -->
+        <div class="log-wrap">
+          <div class="log-hd">
+            <span class="lt">
+              运行日志
+              <span class="badge" id="logBadge">0 条</span>
+            </span>
+            <button class="log-btn" id="btnDiagOpen" type="button">展开</button>
+            <button class="log-btn" id="btnLogCopy" type="button">复制</button>
+            <button class="log-btn" id="btnLogClear" type="button">清空</button>
+          </div>
+          <div class="log-list" id="logList">
+            <div class="log-empty" id="logEmpty">
+              这里会记录每一次大模型请求（地址、模型、耗时、HTTP 状态、失败原因）。<br />
+              连接出问题时，点上面的「测试连接」或「网络自检」，再点「展开」看这里。
+            </div>
+          </div>
+        </div>
+
+        <p class="tip">
+          <b>连接不上怎么办：</b>先点「网络自检」，它会告诉你到底是<b>网络不通</b>、<b>接口不允许浏览器直连</b>，还是<b>配置写错了</b>，并给出对应的解决办法。<br />
+          想看更详细的日志，也可以按 <code>F12</code> 打开浏览器控制台，本页所有请求都会同步打印在那里。
+        </p>
+        <p class="tip">
+          <b>安全说明：</b>配置只保存在<b>本机浏览器 LocalStorage</b> 里，不会上传到任何服务器，刷新也不会丢。<br />
+          若把此页面部署到公网，请勿填入真实密钥——公网链接任何人都能打开。<br />
+          接口需兼容 OpenAI 的 <code>/chat/completions</code> 协议（如 OpenAI、DeepSeek、通义千问、智谱、Moonshot 等）。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 口算 ============ -->
+  <section class="view" id="view-math">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#EAF3FB;color:var(--blue-d)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 8.5h8M8 12h2.5M13.5 12H16M8 15.5h2.5M13.5 15.5H16"/></svg>
+        </span>
+        <div><h2>每日口算</h2><span class="sub">20 道 · 100 以内加减法 &amp; 表内乘法</span></div>
+        <div class="spacer"></div>
+        <button class="btn yellow sm" id="btnNewMath"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>换一批题目</button>
+      </div>
+      <div class="progress-line" style="margin-bottom:14px">
+        <span id="mathProgTxt">已作答 0 / 20</span>
+        <div class="bar"><div class="fill" id="mathFill"></div></div>
+      </div>
+      <div class="m-list" id="mathList"></div>
+      <p class="tip">小提示：输入答案后会自动批改。答对变绿并「叮咚」一声，答错变红，这道题会自动进「错题小本本」。<br />20 道题<b>全部作答</b>就算完成今天的口算任务，答错也没关系；要是<b>一道都没错</b>，会有满分大惊喜哦。</p>
+    </div>
+  </section>
+
+  <!-- ============ 语文 ============ -->
+  <section class="view" id="view-chinese">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#FBEFEA;color:#D9714E">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h7v13H4zM13 5.5h7v13h-7z"/><path d="M6.5 9h2M6.5 12h2M15.5 9h2M15.5 12h2"/></svg>
+        </span>
+        <div><h2>语文乐园 · 课文听写</h2><span class="sub">二年级上册生字表</span></div>
+      </div>
+      <div class="row">
+        <select class="sel" id="lessonSel" style="flex:1;min-width:180px"></select>
+        <button class="btn green" id="btnDictStart" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10-6.5z"/></svg>开始听写</button>
+        <button class="btn ghost" id="btnReadAll" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg>顺序朗读</button>
+      </div>
+      <!-- 屏上听写：手写 + AI 批改 -->
+      <div class="hw-box" id="hwBox">
+        <div class="hw-hd">
+          <span class="hw-ico">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5h16"/><path d="M15 4.2 19.8 9 9.6 19.2 4.8 20.2l1-4.8z"/></svg>
+          </span>
+          <div>
+            <span class="t">屏上听写 · AI 批改</span>
+            <span class="s">在田字格里手写，交给大模型看看写得对不对</span>
+          </div>
+        </div>
+
+        <div class="hw-idle" id="hwIdle">
+          <p>选好课文后点下面的按钮，听到读音就在格子里写下来。写完点「提交给 AI 批改」，大模型会告诉你写对了没有，写得不对的字会自动进错字本。</p>
+          <button class="btn purple" id="btnHwStart" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5h16"/><path d="M15 4.2 19.8 9 9.6 19.2 4.8 20.2l1-4.8z"/></svg>开始屏上听写</button>
+        </div>
+
+        <div class="hw-stage" id="hwStage">
+          <div class="hw-bar">
+            <span class="hw-idx" id="hwIdx">第 1 / 10 个</span>
+            <span class="hw-pin" id="hwPin">-</span>
+            <div class="spacer"></div>
+            <button class="btn ghost sm" id="btnHwSpeak" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg>再听一遍</button>
+          </div>
+
+          <div class="hw-board" id="hwBoard">
+            <div class="hw-sq" id="hwSq">
+              <canvas class="hw-grid" id="hwGrid" aria-hidden="true"></canvas>
+              <canvas class="hw-ink" id="hwInk" aria-label="手写区域"></canvas>
+            </div>
+          </div>
+
+          <div class="hw-tools">
+            <button class="btn ghost" id="btnHwClear" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6.5h12v11H6z"/><path d="M9.5 6.5V4h5v2.5"/></svg>清空重写</button>
+            <button class="btn primary" id="btnHwSubmit" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>提交给 AI 批改</button>
+          </div>
+
+          <div class="hw-res" id="hwRes"></div>
+
+          <div class="hw-tools" id="hwNextBar" style="display:none">
+            <button class="btn ghost" id="btnHwRetry" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>再写一次</button>
+            <button class="btn green" id="btnHwNext" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12.5 6l6 6-6 6"/></svg>下一个字</button>
+          </div>
+
+          <div class="hw-tools">
+            <button class="btn ghost sm" id="btnHwEnd" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>结束本轮听写</button>
+          </div>
+        </div>
+
+        <!-- 汇总放在 stage 外：结束时 stage 收起，汇总仍可见 -->
+        <div class="hw-sum" id="hwSum"></div>
+      </div>
+
+      <div class="zi-grid" id="ziGrid"></div>
+      <div class="zi-stat">
+        <span><span class="dot" style="background:#8FE0C2"></span>已掌握 <b id="cntOk">0</b></span>
+        <span><span class="dot" style="background:#FFBDBD"></span>未掌握 <b id="cntNo">0</b></span>
+        <span><span class="dot" style="background:#DDE9F5"></span>未检查 <b id="cntNone">0</b></span>
+      </div>
+      <p class="tip">点击生字方块可以听读音；听写模式下生字会变成「?」，写完后再点「结束听写」揭晓答案。</p>
+    </div>
+  </section>
+
+  <!-- ============ 童话 ============ -->
+  <section class="view" id="view-story">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#F3EFFF;color:var(--purple-d)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 3.5h5.5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5.5a2 2 0 0 0-2-2h-5.5v17H18a2 2 0 0 1 2 2z"/></svg>
+        </span>
+        <div><h2>智能拼音童话</h2><span class="sub">大模型生成 · 自动注音 · 读过不重复</span></div>
+      </div>
+      <div class="row">
+        <button class="btn purple" id="btnGenStory" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5L4.5 11 10 9z"/></svg>生成新童话</button>
+        <button class="btn ghost" id="btnDemoStory" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16v13H4z"/><path d="M8 9.5h8M8 13h5"/></svg>试读示例故事</button>
+        <button class="btn ghost" id="btnSpeakStory" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/></svg>朗读故事</button>
+      </div>
+
+      <div class="timer-box">
+        <div class="timer-clock" id="timerClock">15:00</div>
+        <button class="btn green" id="btnTimerStart" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.8M9.5 3.5h5"/></svg>开启 15 分钟阅读计时</button>
+        <button class="btn ghost" id="btnTimerStop" type="button" style="display:none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>结束计时</button>
+        <span style="font-size:12.5px;color:var(--ink3)" id="timerHint">认真读满 15 分钟就能完成今日「阅读」任务</span>
+      </div>
+
+      <div class="story-box" id="storyBox" style="margin-top:16px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#E9FBF3;color:var(--green-d)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v13.5H4z"/><path d="M8 3.5v5M16 3.5v5M4 10.5h16"/></svg>
+        </span>
+        <div><h2>读过的故事</h2><span class="sub" id="histSub">生成新故事时会自动避开这些主题</span></div>
+      </div>
+      <div class="hist" id="histList"></div>
+    </div>
+  </section>
+
+  <!-- ============ 错题本 ============ -->
+  <section class="view" id="view-wrong">
+    <div class="card">
+      <div class="card-hd">
+        <span class="ico" style="background:#FFEFF3;color:#C4486B">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-6-4-6 4z"/><path d="M9.5 8.5h5M12 6v5"/></svg>
+        </span>
+        <div><h2>错题小本本</h2><span class="sub">做对一次就能擦掉一题</span></div>
+        <div class="spacer"></div>
+        <span class="stat-pill">重新挑战 <b id="reviewCnt">0</b> / 3</span>
+      </div>
+      <div class="wb-tabs">
+        <button class="wb-tab on" data-wtab="math" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 8.5h8M8 12h2.5M13.5 12H16"/></svg>
+          数学错题区 <span class="n" id="wbMathN">0</span>
+        </button>
+        <button class="wb-tab" data-wtab="chinese" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><path d="M4 5.5h7v13H4zM13 5.5h7v13h-7z"/></svg>
+          语文错字区 <span class="n" id="wbCnN">0</span>
+        </button>
+      </div>
+      <div class="wb-list" id="wbList"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ==================================================================
+     0. 静态数据
+     ================================================================== */
+  var SHENGZI = {
+    "《小蝌蚪找妈妈》": ["两","哪","宽","顶","眼","睛","肚","皮","孩","跳"],
+    "《我是什么》": ["变","极","片","傍","海","洋","作","坏","给","带"],
+    "《植物妈妈有办法》": ["法","如","脚","它","娃","她","毛","更","知","识"],
+    "《场景歌》": ["园","孔","桥","群","队","旗","铜","号","领","巾"],
+    "《树之歌》": ["杨","壮","桐","枫","松","柏","棉","杉","化","桂"],
+    "《拍手歌》": ["歌","丛","深","六","熊","猫","九","朋","友"],
+    "《田家四季歌》": ["季","吹","肥","农","忙","归","戴","麦","苗","桑"],
+    "《曹冲称象》": ["曹","称","员","根","柱","议","论","重","杆","秤","砍","线"],
+    "《玲玲的画》": ["玲","详","幅","评","奖","催","啪","脏","报","另","及","懒"],
+    "《一封信》": ["封","削","锅","朝","叠","刮","胡","灯","修","冷","肩","团"],
+    "《妈妈睡了》": ["妈","哄","先","闭","脸","事","沉","发","窗","沙","乏"],
+    "《古诗二首（登鹳雀楼/望庐山瀑布）》": ["依","尽","欲","穷","层","瀑","布","炉","烟","遥","川"],
+    "《黄山奇石》": ["闻","名","景","区","省","部","秀","尤","其","仙","巨","位","每"],
+    "《日月潭》": ["潭","湖","绕","茂","盛","围","胜","央","岛","华","纱","童","境"]
+  };
+  var LESSONS = Object.keys(SHENGZI);
+
+  var MODELS = [
+    { v: "gpt-4o-mini", t: "gpt-4o-mini（OpenAI · 快而省）" },
+    { v: "gpt-4o", t: "gpt-4o（OpenAI · 质量高）" },
+    { v: "gpt-4.1-mini", t: "gpt-4.1-mini（OpenAI）" },
+    { v: "deepseek-chat", t: "deepseek-chat（DeepSeek）" },
+    { v: "deepseek-reasoner", t: "deepseek-reasoner（DeepSeek）" },
+    { v: "qwen-plus", t: "qwen-plus（通义千问）" },
+    { v: "glm-4-flash", t: "glm-4-flash（智谱）" },
+    { v: "moonshot-v1-8k", t: "moonshot-v1-8k（Kimi）" },
+    { v: "__custom__", t: "自定义模型名称…" }
+  ];
+
+  /* 手写批改需要多模态（能看图）的模型，单独一份候选列表 */
+  var MARK_MODELS = [
+    { v: "__same__", t: "与上方模型相同" },
+    { v: "gpt-4o", t: "gpt-4o（OpenAI · 推荐）" },
+    { v: "gpt-4o-mini", t: "gpt-4o-mini（OpenAI · 快而省）" },
+    { v: "qwen-vl-max", t: "qwen-vl-max（通义千问 · 视觉）" },
+    { v: "glm-4v-plus", t: "glm-4v-plus（智谱 · 视觉）" },
+    { v: "doubao-1.5-vision-pro", t: "doubao-1.5-vision-pro（豆包 · 视觉）" },
+    { v: "__custom__", t: "自定义判卷模型…" }
+  ];
+
+  var HW_START_HTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20.5h16"/><path d="M15 4.2 19.8 9 9.6 19.2 4.8 20.2l1-4.8z"/></svg>开始屏上听写';
+  var HW_SUBMIT_HTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></svg>提交给 AI 批改';
+  var HW_SUBMIT_LOADING = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>AI 批改中…';
+
+  var STORY_PROMPT = "请为小学二年级学生创作一篇生动有趣的童话故事。要求：字数严格控制在 500-600 字之间，情节富有教育意义，语言充满童趣。直接输出故事纯文本内容，不要包含任何前言、后缀或标点符号以外的修饰语。";
+
+  var SAMPLE_STORIES = [
+    {
+      title: "小水珠的旅行",
+      text: "有一颗小水珠，住在软软的云朵妈妈怀里。一天，它听见大地在喊渴，就说：“妈妈，我要去帮帮它们！”云朵妈妈点点头，小水珠便和伙伴们一起跳了下去。\n它落进一条小溪，溪水叮叮咚咚地唱着歌，把小水珠送进荷塘。荷塘里，一朵粉荷花正低着头。小水珠问：“你怎么不高兴呀？”粉荷花说：“太阳太晒了，我好渴。”小水珠就滚到花瓣上，让粉荷花喝了个饱。粉荷花抬起头，笑得又香又甜。\n后来，太阳公公把它接回天上。小水珠发现，自己走过的地方，草更绿了，花开得更艳了。它开心地说：“原来帮助别人，自己也会变得亮晶晶的！”"
+    },
+    {
+      title: "爱笑的铅笔",
+      text: "文具盒里住着一支短短的铅笔。别的笔都笑它太矮，写出来的字也不够漂亮。铅笔不生气，只是笑眯眯地说：“我还写得动呀。”\n有一天，小主人的作业本上出现了一道难题，钢笔写错了，橡皮擦破了纸。铅笔轻轻地说：“让我来试试吧。”它慢慢地、一笔一画地写，字虽然小，却端端正正。老师看了，在本子上画了一颗亮闪闪的星。\n从那以后，文具盒里再也没有人笑它矮了。铅笔说：“只要我们愿意帮忙，多短的铅笔也能写出漂亮的字。”"
+    }
+  ];
+
+  var LS = {
+    settings: "wb_g2_settings",
+    daily: "wb_g2_daily",
+    math: "wb_g2_math",
+    mastery: "wb_g2_mastery",
+    wrong: "wb_g2_wrongbook",
+    stories: "wb_g2_stories",
+    timer: "wb_g2_timer",
+    flags: "wb_g2_flags"
+  };
+
+  var TASK_DEFS = [
+    { key: "math", name: "每日口算", desc: "20 道题全部作答", view: "math",
+      ico: '<svg viewBox="0 0 24 24" fill="none" stroke="#4FA3DC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M8 8.5h8M8 12h2.5M13.5 12H16M8 15.5h2.5M13.5 15.5H16"/></svg>' },
+    { key: "dictation", name: "语文听写一轮", desc: "选一篇课文，完成一轮听写", view: "chinese",
+      ico: '<svg viewBox="0 0 24 24" fill="none" stroke="#D9714E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h7v13H4zM13 5.5h7v13h-7z"/><path d="M6.5 9h2M15.5 9h2"/></svg>' },
+    { key: "reading", name: "童话阅读 15 分钟", desc: "读一篇注音童话，计时满 15 分钟", view: "story",
+      ico: '<svg viewBox="0 0 24 24" fill="none" stroke="#8E7BEF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 3.5h5.5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5.5a2 2 0 0 0-2-2h-5.5v17H18a2 2 0 0 1 2 2z"/></svg>' },
+    { key: "review", name: "错题复习 3 道", desc: "在错题小本本里重新挑战 3 道", view: "wrong",
+      ico: '<svg viewBox="0 0 24 24" fill="none" stroke="#3FBF8F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h12v17l-6-4-6 4z"/><path d="M9.5 8.5h5"/></svg>' }
+  ];
+
+  /* ==================================================================
+     1. 小工具
+     ================================================================== */
+  function $(sel) { return document.querySelector(sel); }
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+  }
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  function uid(p) { return (p || "id") + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function lsGet(key, def) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (raw === null || raw === undefined) return def;
+      return JSON.parse(raw);
+    } catch (e) { return def; }
+  }
+  function lsSet(key, val) {
+    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+    catch (e) { toast("存储空间不足，请先导出备份并清理旧数据"); return false; }
+  }
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = text;
+    return n;
+  }
+  var toastTimer = null;
+  function toast(msg) {
+    var t = $("#toast");
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add("on");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("on"); }, 2200);
+  }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+  function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+
+  /* ==================================================================
+     2. 音效（Web Audio 纯代码合成）
+     ================================================================== */
+  var AC = null;
+  function audioCtx() {
+    if (AC) { if (AC.state === "suspended" && AC.resume) AC.resume(); return AC; }
+    var C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return null;
+    try { AC = new C(); } catch (e) { AC = null; }
+    return AC;
+  }
+  function playDing() {
+    var c = audioCtx(); if (!c) return;
+    var t = c.currentTime, notes = [880, 1318.5];
+    for (var i = 0; i < notes.length; i++) {
+      (function (i) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = "sine"; o.frequency.setValueAtTime(notes[i], t + i * 0.085);
+        var st = t + i * 0.085;
+        g.gain.setValueAtTime(0.0001, st);
+        g.gain.exponentialRampToValueAtTime(0.22, st + 0.015);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + 0.3);
+        o.connect(g); g.connect(c.destination);
+        o.start(st); o.stop(st + 0.32);
+      })(i);
+    }
+  }
+  function playBuzz() {
+    var c = audioCtx(); if (!c) return;
+    var t = c.currentTime;
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "square";
+    o.frequency.setValueAtTime(250, t);
+    o.frequency.exponentialRampToValueAtTime(110, t + 0.2);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.13, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.24);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t + 0.26);
+  }
+  function playTada() {
+    var c = audioCtx(); if (!c) return;
+    var t = c.currentTime, seq = [523.25, 659.25, 783.99, 1046.5];
+    for (var i = 0; i < seq.length; i++) {
+      (function (i) {
+        var o = c.createOscillator(), g = c.createGain(), st = t + i * 0.11;
+        o.type = "triangle"; o.frequency.setValueAtTime(seq[i], st);
+        g.gain.setValueAtTime(0.0001, st);
+        g.gain.exponentialRampToValueAtTime(0.2, st + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, st + 0.34);
+        o.connect(g); g.connect(c.destination);
+        o.start(st); o.stop(st + 0.36);
+      })(i);
+    }
+  }
+
+  /* ==================================================================
+     3. 语音朗读（Web Speech API）
+     ================================================================== */
+  function speak(text) {
+    if (!text) return;
+    if (!("speechSynthesis" in window)) { toast("当前浏览器不支持语音朗读"); return; }
+    try {
+      window.speechSynthesis.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = "zh-CN"; u.rate = 0.72; u.pitch = 1.05;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* 静默降级 */ }
+  }
+  function stopSpeak() { try { window.speechSynthesis.cancel(); } catch (e) {} }
+  var readAllTimer = null;
+  function setReadAllBtn(reading) {
+    var b = $("#btnReadAll");
+    if (!b) return;
+    b.classList.toggle("yellow", !!reading);
+    b.classList.toggle("ghost", !reading);
+    b.innerHTML = reading
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/></svg>停止朗读'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/></svg>顺序朗读';
+  }
+  function stopReadAll() {
+    if (readAllTimer) { clearInterval(readAllTimer); readAllTimer = null; }
+    setReadAllBtn(false);
+  }
+
+  /* ==================================================================
+     4. 烟花 / 彩带特效（Canvas 纯代码）
+     ================================================================== */
+  var fx = $("#fxCanvas"), fxc = fx ? fx.getContext("2d") : null;
+  var particles = [], fxRaf = null;
+  var FX_COLORS = ["#FF7AA2", "#FFD93D", "#7ED9C3", "#8ECDF5", "#C9BCFF", "#FFB07C", "#7ED957"];
+  function resizeFx() {
+    if (!fx || !fxc) return;
+    var dpr = window.devicePixelRatio || 1;
+    fx.width = Math.floor(window.innerWidth * dpr);
+    fx.height = Math.floor(window.innerHeight * dpr);
+    fx.style.width = window.innerWidth + "px";
+    fx.style.height = window.innerHeight + "px";
+    fxc.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function fxSpawn() {
+    var w = window.innerWidth, h = window.innerHeight, i, c;
+    for (i = 0; i < 80; i++) {
+      particles.push({
+        x: Math.random() * w, y: -20 - Math.random() * h * 0.45,
+        vx: (Math.random() - 0.5) * 2.4, vy: 1.6 + Math.random() * 2.6,
+        s: 6 + Math.random() * 7, c: FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)],
+        rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.28,
+        shape: "rect", life: 1
+      });
+    }
+    for (var b = 0; b < 5; b++) {
+      var cx = w * (0.14 + 0.72 * Math.random());
+      var cy = h * (0.16 + 0.34 * Math.random());
+      for (i = 0; i < 32; i++) {
+        var a = Math.random() * 6.2832, sp = 2.4 + Math.random() * 5;
+        particles.push({
+          x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.2,
+          s: 4 + Math.random() * 4, c: FX_COLORS[Math.floor(Math.random() * FX_COLORS.length)],
+          rot: 0, vr: 0, shape: "circle", life: 1
+        });
+      }
+    }
+  }
+  function fxLoop() {
+    if (!fxc) return;
+    fxc.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.vy += 0.055; p.vx *= 0.995;
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life -= 0.0042;
+      if (p.life <= 0 || p.y > window.innerHeight + 60) { particles.splice(i, 1); continue; }
+      fxc.save();
+      fxc.globalAlpha = Math.max(0, Math.min(1, p.life * 1.7));
+      fxc.translate(p.x, p.y); fxc.rotate(p.rot); fxc.fillStyle = p.c;
+      if (p.shape === "rect") { fxc.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); }
+      else { fxc.beginPath(); fxc.arc(0, 0, p.s / 2, 0, 6.2832); fxc.fill(); }
+      fxc.restore();
+    }
+    if (particles.length) { fxRaf = requestAnimationFrame(fxLoop); }
+    else { fxRaf = null; fxc.clearRect(0, 0, window.innerWidth, window.innerHeight); }
+  }
+  var bannerTimer = null;
+  function celebrate(showBanner, headline, subText) {
+    resizeFx(); fxSpawn();
+    if (!fxRaf) fxRaf = requestAnimationFrame(fxLoop);
+    playTada();
+    if (showBanner) {
+      var banner = $("#banner");
+      if (!banner) return;
+      var t = banner.querySelector(".b-t");
+      var sub = banner.querySelector(".b-s");
+      if (t && headline) t.textContent = headline;
+      if (sub && subText) sub.textContent = subText;
+      // 重启动画，让连续触发也能看到效果
+      banner.classList.remove("on");
+      void banner.offsetWidth;
+      banner.classList.add("on");
+      if (bannerTimer) clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(function () { banner.classList.remove("on"); }, 2600);
+    }
+  }
+  /* 满分庆祝：比普通庆祝更盛大——金色大横幅 + 双倍彩带 */
+  function celebratePerfect(subText) {
+    celebrate(true, "全部答对，满分！🎉", subText || "20 道口算一道都没错，太厉害啦");
+    var banner = $("#banner");
+    if (banner) {
+      banner.classList.add("gold");
+      if (bannerTimer) clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(function () {
+        banner.classList.remove("on");
+        banner.classList.remove("gold");
+      }, 3800);
+    }
+    // 稍后再放一轮彩带，营造「满屏」的观感
+    setTimeout(function () {
+      resizeFx(); fxSpawn(); fxSpawn();
+      if (!fxRaf) fxRaf = requestAnimationFrame(fxLoop);
+    }, 280);
+  }
+
+  /* ==================================================================
+     5. 拼音库加载（unpkg → jsdelivr 双源回退）
+     ================================================================== */
+  var pinyinPromise = null;
+  function loadPinyin() {
+    if (window.pinyinPro) return Promise.resolve(true);
+    if (pinyinPromise) return pinyinPromise;
+    var urls = [
+      "https://unpkg.com/pinyin-pro@3.29.4/dist/index.js",
+      "https://cdn.jsdelivr.net/npm/pinyin-pro@3.29.4/dist/index.js"
+    ];
+    pinyinPromise = new Promise(function (resolve) {
+      var idx = 0;
+      function tryNext() {
+        if (window.pinyinPro) { resolve(true); return; }
+        if (idx >= urls.length) { resolve(false); return; }
+        var s = document.createElement("script");
+        var url = urls[idx++];
+        var settled = false;
+        s.src = url; s.async = true;
+        s.onload = function () { if (!settled) { settled = true; resolve(!!window.pinyinPro); } };
+        s.onerror = function () { if (!settled) { settled = true; tryNext(); } };
+        document.head.appendChild(s);
+        setTimeout(function () { if (!settled) { settled = true; tryNext(); } }, 7000);
+      }
+      tryNext();
+    });
+    return pinyinPromise;
+  }
+
+  /* ==================================================================
+     6. 全局状态
+     ================================================================== */
+  var S = {
+    settings: { baseUrl: "", apiKey: "", model: "gpt-4o-mini", customModel: "" },
+    daily: { date: "", tasks: {}, reviewCount: 0 },
+    mathSet: null,
+    lesson: LESSONS[0],
+    mastery: {},
+    wrong: { math: [], chinese: [] },
+    stories: { history: [], readTitles: [] },
+    timer: { endAt: 0, running: false },
+    masked: false,
+    wbTab: "math",
+    storyText: "",
+    storyTitle: ""
+  };
+  var challenge = { type: "", id: "" };
+  var mathSig = "";
+  var lastStoryKey = "";
+
+  /* 屏上听写会话状态（内存态，不落 LocalStorage；掌握度/错字本仍走原有持久化） */
+  var HW = {
+    on: false,        // 是否处于屏上听写模式（false 即回到待开始状态）
+    busy: false,      // 是否正在请求 AI
+    lesson: "",       // 本轮锁定的课文
+    chars: [],        // 本轮字表
+    idx: 0,           // 当前第几个
+    results: {},      // 字 -> { correct, score, comment, written, ai }
+    lastImg: ""       // 最近一次提交的图片
+  };
+  var hwStrokes = [];   // 笔画数据（尺寸变化时用于重绘）
+  var hwCur = null;     // 当前笔画
+  var hwDrawing = false;
+  var hwSize = 0;       // 画布 CSS 边长
+  var hwAutoTimer = null;
+
+  function saveSettings() { lsSet(LS.settings, S.settings); }
+  function saveDaily() { lsSet(LS.daily, S.daily); }
+  function saveMath() { lsSet(LS.math, S.mathSet); }
+  function saveMastery() { lsSet(LS.mastery, S.mastery); }
+  function saveWrong() { lsSet(LS.wrong, S.wrong); }
+  function saveStories() { lsSet(LS.stories, S.stories); }
+  function saveTimer() { lsSet(LS.timer, S.timer); }
+
+  function loadAll() {
+    // 逐字段合并：老版本存档里没有 markModel 等新字段时也能平滑升级
+    var ss = lsGet(LS.settings, null);
+    if (ss && typeof ss === "object") {
+      S.settings = {
+        baseUrl: ss.baseUrl || "",
+        apiKey: ss.apiKey || "",
+        model: ss.model || "gpt-4o-mini",
+        customModel: ss.customModel || "",
+        markModel: ss.markModel || "__same__",
+        markModelCustom: ss.markModelCustom || ""
+      };
+    }
+    S.mastery = lsGet(LS.mastery, {}) || {};
+    S.wrong = lsGet(LS.wrong, { math: [], chinese: [] }) || { math: [], chinese: [] };
+    if (!S.wrong.math) S.wrong.math = [];
+    if (!S.wrong.chinese) S.wrong.chinese = [];
+    S.stories = lsGet(LS.stories, { history: [], readTitles: [] }) || { history: [], readTitles: [] };
+    if (!S.stories.history) S.stories.history = [];
+    if (!S.stories.readTitles) S.stories.readTitles = [];
+    S.daily = lsGet(LS.daily, { date: "", tasks: {}, reviewCount: 0 }) || { date: "", tasks: {}, reviewCount: 0 };
+    S.mathSet = lsGet(LS.math, null);
+    S.timer = lsGet(LS.timer, { endAt: 0, running: false }) || { endAt: 0, running: false };
+  }
+
+  function seedSamples() {
+    var flags = lsGet(LS.flags, {}) || {};
+    if (flags.seeded) return;
+    S.wrong.math.push({ id: uid("m"), text: "7 × 8 =", ans: 56, ts: Date.now(), demo: true });
+    S.wrong.chinese.push({ id: uid("c"), char: "宽", lesson: "《小蝌蚪找妈妈》", ts: Date.now(), demo: true });
+    S.stories.readTitles.push("示例：小水珠的旅行");
+    S.stories.history.push({ title: "示例：小水珠的旅行", date: todayStr(), demo: true });
+    flags.seeded = true;
+    saveWrong(); saveStories(); lsSet(LS.flags, flags);
+  }
+
+  /* ==================================================================
+     7. 计算层
+     ================================================================== */
+  function blankDaily(date) {
+    return {
+      date: date,
+      tasks: { math: false, dictation: false, reading: false, review: false },
+      reviewCount: 0
+    };
+  }
+  function ensureToday() {
+    var t = todayStr();
+    if (!S.daily || S.daily.date !== t) {
+      S.daily = blankDaily(t);
+      saveDaily();
+      buildMathSet();
+      stopTimerSilently();
+      return true;
+    }
+    if (!S.daily.tasks) S.daily.tasks = blankDaily(t).tasks;
+    return false;
+  }
+  function isTaskDone(k) { return !!(S.daily && S.daily.tasks && S.daily.tasks[k]); }
+  function completedCount() {
+    var n = 0;
+    for (var i = 0; i < TASK_DEFS.length; i++) if (isTaskDone(TASK_DEFS[i].key)) n++;
+    return n;
+  }
+  /* 完成一个任务。返回 true 表示「这一步刚好凑满全部任务」，调用方可据此决定是否再叠加自己的庆祝文案 */
+  function completeTask(k) {
+    if (isTaskDone(k)) return false;
+    S.daily.tasks[k] = true;
+    saveDaily();
+    renderStatusBar(); renderTasks(); renderStatCards(); renderReviewCount();
+    var c = completedCount();
+    if (c >= TASK_DEFS.length) {
+      celebrate(true, "你太棒了！🎉", "今日 4 项任务全部完成");
+      return true;
+    }
+    var d = TASK_DEFS.filter(function (x) { return x.key === k; })[0];
+    toast("「" + (d ? d.name : "任务") + "」已完成！还差 " + (TASK_DEFS.length - c) + " 项");
+    celebrate(false);
+    return false;
+  }
+  function mathCorrect() {
+    if (!S.mathSet) return 0;
+    var n = 0, r = S.mathSet.results || {};
+    for (var k in r) if (r[k] === "ok") n++;
+    return n;
+  }
+  function mathTotal() { return (S.mathSet && S.mathSet.qs) ? S.mathSet.qs.length : 20; }
+  /* 已作答 = 已判对 + 已判错，与对错无关。完成标准看这个数 */
+  function mathAnswered() {
+    if (!S.mathSet || !S.mathSet.qs) return 0;
+    var n = 0, r = S.mathSet.results || {};
+    for (var i = 0; i < S.mathSet.qs.length; i++) if (r[i] === "ok" || r[i] === "bad") n++;
+    return n;
+  }
+  function mathPerfect() { return mathAnswered() >= mathTotal() && mathCorrect() >= mathTotal(); }
+  function syncMathProgress() {
+    var pt = $("#mathProgTxt"), mf = $("#mathFill");
+    var total = mathTotal(), a = mathAnswered(), n = mathCorrect();
+    var perfect = (a >= total && n >= total);
+    if (pt) {
+      if (a >= total) pt.textContent = perfect ? ("已作答 " + a + " / " + total + " · 全部答对") : ("已作答 " + a + " / " + total + " · 答对 " + n + " 题");
+      else pt.textContent = "已作答 " + a + " / " + total;
+    }
+    if (mf) {
+      mf.style.width = (Math.min(a, total) / total * 100) + "%";
+      mf.style.background = perfect ? "linear-gradient(90deg,#FFD93D,#FFB74D)" : "";
+    }
+  }
+  /* 口算完成判定：20 题全部作答即算完成（不看对错）；全部答对再额外给满分庆祝 */
+  function checkMathDone() {
+    if (!S.mathSet || !S.mathSet.qs) return;
+    var total = mathTotal();
+    if (mathAnswered() < total) return;
+    var filled = completeTask("math");   // 已标记过则内部直接返回，无副作用
+    if (mathCorrect() < total) return;
+    if (S.mathSet.perfect) return;       // 同一套题只庆祝一次
+    S.mathSet.perfect = true;
+    saveMath();
+    celebratePerfect(filled ? "20 道全对，今天的任务也全部完成啦" : "20 道口算一道都没错，太厉害啦");
+  }
+  /* 兼容旧存档：旧版本要求全对才标记完成，升级后已作答满 20 题的应补上标记（静默，不弹庆祝） */
+  function syncMathTaskFlag() {
+    if (!S.mathSet || !S.mathSet.qs) return;
+    if (mathAnswered() >= S.mathSet.qs.length && !isTaskDone("math")) {
+      S.daily.tasks.math = true;
+      saveDaily();
+    }
+  }
+
+  /* ---------- 出题 ---------- */
+  function makeMathSet() {
+    var qs = [], seen = {}, guard = 0;
+    function push(q) {
+      if (seen[q.text] || qs.length >= 20) return;
+      seen[q.text] = 1; qs.push(q);
+    }
+    // 10 道表内乘法
+    while (qs.length < 10 && guard++ < 400) {
+      var a = randInt(2, 9), b = randInt(2, 9);
+      push({ op: "×", a: a, b: b, text: a + " × " + b + " =", ans: a * b });
+    }
+    // 5 道加法
+    guard = 0;
+    var addCount = 0;
+    while (addCount < 5 && guard++ < 400) {
+      var x = randInt(10, 89), y = randInt(2, Math.min(99 - x, 40));
+      if (y < 2 || x + y > 100) continue;
+      var before = qs.length;
+      push({ op: "+", a: x, b: y, text: x + " + " + y + " =", ans: x + y });
+      if (qs.length > before) addCount++;
+    }
+    // 5 道减法
+    guard = 0;
+    var subCount = 0;
+    while (subCount < 5 && guard++ < 400) {
+      var m = randInt(21, 99), n = randInt(2, m - 1);
+      if (m - n > 100) continue;
+      var b2 = qs.length;
+      push({ op: "-", a: m, b: n, text: m + " - " + n + " =", ans: m - n });
+      if (qs.length > b2) subCount++;
+    }
+    // 补足 20 道
+    guard = 0;
+    while (qs.length < 20 && guard++ < 800) {
+      var t = Math.random();
+      if (t < 0.4) { var p = randInt(2, 9), q = randInt(2, 9); push({ op: "×", a: p, b: q, text: p + " × " + q + " =", ans: p * q }); }
+      else if (t < 0.7) { var u = randInt(11, 80), v = randInt(2, 95 - u); if (v < 1) continue; push({ op: "+", a: u, b: v, text: u + " + " + v + " =", ans: u + v }); }
+      else { var s1 = randInt(21, 99), s2 = randInt(2, s1 - 1); push({ op: "-", a: s1, b: s2, text: s1 + " - " + s2 + " =", ans: s1 - s2 }); }
+    }
+    shuffle(qs);
+    return {
+      id: uid("set"),
+      date: todayStr(),
+      qs: qs.slice(0, 20),
+      answers: {},
+      results: {},
+      wrongAdded: {}
+    };
+  }
+  function buildMathSet() {
+    S.mathSet = makeMathSet();
+    mathSig = "";
+    saveMath();
+  }
+
+  /* ==================================================================
+     8. 视图切换
+     ================================================================== */
+  function switchView(name) {
+    var views = document.querySelectorAll(".view");
+    for (var i = 0; i < views.length; i++) {
+      views[i].classList.toggle("active", views[i].id === "view-" + name);
+    }
+    var btns = document.querySelectorAll("#nav button");
+    for (var j = 0; j < btns.length; j++) {
+      btns[j].classList.toggle("active", btns[j].getAttribute("data-view") === name);
+    }
+    if (name === "wrong") renderWrong();
+    if (name === "story") renderTimer();
+    if (name === "chinese") fitHandCanvas();   // 视图刚显示，此时才能量到真实宽度
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /* ==================================================================
+     9. 渲染层（各渲染函数互不调用，统一由 refreshAll 调度）
+     ================================================================== */
+  function renderStatusBar() {
+    var c = completedCount();
+    var dc = $("#doneCount");
+    if (dc) dc.textContent = c;
+    var pill = $("#statPill");
+    if (pill) {
+      if (c >= TASK_DEFS.length) pill.style.background = "linear-gradient(135deg,#FFF3D6,#FFE9B8)";
+      else pill.style.background = "linear-gradient(135deg,#EAF7FF,#E9FBF3)";
+    }
+    var fill = $("#engFill");
+    if (fill) fill.style.width = (c / TASK_DEFS.length * 100) + "%";
+    var stars = $("#engStars");
+    if (stars && stars.childElementCount !== TASK_DEFS.length) {
+      stars.innerHTML = "";
+      for (var i = 0; i < TASK_DEFS.length; i++) {
+        var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 24 24");
+        svg.innerHTML = '<path d="M12 3.5 14.6 9l6 .9-4.3 4.2 1 6-5.3-2.8-5.3 2.8 1-6L3.4 9.9l6-.9z" />';
+        svg.querySelector("path").setAttribute("fill", "#E4ECF5");
+        stars.appendChild(svg);
+      }
+    }
+    if (stars) {
+      for (var k = 0; k < stars.children.length; k++) {
+        var p = stars.children[k].querySelector("path");
+        p.setAttribute("fill", k < c ? "#FFD93D" : "#E4ECF5");
+        p.setAttribute("stroke", k < c ? "#E8A800" : "none");
+        p.setAttribute("stroke-width", "1");
+      }
+    }
+  }
+
+  function renderTasks() {
+    var host = $("#taskList");
+    if (!host) return;
+    host.innerHTML = "";
+    var c = completedCount();
+    for (var i = 0; i < TASK_DEFS.length; i++) {
+      var d = TASK_DEFS[i], done = isTaskDone(d.key);
+      var row = el("div", "task " + (done ? "done" : "pending"));
+      row.setAttribute("data-jump", d.view);
+      var ico = el("div", "t-ico"); ico.innerHTML = d.ico;
+      var main = el("div", "t-main");
+      main.appendChild(el("div", "t-name", d.name));
+      var desc = d.desc;
+      if (d.key === "math") desc = "已作答 " + mathAnswered() + " / " + mathTotal() + " 题" + (mathPerfect() ? " · 全对" : "");
+      else if (d.key === "review") desc = "已完成 " + (S.daily.reviewCount || 0) + " / 3 道";
+      main.appendChild(el("div", "t-desc", desc));
+      var chip = el("div", "t-chip", done ? "已完成" : "待完成");
+      row.appendChild(ico); row.appendChild(main); row.appendChild(chip);
+      if (done) {
+        var ck = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        ck.setAttribute("viewBox", "0 0 24 24");
+        ck.setAttribute("class", "t-check");
+        ck.innerHTML = '<circle cx="12" cy="12" r="10" fill="#7FDCB8"/><path d="M7.5 12.4 10.6 15.5 16.5 9" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+        row.appendChild(ck);
+      }
+      host.appendChild(row);
+    }
+    var sub = $("#homeSub");
+    if (sub) sub.textContent = c >= TASK_DEFS.length ? "今天的任务全部完成，太厉害了！" : ("还有 " + (TASK_DEFS.length - c) + " 项没完成，加油！");
+    var tf = $("#taskFill"), tft = $("#taskFillTxt");
+    if (tf) tf.style.width = (c / TASK_DEFS.length * 100) + "%";
+    if (tft) tft.textContent = Math.round(c / TASK_DEFS.length * 100) + "%";
+  }
+
+  function renderStatCards() {
+    var host = $("#statCards");
+    if (!host) return;
+    host.innerHTML = "";
+    var mastered = 0, total = 0;
+    for (var L in S.mastery) {
+      if (!S.mastery[L]) continue;
+      for (var ch in S.mastery[L]) { total++; if (S.mastery[L][ch] === 1) mastered++; }
+    }
+    var items = [
+      { n: mastered, l: "已掌握生字", c: "#3FBF8F", bg: "#E9FBF3" },
+      { n: S.wrong.math.length + S.wrong.chinese.length, l: "错题待复习", c: "#C4486B", bg: "#FFEFF3" },
+      { n: S.stories.history.length, l: "读过的故事", c: "#8E7BEF", bg: "#F3EFFF" }
+    ];
+    for (var i = 0; i < items.length; i++) {
+      var box = el("div", "");
+      box.style.cssText = "background:" + items[i].bg + ";border-radius:16px;padding:14px;text-align:center";
+      var num = el("div", "", String(items[i].n));
+      num.style.cssText = "font-size:30px;font-weight:900;color:" + items[i].c + ";line-height:1.1;font-variant-numeric:tabular-nums";
+      var lab = el("div", "", items[i].l);
+      lab.style.cssText = "font-size:13px;color:#6C8098;font-weight:700;margin-top:4px";
+      box.appendChild(num); box.appendChild(lab);
+      host.appendChild(box);
+    }
+  }
+
+  /* ---------- 口算 ---------- */
+  function mathRowEl(i, q) {
+    var row = el("div", "m-row");
+    row.id = "mrow-" + i;
+    row.setAttribute("data-i", String(i));
+    row.appendChild(el("span", "m-no", String(i + 1)));
+    row.appendChild(el("span", "m-q", q.text));
+    var inp = document.createElement("input");
+    inp.type = "number";
+    inp.className = "m-in";
+    inp.setAttribute("inputmode", "numeric");
+    inp.setAttribute("autocomplete", "off");
+    inp.setAttribute("data-i", String(i));
+    row.appendChild(inp);
+    var mark = el("span", "m-mark");
+    mark.id = "mmark-" + i;
+    row.appendChild(mark);
+    return row;
+  }
+  function renderMath() {
+    var host = $("#mathList");
+    if (!host || !S.mathSet) return;
+    var sig = S.mathSet.id;
+    if (sig !== mathSig) {
+      mathSig = sig;
+      host.innerHTML = "";
+      for (var i = 0; i < S.mathSet.qs.length; i++) host.appendChild(mathRowEl(i, S.mathSet.qs[i]));
+      var ans = S.mathSet.answers || {};
+      for (var k in ans) {
+        var inp = host.querySelector('.m-in[data-i="' + k + '"]');
+        if (inp) inp.value = ans[k];
+      }
+    }
+    for (var j = 0; j < S.mathSet.qs.length; j++) syncMathRow(j);
+    syncMathProgress();
+  }
+  function syncMathRow(i) {
+    var row = $("#mrow-" + i), mark = $("#mmark-" + i);
+    if (!row || !mark) return;
+    var inp = row.querySelector(".m-in");
+    var st = (S.mathSet && S.mathSet.results) ? S.mathSet.results[i] : "";
+    row.classList.remove("ok", "bad");
+    if (inp) inp.classList.remove("ok", "bad");
+    mark.innerHTML = "";
+    if (st === "ok") {
+      row.classList.add("ok"); if (inp) inp.classList.add("ok");
+      mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#7FDCB8"/><path d="M7.4 12.4 10.6 15.6 16.6 8.9" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    } else if (st === "bad") {
+      row.classList.add("bad"); if (inp) inp.classList.add("bad");
+      mark.innerHTML = '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#FF8C8C"/><path d="M8.6 8.6l6.8 6.8M15.4 8.6l-6.8 6.8" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+    }
+  }
+
+  /* ---------- 语文 ---------- */
+  function renderChinese() {
+    var grid = $("#ziGrid");
+    if (!grid) return;
+    var chars = SHENGZI[S.lesson] || [];
+    grid.innerHTML = "";
+    grid.classList.toggle("masked", !!S.masked);
+    var ok = 0, no = 0, none = 0;
+    var book = S.mastery[S.lesson] || {};
+    for (var i = 0; i < chars.length; i++) {
+      var ch = chars[i];
+      var st = book[ch];
+      var tile = el("div", "zi" + (st === 1 ? " mastered" : (st === 0 ? " failed" : "")));
+      tile.setAttribute("data-char", ch);
+      var face = el("button", "zi-face");
+      face.type = "button";
+      face.setAttribute("data-speak", ch);
+      face.setAttribute("aria-label", "朗读 " + ch);
+      face.appendChild(el("span", "zi-char", ch));
+      var btns = el("div", "zi-btns");
+      var bOk = el("button", "zi-b" + (st === 1 ? " on-ok" : ""));
+      bOk.type = "button"; bOk.setAttribute("data-mark", "1"); bOk.setAttribute("data-char", ch);
+      bOk.title = "已掌握";
+      bOk.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 6.5"/></svg>';
+      var bNo = el("button", "zi-b" + (st === 0 ? " on-no" : ""));
+      bNo.type = "button"; bNo.setAttribute("data-mark", "0"); bNo.setAttribute("data-char", ch);
+      bNo.title = "未掌握，加入错题本";
+      bNo.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+      btns.appendChild(bOk); btns.appendChild(bNo);
+      tile.appendChild(face); tile.appendChild(btns);
+      grid.appendChild(tile);
+      if (st === 1) ok++; else if (st === 0) no++; else none++;
+    }
+    var c1 = $("#cntOk"), c2 = $("#cntNo"), c3 = $("#cntNone");
+    if (c1) c1.textContent = ok;
+    if (c2) c2.textContent = no;
+    if (c3) c3.textContent = none;
+    var bs = $("#btnDictStart");
+    if (bs) {
+      bs.innerHTML = S.masked
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17.5 19 6.5"/></svg>结束听写'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5.5v13l10-6.5z"/></svg>开始听写';
+      bs.classList.toggle("yellow", !!S.masked);
+      bs.classList.toggle("green", !S.masked);
+    }
+  }
+
+  /* ---------- 屏上听写：手写板 + AI 批改 ---------- */
+  function hwPinyin(ch) {
+    try {
+      if (window.pinyinPro && window.pinyinPro.pinyin) {
+        var r = window.pinyinPro.pinyin(ch, { toneType: "symbol", type: "array" });
+        if (r && r.length) return r.join(" ");
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  /* 田字格格线画在独立图层，导出时只取笔迹层，避免格线干扰模型识别 */
+  function paintHandGrid() {
+    var c = $("#hwGrid");
+    if (!c || !hwSize) return;
+    var ctx = c.getContext("2d");
+    var w = hwSize, m = 5;
+    ctx.clearRect(0, 0, w, w);
+    ctx.save();
+    ctx.strokeStyle = "#EFC6C6";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([7, 6]);
+    ctx.beginPath();
+    ctx.moveTo(w / 2, m); ctx.lineTo(w / 2, w - m);
+    ctx.moveTo(m, w / 2); ctx.lineTo(w - m, w / 2);
+    ctx.stroke();
+    ctx.strokeStyle = "#F7DFDF";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(m, m); ctx.lineTo(w - m, w - m);
+    ctx.moveTo(w - m, m); ctx.lineTo(m, w - m);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  function hwPaint() {
+    var ink = $("#hwInk");
+    if (!ink || !hwSize) return;
+    var ctx = ink.getContext("2d");
+    ctx.clearRect(0, 0, hwSize, hwSize);
+    var lw = Math.max(7, Math.round(hwSize * 0.026));
+    ctx.strokeStyle = "#33415A";
+    ctx.fillStyle = "#33415A";
+    ctx.lineWidth = lw;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (var i = 0; i < hwStrokes.length; i++) {
+      var s = hwStrokes[i];
+      if (!s || !s.length) continue;
+      if (s.length === 1) {
+        ctx.beginPath();
+        ctx.arc(s[0].x, s[0].y, lw / 2, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+      ctx.beginPath();
+      ctx.moveTo(s[0].x, s[0].y);
+      for (var j = 1; j < s.length - 1; j++) {
+        ctx.quadraticCurveTo(s[j].x, s[j].y, (s[j].x + s[j + 1].x) / 2, (s[j].y + s[j + 1].y) / 2);
+      }
+      ctx.lineTo(s[s.length - 1].x, s[s.length - 1].y);
+      ctx.stroke();
+    }
+  }
+
+  /* 依父容器宽度同步画布像素尺寸，并在尺寸变化后重绘笔迹 */
+  function fitHandCanvas() {
+    /* 量 .hw-sq 而不是外层 .hw-board：clientWidth 正好等于画布的 CSS 宽度 */
+    var sq = $("#hwSq") || $("#hwBoard"), g = $("#hwGrid"), ink = $("#hwInk");
+    if (!sq || !g || !ink) return;
+    var w = Math.round(sq.clientWidth);
+    if (!w || w < 80) return;   // 视图隐藏时宽度为 0，跳过
+    if (hwSize === w) return;
+    hwSize = w;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    var list = [g, ink];
+    for (var i = 0; i < list.length; i++) {
+      list[i].width = Math.round(w * dpr);
+      list[i].height = Math.round(w * dpr);
+      var cx = list[i].getContext("2d");
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cx.clearRect(0, 0, w, w);
+    }
+    paintHandGrid();
+    hwPaint();
+  }
+
+  function hwPos(e) {
+    var ink = $("#hwInk");
+    if (!ink) return { x: 0, y: 0 };
+    var r = ink.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function hwDown(e) {
+    if (!HW.on || HW.busy) return;
+    e.preventDefault();
+    var ink = $("#hwInk");
+    try { if (ink && ink.setPointerCapture) ink.setPointerCapture(e.pointerId); } catch (err) {}
+    hwDrawing = true;
+    hwCur = [hwPos(e)];
+    hwStrokes.push(hwCur);
+    hwPaint();
+  }
+
+  function hwMove(e) {
+    if (!hwDrawing || !hwCur) return;
+    e.preventDefault();
+    var p = hwPos(e);
+    var last = hwCur[hwCur.length - 1];
+    if (last && Math.abs(p.x - last.x) < 1.2 && Math.abs(p.y - last.y) < 1.2) return;
+    hwCur.push(p);
+    hwPaint();
+  }
+
+  function hwUp() {
+    if (!hwDrawing) return;
+    hwDrawing = false;
+    hwCur = null;
+  }
+
+  function bindHandCanvas() {
+    var ink = $("#hwInk");
+    if (!ink || ink.getAttribute("data-bound") === "1") return;
+    ink.setAttribute("data-bound", "1");
+    ink.addEventListener("pointerdown", hwDown);
+    ink.addEventListener("pointermove", hwMove);
+    ink.addEventListener("pointerup", hwUp);
+    ink.addEventListener("pointercancel", hwUp);
+    ink.addEventListener("pointerleave", hwUp);
+    ink.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  }
+
+  function clearHandInk() {
+    hwStrokes = [];
+    hwCur = null;
+    hwDrawing = false;
+    var ink = $("#hwInk");
+    if (ink && hwSize) {
+      var ctx = ink.getContext("2d");
+      ctx.clearRect(0, 0, hwSize, hwSize);
+    }
+  }
+
+  /* 导出为白底 PNG：只含笔迹，不带田字格线 */
+  function exportHandImage() {
+    var ink = $("#hwInk");
+    var SZ = 640;
+    var c = document.createElement("canvas");
+    c.width = SZ;
+    c.height = SZ;
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = "#FFFFFF";
+    ctx.fillRect(0, 0, SZ, SZ);
+    if (ink && ink.width) ctx.drawImage(ink, 0, 0, SZ, SZ);
+    try { return c.toDataURL("image/png"); } catch (e) { return ""; }
+  }
+
+  function buildMarkPrompt(ch) {
+    return "你是一位小学二年级语文老师，正在批改一次听写作业。\n" +
+      "学生听写的字是：「" + ch + "」。\n" +
+      "图片里是学生在田字格上用深色笔手写的这个字。\n\n" +
+      "请判断两件事：\n" +
+      "1. 学生写出来的是不是「" + ch + "」这个字；\n" +
+      "2. 笔画有没有明显缺失、多余，或者结构严重错位。\n\n" +
+      "判定标准要宽松：手写会有歪斜、大小不一、笔画抖动、粗细不匀，只要字写对了、结构基本成立就算正确，不要因为字写得不好看而判错。\n\n" +
+      "只输出一个 JSON，不要有任何其他文字、解释或代码块标记：\n" +
+      '{"written":"你认出来的字","correct":true,"score":90,"comment":"给二年级小朋友的一句话，12到22个字，语气温暖"}';
+  }
+
+  function parseMarkResult(text) {
+    var t = String(text || "").trim();
+    if (!t) return null;
+    t = t.replace(/^```[a-zA-Z]*\s*/, "").replace(/```\s*$/, "").trim();
+    var obj = null;
+    try { obj = JSON.parse(t); } catch (e) {
+      var m = t.match(/\{[\s\S]*\}/);
+      if (m) { try { obj = JSON.parse(m[0]); } catch (e2) { obj = null; } }
+    }
+    if (!obj || typeof obj !== "object") return null;
+    var cv = obj.correct;
+    var correct = (cv === true || cv === "true" || cv === 1 || cv === "1" || cv === "是" || cv === "yes");
+    var score = parseInt(obj.score, 10);
+    if (isNaN(score)) score = correct ? 90 : 40;
+    var written = String(obj.written == null ? "" : obj.written).replace(/\s+/g, "").slice(0, 8);
+    var comment = String(obj.comment == null ? "" : obj.comment).replace(/\s+/g, " ").trim().slice(0, 60);
+    return { correct: correct, score: score, written: written, comment: comment };
+  }
+
+  function markModelName() {
+    var v = S.settings.markModel || "__same__";
+    if (v === "__same__") return currentModel();
+    if (v === "__custom__") return (S.settings.markModelCustom || "").trim() || currentModel();
+    return v;
+  }
+
+  function requestMarkHand(dataUrl, ch, cb) {
+    var base = (S.settings.baseUrl || "").trim();
+    var key = (S.settings.apiKey || "").trim();
+    apiFetch({
+      label: "手写批改「" + ch + "」",
+      url: buildChatUrl(base),
+      key: key,
+      model: markModelName(),
+      timeout: 45000,
+      body: {
+        model: markModelName(),
+        messages: [{
+          role: "user",
+          content: [
+            { type: "text", text: buildMarkPrompt(ch) },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ]
+        }],
+        max_tokens: 400,
+        temperature: 0
+      }
+    }).then(function (data) {
+      var c = "";
+      try { c = data.choices[0].message.content; } catch (e) { c = ""; }
+      if (Array.isArray(c)) {
+        var acc = "";
+        for (var i = 0; i < c.length; i++) if (c[i] && c[i].text) acc += c[i].text;
+        c = acc;
+      }
+      var raw = String(c == null ? "" : c);
+      var r = parseMarkResult(raw);
+      if (!r) {
+        dbg("err", "手写批改「" + ch + "」← 模型没按格式返回",
+          "模型原话：" + raw.replace(/\s+/g, " ").trim().slice(0, 150));
+        var e3 = new Error("模型没有按约定格式返回");
+        e3.raw = raw.replace(/\s+/g, " ").trim().slice(0, 150);
+        cb(e3, null);
+        return;
+      }
+      cb(null, r);
+    }).catch(function (err) {
+      var info = apiErrInfo(err);
+      var msg = info.title;
+      if (err && err.raw) msg += "（模型原话：" + err.raw + "）";
+      else msg += "。" + info.fix;
+      cb(msg, null);
+    });
+  }
+
+  function setHandResult(rec) {
+    var res = $("#hwRes");
+    if (!res) return;
+    res.innerHTML = "";
+    if (!rec) { res.className = "hw-res"; return; }
+    res.className = "hw-res on " + (rec.correct ? "ok" : "no");
+    res.appendChild(el("div", "", (rec.correct ? "写对啦！" : "这个字还没写对。") +
+      "　AI 认读为「" + (rec.written || "?") + "」" + (rec.ai === false ? "（家长判定）" : "")));
+    if (rec.comment) res.appendChild(el("div", "cm", rec.comment));
+  }
+
+  function showHandManual(msg) {
+    var res = $("#hwRes");
+    if (!res) return;
+    res.innerHTML = "";
+    res.className = "hw-res on no";
+    res.appendChild(el("div", "", msg || "请家长帮忙看看这个字写得对不对"));
+    var bar = el("div", "hw-tools");
+    bar.style.marginTop = "10px";
+    var bOk = el("button", "btn green sm", "写对了");
+    bOk.type = "button";
+    bOk.id = "btnHwManualOk";
+    var bNo = el("button", "btn ghost sm", "没写对");
+    bNo.type = "button";
+    bNo.id = "btnHwManualNo";
+    bar.appendChild(bOk);
+    bar.appendChild(bNo);
+    res.appendChild(bar);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "flex";
+  }
+
+  function setHandBusy(on) {
+    HW.busy = !!on;
+    var b = $("#btnHwSubmit");
+    if (b) { b.disabled = !!on; b.innerHTML = on ? HW_SUBMIT_LOADING : HW_SUBMIT_HTML; }
+    var c = $("#btnHwClear");
+    if (c) c.disabled = !!on;
+    var e = $("#btnHwEnd");
+    if (e) e.disabled = !!on;
+  }
+
+  /* 只更新文本与状态，绝不重建画布节点（否则笔迹会丢） */
+  function renderHandWrite() {
+    var idle = $("#hwIdle"), stage = $("#hwStage");
+    if (!idle || !stage) return;
+    idle.style.display = HW.on ? "none" : "block";
+    stage.classList.toggle("on", !!HW.on);
+    var start = $("#btnHwStart");
+    if (start) { start.disabled = !!HW.busy; start.innerHTML = HW_START_HTML; }
+    if (!HW.on) return;
+    var ch = HW.chars[HW.idx] || "";
+    var idx = $("#hwIdx"), pin = $("#hwPin");
+    if (idx) idx.textContent = "第 " + (HW.idx + 1) + " / " + HW.chars.length + " 个";
+    if (pin) pin.textContent = hwPinyin(ch) || "请点「再听一遍」";
+  }
+
+  function speakHandChar() {
+    var ch = HW.chars[HW.idx];
+    if (ch) speak(ch);
+  }
+
+  function scheduleHandNext(ms) {
+    clearTimeout(hwAutoTimer);
+    hwAutoTimer = setTimeout(function () { hwAutoTimer = null; nextHand(); }, ms);
+  }
+
+  function startHandWrite() {
+    var chars = (SHENGZI[S.lesson] || []).slice();
+    if (!chars.length) { toast("这篇课文还没有生字表"); return; }
+    if (chars.length > 12) chars = chars.slice(0, 12);
+    HW.on = true;
+    HW.busy = false;
+    HW.lesson = S.lesson;
+    HW.chars = chars;
+    HW.idx = 0;
+    HW.results = {};
+    HW.lastImg = "";
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    if (S.masked) { S.masked = false; renderChinese(); }
+    var sum = $("#hwSum");
+    if (sum) { sum.classList.remove("on"); sum.innerHTML = ""; }
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    clearHandInk();
+    setHandResult(null);
+    setHandBusy(false);
+    renderHandWrite();
+    fitHandCanvas();
+    speakHandChar();
+    // 手写板较高，开始后自动滚到视线中央，省得孩子自己找
+    var bd = $("#hwBoard");
+    if (bd) setTimeout(function () { try { bd.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {} }, 80);
+    toast("听到读音，就在格子里写下来吧");
+  }
+
+  function nextHand() {
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    if (!HW.on || HW.busy) return;
+    if (HW.idx + 1 >= HW.chars.length) { finishHandRound(); return; }
+    HW.idx++;
+    clearHandInk();
+    setHandResult(null);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    renderHandWrite();
+    speakHandChar();
+  }
+
+  function retryHand() {
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    if (!HW.on) return;
+    clearHandInk();
+    setHandResult(null);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    speakHandChar();
+  }
+
+  function applyHandResult(ch, rec) {
+    HW.results[ch] = rec;
+    setHandResult(rec);
+    if (rec.correct) playDing(); else playBuzz();
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "flex";
+  }
+
+  function submitHand() {
+    if (!HW.on || HW.busy) return;
+    var ch = HW.chars[HW.idx];
+    if (!ch) return;
+    if (!hwStrokes.length) { toast("先在格子里把这个字写出来，再交给 AI 看看"); return; }
+    var base = (S.settings.baseUrl || "").trim();
+    var key = (S.settings.apiKey || "").trim();
+    if (!base || !key || !markModelName()) {
+      toast("还没配置大模型，请家长先打开「家长控制面板」");
+      showHandManual("还没配置大模型，先由家长人工判定吧；配置之后 AI 就能自动批改。");
+      var p = $("#panel");
+      if (p && !p.classList.contains("open")) togglePanel();
+      switchView("home");
+      var inp = $("#cfgBaseUrl");
+      if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 380);
+      return;
+    }
+    var img = exportHandImage();
+    if (!img) { toast("手写图片生成失败，请刷新页面后重试"); return; }
+    HW.lastImg = img;
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    setHandResult(null);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    setHandBusy(true);
+    requestMarkHand(img, ch, function (err, r) {
+      setHandBusy(false);
+      if (!HW.on) return;
+      if (err) {
+        toast("这次没批改成功");
+        showHandManual("AI 批改没成功：" + err + "　可以再点一次「提交给 AI 批改」重试，或由家长人工判定。");
+        return;
+      }
+      applyHandResult(ch, { correct: !!r.correct, score: r.score, comment: r.comment, written: r.written, ai: true });
+      setCharMastery(ch, r.correct ? 1 : 0, HW.lesson);
+      if (r.correct) scheduleHandNext(1800);
+    });
+  }
+
+  function manualHand(correct) {
+    if (!HW.on || !HW.chars[HW.idx]) return;
+    var ch = HW.chars[HW.idx];
+    applyHandResult(ch, {
+      correct: !!correct,
+      score: correct ? 90 : 40,
+      comment: correct ? "家长确认写对啦，继续保持！" : "再看看笔画，多练两遍就记住了。",
+      written: ch,
+      ai: false
+    });
+    setCharMastery(ch, correct ? 1 : 0, HW.lesson);
+  }
+
+  function finishHandRound() {
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    var chars = HW.chars, results = HW.results;
+    var total = chars.length, done = 0, ok = 0, bad = [];
+    for (var i = 0; i < chars.length; i++) {
+      var r = results[chars[i]];
+      if (r) { done++; if (r.correct) ok++; else bad.push(chars[i]); }
+    }
+    var sum = $("#hwSum");
+    if (sum) {
+      sum.innerHTML = "";
+      sum.classList.add("on");
+      sum.appendChild(el("div", "", "本轮听写结束：共 " + total + " 个字，判定了 " + done + " 个，写对 " + ok + " 个。"));
+      sum.appendChild(el("div", "", bad.length ? ("要再练的字：" + bad.join("　")) : "全部写对，太厉害啦！"));
+      var dots = el("div", "hw-dots");
+      for (var k = 0; k < chars.length; k++) {
+        var rr = results[chars[k]];
+        dots.appendChild(el("span", "hw-dot" + (rr ? (rr.correct ? " ok" : " no") : "")));
+      }
+      sum.appendChild(dots);
+    }
+    HW.on = false;
+    clearHandInk();
+    setHandResult(null);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    renderHandWrite();
+    if (done >= 3) completeTask("dictation");
+    else if (done > 0) toast("本轮结束，至少写完 3 个字才算完成今日「语文听写」任务哦");
+    else toast("本轮听写已结束");
+    if (sum) setTimeout(function () { try { sum.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {} }, 80);
+  }
+
+  function endHandWrite(silent) {
+    clearTimeout(hwAutoTimer); hwAutoTimer = null;
+    if (!HW.on) return;
+    var done = 0;
+    for (var i = 0; i < HW.chars.length; i++) if (HW.results[HW.chars[i]]) done++;
+    HW.on = false;
+    clearHandInk();
+    setHandResult(null);
+    var nb = $("#hwNextBar");
+    if (nb) nb.style.display = "none";
+    var sum = $("#hwSum");
+    if (sum) { sum.classList.remove("on"); sum.innerHTML = ""; }
+    renderHandWrite();
+    if (silent) return;
+    if (done >= 3) completeTask("dictation");
+    else toast(done > 0 ? "已退出屏上听写，至少写完 3 个字才算完成任务哦" : "已退出屏上听写");
+  }
+
+  /* 幂等设置掌握状态：供 AI 判定/家长判定使用（不同于点击切换的 markChar） */
+  function setCharMastery(ch, st, lesson) {
+    var les = lesson || S.lesson;
+    if (!S.mastery[les]) S.mastery[les] = {};
+    if (S.mastery[les][ch] !== st) S.mastery[les][ch] = st;
+    saveMastery();
+    if (st === 0) addWrongChar(ch, les);
+    else removeCharFromWrong(ch, les);
+    renderChinese(); renderStatCards(); renderWrong(); renderBadges();
+  }
+
+  /* ---------- 童话 ---------- */
+  function buildStoryContent() {
+    var box = $("#storyBox");
+    if (!box) return;
+    box.innerHTML = "";
+    if (!S.storyText) {
+      var em = el("div", "story-empty");
+      em.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2 2 0 0 1 6 3.5h5.5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5.5a2 2 0 0 0-2-2h-5.5v17H18a2 2 0 0 1 2 2z"/></svg>';
+      em.appendChild(el("div", "", "还没有故事哦～点上面的「生成新童话」试试吧！"));
+      em.appendChild(el("div", "", "第一次使用请家长在「家长控制面板」里配置好大模型 API"));
+      box.appendChild(em);
+      return;
+    }
+    if (S.storyTitle) box.appendChild(el("h3", "story-title", S.storyTitle));
+    var wrap = el("div", "story-text");
+    var lines = S.storyText.split(/\n+/).filter(function (x) { return x.trim().length > 0; });
+    if (!lines.length) lines = [S.storyText];
+    var usePinyin = !!window.pinyinPro;
+    for (var i = 0; i < lines.length; i++) {
+      var p = el("p");
+      if (usePinyin) appendRuby(p, lines[i]);
+      else p.textContent = lines[i];
+      wrap.appendChild(p);
+    }
+    box.appendChild(wrap);
+    if (!usePinyin) {
+      var tip = el("p", "tip", "拼音库暂时没加载出来（可能离线），先看文字版吧。联网刷新页面即可恢复注音。");
+      box.appendChild(tip);
+    }
+  }
+  function appendRuby(host, text) {
+    var re = /[\u4e00-\u9fa5]+/g, last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) host.appendChild(el("span", "punct", text.slice(last, m.index)));
+      var run = m[0], pyArr = null;
+      try { pyArr = window.pinyinPro.pinyin(run, { type: "array", toneType: "symbol" }); } catch (e) { pyArr = null; }
+      for (var i = 0; i < run.length; i++) {
+        var ruby = document.createElement("ruby");
+        ruby.appendChild(document.createTextNode(run[i]));
+        var rt = document.createElement("rt");
+        rt.textContent = (pyArr && pyArr[i]) ? pyArr[i] : "";
+        ruby.appendChild(rt);
+        host.appendChild(ruby);
+      }
+      last = m.index + run.length;
+    }
+    if (last < text.length) host.appendChild(el("span", "punct", text.slice(last)));
+  }
+  function renderStory() {
+    var key = (S.storyTitle || "") + "|" + S.storyText.length + "|" + (window.pinyinPro ? "1" : "0");
+    if (key === lastStoryKey) return;
+    lastStoryKey = key;
+    buildStoryContent();
+  }
+  function renderHistory() {
+    var host = $("#histList");
+    if (!host) return;
+    host.innerHTML = "";
+    var list = S.stories.history.slice().reverse();
+    if (!list.length) {
+      var e = el("div", "wb-empty", "还没有读过故事，快去生成一篇吧！");
+      host.appendChild(e);
+    } else {
+      for (var i = 0; i < list.length; i++) {
+        var it = list[i];
+        var row = el("div", "hist-item");
+        var t = el("div", "h-t", it.title);
+        if (it.demo) t.appendChild(el("span", "demo-tag", "示例"));
+        var d = el("div", "h-d", it.date || "");
+        var x = el("button", "h-x");
+        x.type = "button"; x.setAttribute("data-del", it.title);
+        x.title = "删除这条记录";
+        x.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>';
+        row.appendChild(t); row.appendChild(d); row.appendChild(x);
+        host.appendChild(row);
+      }
+    }
+    var sub = $("#histSub");
+    if (sub) sub.textContent = "已读过 " + S.stories.readTitles.length + " 个主题，生成新故事时会自动避开";
+  }
+  function renderTimer() {
+    var clock = $("#timerClock"), start = $("#btnTimerStart"), stop = $("#btnTimerStop"), hint = $("#timerHint");
+    if (!clock) return;
+    var running = !!(S.timer && S.timer.running && S.timer.endAt);
+    // 未计时时显示目标时长 15:00，而不是 00:00，让孩子知道要读多久
+    var remain = running ? Math.max(0, Math.ceil((S.timer.endAt - Date.now()) / 1000)) : TIMER_SECONDS;
+    var mm = Math.floor(remain / 60), ss = remain % 60;
+    clock.textContent = pad2(mm) + ":" + pad2(ss);
+    clock.classList.toggle("run", running);
+    if (start) start.style.display = running ? "none" : "inline-flex";
+    if (stop) stop.style.display = running ? "inline-flex" : "none";
+    if (hint) hint.textContent = running
+      ? "阅读计时中，读完记得让眼睛休息一下～"
+      : "认真读满 15 分钟就能完成今日「阅读」任务";
+  }
+  function renderWrong() {
+    var host = $("#wbList");
+    if (!host) return;
+    host.innerHTML = "";
+    var mn = $("#wbMathN"), cn = $("#wbCnN");
+    if (mn) mn.textContent = S.wrong.math.length;
+    if (cn) cn.textContent = S.wrong.chinese.length;
+    var tabs = document.querySelectorAll(".wb-tab");
+    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle("on", tabs[i].getAttribute("data-wtab") === S.wbTab);
+
+    if (S.wbTab === "math") {
+      if (!S.wrong.math.length) {
+        var e1 = el("div", "wb-empty");
+        e1.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 12.5 10.8 15.3 16.2 9.2"/></svg>';
+        e1.appendChild(el("div", "", "数学错题本是空的，太棒啦！"));
+        host.appendChild(e1);
+        return;
+      }
+      for (var a = 0; a < S.wrong.math.length; a++) {
+        host.appendChild(wrongMathItem(S.wrong.math[a]));
+      }
+    } else {
+      if (!S.wrong.chinese.length) {
+        var e2 = el("div", "wb-empty");
+        e2.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 12.5 10.8 15.3 16.2 9.2"/></svg>';
+        e2.appendChild(el("div", "", "语文错字本是空的，真厉害！"));
+        host.appendChild(e2);
+        return;
+      }
+      for (var b = 0; b < S.wrong.chinese.length; b++) {
+        host.appendChild(wrongCnItem(S.wrong.chinese[b]));
+      }
+    }
+  }
+  function wrongMathItem(it) {
+    var row = el("div", "wb-item");
+    row.appendChild(el("span", "w-q", it.text));
+    var meta = el("div", "w-meta");
+    meta.appendChild(el("div", "w-lab", "正确答案"));
+    meta.appendChild(el("div", "w-py", String(it.ans)));
+    row.appendChild(meta);
+    if (challenge.type === "math" && challenge.id === it.id) {
+      var box = el("div", "wb-challenge");
+      box.appendChild(el("span", "w-lab", "再算一次："));
+      var inp = document.createElement("input");
+      inp.type = "number"; inp.className = "m-in"; inp.setAttribute("inputmode", "numeric");
+      inp.setAttribute("data-wc", it.id);
+      inp.placeholder = "?";
+      box.appendChild(inp);
+      var cancel = el("button", "btn ghost sm", "先不做");
+      cancel.type = "button"; cancel.setAttribute("data-wcancel", "1");
+      box.appendChild(cancel);
+      row.appendChild(box);
+      setTimeout(function () { try { inp.focus(); } catch (e) {} }, 30);
+    } else {
+      var btn = el("button", "btn yellow sm", "重新挑战");
+      btn.type = "button";
+      btn.setAttribute("data-wstart", it.id);
+      btn.setAttribute("data-wtype", "math");
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>重新挑战';
+      row.appendChild(btn);
+    }
+    return row;
+  }
+  function wrongCnItem(it) {
+    var row = el("div", "wb-item");
+    var face = el("button", "w-char");
+    face.type = "button";
+    face.setAttribute("data-speak", it.char);
+    face.setAttribute("aria-label", "朗读 " + it.char);
+    face.textContent = it.char;
+    row.appendChild(face);
+    var meta = el("div", "w-meta");
+    meta.appendChild(el("div", "w-lab", it.lesson || "语文错字"));
+    var py = "";
+    if (window.pinyinPro) { try { py = window.pinyinPro.pinyin(it.char, { toneType: "symbol" }); } catch (e) { py = ""; } }
+    meta.appendChild(el("div", "w-py", py || "点左边的字听读音"));
+    row.appendChild(meta);
+    if (challenge.type === "cn" && challenge.id === it.id) {
+      var box = el("div", "wb-challenge");
+      box.appendChild(el("span", "w-lab", "在纸上写一遍，写对了吗？"));
+      var yes = el("button", "btn green sm", "写对了，擦掉它");
+      yes.type = "button"; yes.setAttribute("data-wok", it.id);
+      var no = el("button", "btn ghost sm", "再练练");
+      no.type = "button"; no.setAttribute("data-wcancel", "1");
+      box.appendChild(yes); box.appendChild(no);
+      row.appendChild(box);
+    } else {
+      var btn = el("button", "btn yellow sm", "重新挑战");
+      btn.type = "button";
+      btn.setAttribute("data-wstart", it.id);
+      btn.setAttribute("data-wtype", "cn");
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>重新挑战';
+      row.appendChild(btn);
+    }
+    return row;
+  }
+  function renderReviewCount() {
+    var r = $("#reviewCnt");
+    if (r) r.textContent = S.daily.reviewCount || 0;
+  }
+  function renderBadges() {
+    var wm = $("#navMathBadge"), ww = $("#navWrongBadge");
+    if (wm) {
+      var wrongMathCount = 0;
+      if (S.mathSet && S.mathSet.results) {
+        for (var k in S.mathSet.results) if (S.mathSet.results[k] === "bad") wrongMathCount++;
+      }
+      wm.textContent = wrongMathCount ? String(wrongMathCount) : "";
+      wm.classList.toggle("on", wrongMathCount > 0);
+    }
+    if (ww) {
+      var n = S.wrong.math.length + S.wrong.chinese.length;
+      ww.textContent = n ? String(n) : "";
+      ww.classList.toggle("on", n > 0);
+    }
+  }
+  function renderSettingsForm() {
+    var b = $("#cfgBaseUrl"), k = $("#cfgApiKey"), m = $("#cfgModel"), c = $("#cfgModelCustom");
+    if (b) b.value = S.settings.baseUrl || "";
+    if (k) k.value = S.settings.apiKey || "";
+    if (m) {
+      m.innerHTML = "";
+      for (var i = 0; i < MODELS.length; i++) {
+        var o = document.createElement("option");
+        o.value = MODELS[i].v; o.textContent = MODELS[i].t;
+        m.appendChild(o);
+      }
+      var isCustom = S.settings.model === "__custom__";
+      m.value = isCustom ? "__custom__" : (S.settings.model || "gpt-4o-mini");
+    }
+    if (c) {
+      c.style.display = (S.settings.model === "__custom__") ? "block" : "none";
+      c.value = S.settings.customModel || "";
+    }
+    var mm = $("#cfgMarkModel"), mc = $("#cfgMarkModelCustom");
+    if (mm) {
+      mm.innerHTML = "";
+      for (var j = 0; j < MARK_MODELS.length; j++) {
+        var oo = document.createElement("option");
+        oo.value = MARK_MODELS[j].v;
+        oo.textContent = MARK_MODELS[j].t;
+        mm.appendChild(oo);
+      }
+      mm.value = S.settings.markModel || "__same__";
+    }
+    if (mc) {
+      mc.style.display = (S.settings.markModel === "__custom__") ? "block" : "none";
+      mc.value = S.settings.markModelCustom || "";
+    }
+  }
+
+  function refreshAll() {
+    renderStatusBar();
+    renderTasks();
+    renderStatCards();
+    renderMath();
+    renderChinese();
+    renderHandWrite();
+    renderStory();
+    renderHistory();
+    renderWrong();
+    renderTimer();
+    renderReviewCount();
+    renderBadges();
+    renderLogPanel();
+  }
+
+  /* ==================================================================
+     10. 业务动作
+     ================================================================== */
+  function handleMathInput(i, inp) {
+    if (!S.mathSet || !S.mathSet.qs[i]) return;
+    var v = (inp.value || "").trim();
+    if (!S.mathSet.answers) S.mathSet.answers = {};
+    if (!S.mathSet.results) S.mathSet.results = {};
+    if (!S.mathSet.wrongAdded) S.mathSet.wrongAdded = {};
+    S.mathSet.answers[i] = v;
+    var q = S.mathSet.qs[i];
+    var ansStr = String(q.ans);
+    if (v === ansStr) {
+      if (S.mathSet.results[i] !== "ok") {
+        S.mathSet.results[i] = "ok";
+        saveMath();
+        playDing();
+        syncMathRow(i);
+        syncMathProgress();
+        renderTasks(); renderBadges(); renderStatCards();
+        checkMathDone();
+      }
+      return;
+    }
+    if (v.length >= ansStr.length && v.length > 0) {
+      if (S.mathSet.results[i] !== "bad") {
+        S.mathSet.results[i] = "bad";
+        saveMath();
+        if (!S.mathSet.wrongAdded[i]) {
+          S.mathSet.wrongAdded[i] = true;
+          addWrongMath(q);
+        }
+        playBuzz();
+        syncMathRow(i);
+        syncMathProgress();
+        renderBadges(); renderTasks();
+        toast("答错啦，已放进错题小本本");
+        checkMathDone();
+      }
+    } else if (S.mathSet.results[i] === "bad") {
+      S.mathSet.results[i] = "";
+      saveMath();
+      syncMathRow(i);
+      syncMathProgress();
+      renderBadges(); renderTasks();
+    }
+  }
+  function addWrongMath(q) {
+    for (var i = 0; i < S.wrong.math.length; i++) if (S.wrong.math[i].text === q.text) return;
+    S.wrong.math.push({ id: uid("m"), text: q.text, ans: q.ans, ts: Date.now() });
+    saveWrong();
+    renderStatCards(); renderWrong();
+  }
+  function addWrongChar(ch, lesson) {
+    for (var i = 0; i < S.wrong.chinese.length; i++) {
+      if (S.wrong.chinese[i].char === ch && S.wrong.chinese[i].lesson === lesson) return;
+    }
+    S.wrong.chinese.push({ id: uid("c"), char: ch, lesson: lesson, ts: Date.now() });
+    saveWrong();
+    renderStatCards(); renderWrong();
+  }
+  function removeCharFromWrong(ch, lesson) {
+    var next = [];
+    for (var i = 0; i < S.wrong.chinese.length; i++) {
+      var w = S.wrong.chinese[i];
+      if (!(w.char === ch && w.lesson === lesson)) next.push(w);
+    }
+    if (next.length !== S.wrong.chinese.length) { S.wrong.chinese = next; saveWrong(); }
+  }
+  function markChar(ch, st) {
+    if (!S.mastery[S.lesson]) S.mastery[S.lesson] = {};
+    var book = S.mastery[S.lesson];
+    var now; // 本次操作后该字的状态：1=已掌握 0=未掌握 undefined=已取消标记
+    if (book[ch] === st) { delete book[ch]; now = undefined; }
+    else { book[ch] = st; now = st; }
+    saveMastery();
+    if (now === 0) {
+      addWrongChar(ch, S.lesson);
+      playBuzz();
+      toast("「" + ch + "」已加入错字本，多写几遍吧");
+    } else {
+      // 已掌握 / 取消标记 → 同步从错字本移除，两处状态保持一致
+      removeCharFromWrong(ch, S.lesson);
+      if (now === 1) playDing();
+    }
+    renderChinese(); renderStatCards(); renderWrong(); renderBadges();
+  }
+  function bumpReview() {
+    S.daily.reviewCount = (S.daily.reviewCount || 0) + 1;
+    saveDaily();
+    renderReviewCount(); renderTasks();
+    if (S.daily.reviewCount >= 3) completeTask("review");
+  }
+  function removeWrong(kind, id) {
+    var arr = kind === "math" ? S.wrong.math : S.wrong.chinese;
+    var next = [];
+    for (var i = 0; i < arr.length; i++) if (arr[i].id !== id) next.push(arr[i]);
+    if (kind === "math") S.wrong.math = next; else S.wrong.chinese = next;
+    saveWrong();
+  }
+
+  /* ---------- 计时器 ---------- */
+  var timerTick = null;
+  var TIMER_SECONDS = 15 * 60;
+  function startTimer() {
+    S.timer = { endAt: Date.now() + TIMER_SECONDS * 1000, running: true };
+    saveTimer(); renderTimer();
+    toast("计时开始，安心读书吧～");
+    if (!timerTick) timerTick = setInterval(onTimerTick, 1000);
+  }
+  function stopTimerSilently() {
+    if (timerTick) { clearInterval(timerTick); timerTick = null; }
+    S.timer = { endAt: 0, running: false };
+  }
+  function stopTimer() {
+    stopTimerSilently(); saveTimer(); renderTimer();
+  }
+  function onTimerTick() {
+    if (!S.timer || !S.timer.running) { if (timerTick) { clearInterval(timerTick); timerTick = null; } return; }
+    var remain = Math.ceil((S.timer.endAt - Date.now()) / 1000);
+    if (remain <= 0) {
+      stopTimerSilently(); saveTimer(); renderTimer();
+      // 若阅读恰好是最后一项，completeTask 已弹出满格祝贺，此处不再覆盖
+      if (!completeTask("reading")) {
+        celebrate(true, "读满 15 分钟！", "阅读任务完成，眼睛该休息啦");
+      }
+      return;
+    }
+    renderTimer();
+  }
+  function resumeTimer() {
+    if (S.timer && S.timer.running && S.timer.endAt > Date.now()) {
+      if (!timerTick) timerTick = setInterval(onTimerTick, 1000);
+    } else if (S.timer && S.timer.running && S.timer.endAt <= Date.now()) {
+      // 跨天/超时，自动结束
+      stopTimerSilently(); saveTimer();
+    }
+  }
+
+  /* ==================================================================
+     9.5 运行日志与网络诊断（排查连接问题专用）
+     ================================================================== */
+  var LOGS = [];
+  var LOG_MAX = 200;
+  var logSeq = 0;
+  var logOpenAll = false;
+  var logRenderTimer = null;
+  var lastDiag = null;   // 最近一次失败的诊断结论
+
+  // 记录一条诊断结论，显示在日志面板顶部
+  function setDiag(info) {
+    lastDiag = info || null;
+    renderLogPanel();
+  }
+
+  function nowHMS() {
+    var d = new Date();
+    return pad2(d.getHours()) + ":" + pad2(d.getMinutes()) + ":" + pad2(d.getSeconds());
+  }
+
+  /* 记一条日志。level: info | ok | warn | err
+     调用链是单向的：dbg → scheduleLogRender → renderLogPanel
+     renderLogPanel 绝不回调 dbg，避免出现环路 */
+  function dbg(level, msg, detail) {
+    var e = { i: ++logSeq, t: nowHMS(), lv: level, msg: msg, dt: detail || "", open: false };
+    LOGS.push(e);
+    if (LOGS.length > LOG_MAX) LOGS.shift();
+    try {
+      if (typeof console !== "undefined" && console) {
+        var tag = "[小二学习台] " + e.t + " " + msg;
+        if (level === "err" && console.error) console.error(tag, detail || "");
+        else if (level === "warn" && console.warn) console.warn(tag, detail || "");
+        else if (console.log) console.log(tag, detail || "");
+      }
+    } catch (e1) {}
+    scheduleLogRender();
+  }
+  function scheduleLogRender() {
+    if (logRenderTimer) return;
+    logRenderTimer = setTimeout(function () {
+      logRenderTimer = null;
+      renderLogPanel();
+    }, 60);
+  }
+  function clearLogs() {
+    LOGS.length = 0;
+    logSeq = 0;
+    renderLogPanel();
+  }
+  function logsToText() {
+    var out = [];
+    out.push("===== 二年级快乐学习台 · 运行日志 =====");
+    out.push("导出时间：" + new Date().toLocaleString());
+    out.push("页面地址：" + location.href);
+    out.push("页面来源：" + location.origin + "（协议 " + location.protocol + "）");
+    out.push("浏览器：" + navigator.userAgent);
+    out.push("--------------------------------------");
+    if (!LOGS.length) out.push("(无日志)");
+    for (var i = 0; i < LOGS.length; i++) {
+      var e = LOGS[i];
+      out.push("[" + e.t + "][" + e.lv.toUpperCase() + "] " + e.msg);
+      if (e.dt) {
+        var parts = String(e.dt).split("\n");
+        for (var j = 0; j < parts.length; j++) out.push("        " + parts[j]);
+      }
+    }
+    return out.join("\n");
+  }
+
+  function renderLogPanel() {
+    var list = $("#logList");
+    if (!list) return;
+    var badge = $("#logBadge");
+    var errN = 0;
+    for (var a = 0; a < LOGS.length; a++) if (LOGS[a].lv === "err") errN++;
+    if (badge) {
+      badge.textContent = LOGS.length ? (LOGS.length + " 条" + (errN ? " · " + errN + " 处报错" : "")) : "0 条";
+      badge.className = "badge" + (errN ? " err" : (LOGS.length ? " ok" : ""));
+    }
+    while (list.firstChild) list.removeChild(list.firstChild);
+
+    if (lastDiag) {
+      var dg = el("div", "log-diag");
+      var dgT = el("div", "", "诊断结论：" + (lastDiag.title || "请求失败"));
+      dgT.style.fontWeight = "800";
+      dg.appendChild(dgT);
+      if (lastDiag.why) dg.appendChild(el("div", "", lastDiag.why));
+      if (lastDiag.fix) {
+        var fx = el("div", "fix", "怎么解决：" + lastDiag.fix);
+        dg.appendChild(fx);
+      }
+      list.appendChild(dg);
+    }
+
+    if (!LOGS.length) {
+      var em = el("div", "log-empty", "还没有日志。填好配置后点「测试连接」或「网络自检」开始记录。");
+      list.appendChild(em);
+      return;
+    }
+    for (var k = 0; k < LOGS.length; k++) {
+      var e = LOGS[k];
+      var shown = logOpenAll || e.open;
+      var row = el("div", "log-row " + e.lv + (shown ? " open" : ""));
+      row.setAttribute("data-log", String(e.i));
+      row.title = "点击查看/收起详情";
+      row.appendChild(el("span", "tm", e.t));
+      row.appendChild(el("span", "dt", ""));
+      var tx = el("span", "tx", e.msg);
+      if (e.dt) tx.appendChild(el("span", "dts", e.dt));
+      row.appendChild(tx);
+      list.appendChild(row);
+    }
+    list.scrollTop = list.scrollHeight;
+  }
+
+  function toggleLogRow(id, forceOpen) {
+    for (var i = 0; i < LOGS.length; i++) {
+      if (String(LOGS[i].i) === String(id)) {
+        LOGS[i].open = (forceOpen === undefined) ? !LOGS[i].open : !!forceOpen;
+        break;
+      }
+    }
+    renderLogPanel();
+  }
+
+  function copyLogs() {
+    var txt = logsToText();
+    var okCopy = false;
+    try {
+      var ta = document.createElement("textarea");
+      ta.value = txt;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0";
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, txt.length);
+      okCopy = document.execCommand("copy");
+      document.body.removeChild(ta);
+    } catch (e) { okCopy = false; }
+    if (okCopy) { toast("日志已复制到剪贴板，粘贴给我们就行"); return; }
+    downloadLogs();
+  }
+  function downloadLogs() {
+    try {
+      var blob = new Blob([logsToText()], { type: "text/plain;charset=utf-8" });
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "小二学习台-日志-" + todayStr() + ".txt";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); document.body.removeChild(a); }, 500);
+      toast("日志已下载");
+    } catch (e) {
+      toast("导出日志失败，可以按 F12 从控制台复制");
+    }
+  }
+
+  /* ---------- 网络探测 ---------- */
+
+  function originOf(url) {
+    try { var u = new URL(url); return u.origin; } catch (e) { return ""; }
+  }
+  // 去掉 /chat/completions 后缀，得到基础路径
+  function baseNoPath(base) {
+    var u = String(base || "").trim().replace(/\/+$/, "");
+    if (/\/chat\/completions$/i.test(u)) u = u.replace(/\/chat\/completions$/i, "").replace(/\/+$/, "");
+    return u;
+  }
+  // no-cors 探测：只要服务器有回应就算「网络通」，与 CORS 是否放行无关。
+  // 这是区分「网络不通」和「被浏览器 CORS 拦下」的关键手段。
+  function probeReach(url, timeoutMs) {
+    return new Promise(function (resolve) {
+      if (!url || !/^https?:/i.test(url)) {
+        resolve({ reachable: false, ms: 0, msg: "地址格式不对，必须以 http:// 或 https:// 开头" });
+        return;
+      }
+      var t0 = Date.now();
+      var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+      var to = setTimeout(function () { if (ctl) ctl.abort(); }, timeoutMs || 6000);
+      var done = false;
+      function fin(r) { if (done) return; done = true; clearTimeout(to); resolve(r); }
+      try {
+        fetch(url, { method: "GET", mode: "no-cors", cache: "no-store", signal: ctl ? ctl.signal : undefined })
+          .then(function () { fin({ reachable: true, ms: Date.now() - t0 }); })
+          .catch(function (e) {
+            fin({ reachable: false, ms: Date.now() - t0, name: e && e.name, msg: (e && e.message) || "无法访问" });
+          });
+      } catch (e) {
+        fin({ reachable: false, ms: Date.now() - t0, name: e && e.name, msg: (e && e.message) || "无法访问" });
+      }
+    });
+  }
+  // 探测 /models：OpenAI 兼容接口大多支持，用来验证「CORS + 鉴权」是否正常，且不消耗 token
+  function probeModels(base, key, timeoutMs) {
+    var url = baseNoPath(base) + "/models";
+    var t0 = Date.now();
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctl) ctl.abort(); }, timeoutMs || 12000);
+    return fetch(url, {
+      method: "GET",
+      headers: { "Authorization": "Bearer " + (key || "") },
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
+      clearTimeout(to);
+      return res.text().then(function (t) {
+        return { ok: true, status: res.status, ms: Date.now() - t0, body: String(t || "").replace(/\s+/g, " ").slice(0, 200), url: url };
+      });
+    }).catch(function (e) {
+      clearTimeout(to);
+      return { ok: false, name: e && e.name, msg: (e && e.message) || "无法访问", ms: Date.now() - t0, url: url };
+    });
+  }
+
+  /* ---------- 统一请求入口：所有大模型调用都走这里，保证有日志 ---------- */
+  function apiFetch(o) {
+    var label = o.label || "请求";
+    var url = o.url;
+    var timeout = o.timeout || 60000;
+    var bodyText = o.body ? JSON.stringify(o.body) : "";
+    var t0 = Date.now();
+
+    dbg("info", label + " → 发起请求", [
+      "请求地址：" + url,
+      "模型：" + (o.model || "(未指定)"),
+      "请求体大小：" + (bodyText.length / 1024).toFixed(1) + " KB",
+      "超时上限：" + (timeout / 1000) + " 秒"
+    ].join("\n"));
+
+    var ctl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    var to = setTimeout(function () { if (ctl) ctl.abort(); }, timeout);
+
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + (o.key || "") },
+      body: bodyText,
+      signal: ctl ? ctl.signal : undefined
+    }).then(function (res) {
+      clearTimeout(to);
+      var ms = Date.now() - t0;
+      if (!res.ok) {
+        return res.text().then(function (txt) {
+          var brief = String(txt || "").replace(/\s+/g, " ").slice(0, 300);
+          var em = "";
+          try { var j = JSON.parse(txt); if (j && j.error && j.error.message) em = j.error.message; } catch (e) {}
+          dbg("err", label + " ← 接口拒绝：HTTP " + res.status + "（" + ms + "ms）", [
+            "HTTP 状态：" + res.status,
+            em ? "接口原话：" + em : "",
+            "响应片段：" + brief
+          ].filter(Boolean).join("\n"));
+          var err1 = new Error("HTTP " + res.status + (em ? " · " + em : ""));
+          err1.kind = "http";
+          err1.status = res.status;
+          err1.raw = brief;
+          throw err1;
+        });
+      }
+      return res.text().then(function (txt) {
+        var data = null;
+        try {
+          data = JSON.parse(txt);
+        } catch (e2) {
+          dbg("err", label + " ← 返回的不是 JSON（" + ms + "ms）",
+            "HTTP 状态：" + res.status + "\n响应片段：" + String(txt || "").replace(/\s+/g, " ").slice(0, 300));
+          var err2 = new Error("接口返回的不是 JSON，多半是地址写错了");
+          err2.kind = "parse";
+          throw err2;
+        }
+        dbg("ok", label + " ← 成功（" + ms + "ms）", "HTTP 状态：" + res.status + "\n耗时：" + ms + " ms");
+        return data;
+      });
+    }).catch(function (err) {
+      clearTimeout(to);
+      var ms = Date.now() - t0;
+      if (err && err.kind) throw err;
+      if (err && err.name === "AbortError") {
+        dbg("err", label + " ← 超时（" + ms + "ms）", [
+          "请求发出后 " + (timeout / 1000) + " 秒内没有拿到响应。",
+          "常见原因：网络被代理/防火墙拦住、接口地址指向的服务没在运行、或服务本身卡住不返回。",
+          "注意：这不是被 CORS 拦截（那种情况会立刻失败，不会等满 " + (timeout / 1000) + " 秒）。"
+        ].join("\n"));
+        var e3 = new Error("请求超时");
+        e3.kind = "timeout";
+        throw e3;
+      }
+      // TypeError: Failed to fetch —— 继续探测，区分「网络不通」还是「CORS 拦截」
+      return probeReach(originOf(url), 5000).then(function (p) {
+        var e4;
+        if (p.reachable) {
+          dbg("err", label + " ← 被浏览器拦截（" + ms + "ms）", [
+            "服务器是连得上的（探测 " + p.ms + "ms 有回应），但浏览器不让页面读取响应——这是 CORS 跨域限制。",
+            "说明该接口没有开放浏览器直连，或当前页面来源不在它的白名单里。",
+            "当前页面来源：" + location.origin + "（" + location.protocol + "）"
+          ].join("\n"));
+          e4 = new Error("接口不允许浏览器直连（CORS）");
+          e4.kind = "cors";
+        } else {
+          dbg("err", label + " ← 网络不通（" + ms + "ms）", [
+            "连服务器都没连上，压根没到 CORS 那一步。",
+            "探测结果：" + (p.msg || "无法访问") + "（" + p.ms + "ms）",
+            "请检查：地址是否写错、是否需要公司代理、域名能否解析。"
+          ].join("\n"));
+          e4 = new Error("网络不通，连不上这个地址");
+          e4.kind = "network";
+        }
+        throw e4;
+      });
+    });
+  }
+
+  // 把错误翻译成给家长看的话 + 具体怎么修
+  function apiErrInfo(err) {
+    var k = err && err.kind;
+    var origin = location.origin + (location.protocol === "file:" ? "（本地文件）" : "");
+    if (k === "timeout") return {
+      title: "请求超时",
+      why: "请求发出去了，但等满时限都没收到回应。",
+      fix: "多半是网络到不了这个服务（代理 / 防火墙 / 服务没启动）。可以先用「网络自检」确认网络是否可达。"
+    };
+    if (k === "cors") return {
+      title: "接口不允许浏览器直连（CORS）",
+      why: "网络是通的，但该接口没有开放跨域访问，浏览器按安全策略把响应拦下了。",
+      fix: "换一个允许浏览器直连的服务商（本机实测 DeepSeek、Moonshot、通义千问、SiliconFlow 可直接用），或自己搭一层反向代理转发。"
+    };
+    if (k === "network") return {
+      title: "网络不通",
+      why: "域名解析失败或端口连不上，请求根本没发出去。",
+      fix: "检查 Base URL 有没有写错（注意别漏了 /v1 这一段），确认这台电脑能正常访问该网站。"
+    };
+    if (k === "parse") return {
+      title: "接口返回的不是 JSON",
+      why: "地址多半写错了，请求打到了别的页面上（比如网页首页）。",
+      fix: "检查 Base URL，正确形式类似 https://api.deepseek.com/v1"
+    };
+    if (k === "http") return {
+      title: "接口返回错误 " + (err.status || ""),
+      why: err.message || "",
+      fix: err.status === 401 || err.status === 403
+        ? "密钥无效或没有该模型的权限，检查 API Key 是否复制完整。"
+        : (err.status === 404
+          ? "地址或模型名不对，检查 Base URL 与模型名称。"
+          : (err.status === 429 ? "请求太频繁或额度用完，稍后再试或充值。" : "按上面的接口原话排查。"))
+    };
+    return { title: "请求失败", why: (err && err.message) || "未知错误", fix: "点「网络自检」看看具体卡在哪一步。" };
+  }
+
+  /* ---------- 网络自检：不消耗 token，只查链路 ---------- */
+  function runDiagnostics() {
+    readForm();
+    var base = (S.settings.baseUrl || "").trim();
+    var key = (S.settings.apiKey || "").trim();
+    var model = currentModel();
+    var url = buildChatUrl(base);
+
+    dbg("info", "===== 开始网络自检 =====", "");
+
+    // ① 页面来源
+    if (location.protocol === "file:") {
+      dbg("warn", "① 页面来源：本地文件（file://）", [
+        "页面是直接双击打开的。部分接口不接受 file:// 这种来源。",
+        "如果后面显示「被浏览器拦截」，可以试试用 http 方式打开，或部署到线上。"
+      ].join("\n"));
+    } else {
+      dbg("info", "① 页面来源：" + location.origin, "协议 " + location.protocol + "，正常。");
+    }
+
+    // ② 配置
+    var missing = [];
+    if (!base) missing.push("Base URL");
+    if (!key) missing.push("API Key");
+    if (!model) missing.push("模型名称");
+    if (missing.length) {
+      dbg("err", "② 配置不完整：缺 " + missing.join("、"), "先把这几项填好再自检。");
+    } else {
+      dbg("info", "② 配置检查通过", [
+        "Base URL：" + base,
+        "实际请求地址：" + url,
+        "模型：" + model,
+        "密钥：" + (key.length > 8 ? key.slice(0, 5) + "****" + key.slice(-3) : "****") + "（长度 " + key.length + "）"
+      ].join("\n"));
+    }
+
+    // ③→④→⑤ 串行探测
+    var origin = originOf(url) || baseNoPath(base);
+    probeReach(origin, 6000).then(function (p) {
+      if (!p.ok && !p.reachable) { /* noop */ }
+      if (p.reachable) {
+        dbg("ok", "③ 网络可达：" + origin + "（" + p.ms + "ms）", "能连上这个服务器，DNS 和网络没问题。");
+      } else {
+        dbg("err", "③ 网络不可达：" + origin, [
+          "原因：" + (p.msg || "无法访问") + "（" + p.ms + "ms）",
+          "这一步不通，后面的请求都不可能成功。请先解决网络/地址问题。"
+        ].join("\n"));
+      }
+      return probeModels(base, key, 12000);
+    }).then(function (m) {
+      if (!m.ok) {
+        if (m.name === "AbortError") {
+          dbg("err", "④ 接口连通性：超时（" + m.ms + "ms）", "地址 " + m.url + "\n超过 12 秒没响应，服务可能卡住或网络受限。");
+        } else {
+          dbg("err", "④ 接口连通性：请求失败（" + m.ms + "ms）", [
+            "地址：" + m.url,
+            "错误：" + m.name + " · " + m.msg,
+            "如果第 ③ 步是通的，那这里失败基本就是 CORS 被拦（该接口不开放浏览器直连）。"
+          ].join("\n"));
+        }
+      } else if (m.status === 200 || m.status === 204) {
+        dbg("ok", "④ 接口连通性：正常（HTTP " + m.status + "，" + m.ms + "ms）", "地址 " + m.url + "\nCORS 与鉴权都通过了，可以直接用。");
+      } else if (m.status === 401 || m.status === 403) {
+        dbg("warn", "④ 接口连通性：能连上，但密钥被拒（HTTP " + m.status + "，" + m.ms + "ms）", [
+          "地址：" + m.url,
+          "接口原话：" + m.body,
+          "好消息：CORS 是通的（否则根本读不到状态码）。问题在 API Key。"
+        ].join("\n"));
+      } else if (m.status === 404) {
+        dbg("warn", "④ 接口连通性：能连上，但没有 /models（HTTP 404）", [
+          "地址：" + m.url,
+          "有些兼容接口不提供 /models，这不代表配置有问题，可以直接点「测试连接」试真实对话。"
+        ].join("\n"));
+      } else {
+        dbg("warn", "④ 接口连通性：HTTP " + m.status + "（" + m.ms + "ms）", "地址：" + m.url + "\n响应片段：" + m.body);
+      }
+      dbg("info", "===== 自检结束 =====", "结论：③ 看网络、④ 看 CORS 与鉴权。两步都过就点「测试连接」发起真实对话。");
+    }).catch(function (e) {
+      dbg("err", "自检过程出错", String((e && e.message) || e));
+    });
+  }
+
+  function openLogPanel() {
+    var p = $("#panel");
+    if (p && !p.classList.contains("open")) togglePanel();
+  }
+  function expandLogs(on) {
+    logOpenAll = !!on;
+    var list = $("#logList");
+    if (list) list.classList.toggle("expanded", logOpenAll);
+    var b = $("#btnDiagOpen");
+    if (b) b.textContent = logOpenAll ? "收起" : "展开";
+    renderLogPanel();
+  }
+
+  /* ---------- 大模型调用 ---------- */
+  function buildChatUrl(base) {
+    var b = String(base || "").trim().replace(/\/+$/, "");
+    if (!b) return "";
+    if (/\/chat\/completions$/i.test(b)) return b;
+    return b + "/chat/completions";
+  }
+  function currentModel() {
+    if (S.settings.model === "__custom__") return (S.settings.customModel || "").trim();
+    return S.settings.model;
+  }
+  function setStoryLoading(on, msg) {
+    var btn = $("#btnGenStory");
+    if (btn) {
+      btn.disabled = !!on;
+      btn.innerHTML = on
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4.5V11h-6.5"/></svg>正在创作…'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 14 9l5.5 2-5.5 2-2 5.5-2-5.5L4.5 11 10 9z"/></svg>生成新童话';
+    }
+    if (msg) toast(msg);
+  }
+  function generateStory() {
+    var base = (S.settings.baseUrl || "").trim();
+    var key = (S.settings.apiKey || "").trim();
+    var model = currentModel();
+    if (!base || !key) {
+      toast("请先在「家长控制面板」里填写 Base URL 和 API Key");
+      var p = $("#panel");
+      if (p && !p.classList.contains("open")) togglePanel();
+      switchView("home");
+      var inp = $("#cfgBaseUrl");
+      if (inp) setTimeout(function () { try { inp.focus(); } catch (e) {} }, 350);
+      return;
+    }
+    if (!model) { toast("请先在家长面板里选择或填写模型名称"); return; }
+    var url = buildChatUrl(base);
+    var readList = S.stories.readTitles.filter(function (t) { return t.indexOf("示例：") !== 0; });
+    var prompt = STORY_PROMPT;
+    if (readList.length) {
+      prompt += "\n\n请不要创作以下主题：[" + readList.join("、") + "]";
+    }
+    setStoryLoading(true, "正在请大模型创作新故事…");
+    setDiag(null);
+    apiFetch({
+      label: "生成童话",
+      url: url,
+      key: key,
+      model: model,
+      timeout: 60000,
+      body: { model: model, messages: [{ role: "user", content: prompt }], temperature: 0.9 }
+    }).then(function (data) {
+      var text = "";
+      try { text = data.choices[0].message.content; } catch (e) { text = ""; }
+      text = String(text || "").trim();
+      if (!text) {
+        dbg("err", "生成童话 ← 模型返回空内容", "接口通了，但 choices[0].message.content 是空的。");
+        throw (function () { var e = new Error("模型没有返回内容"); e.kind = "empty"; return e; })();
+      }
+      text = text.replace(/^["'“”\s]+|["'“”\s]+$/g, "");
+      applyNewStory(text);
+      setStoryLoading(false);
+      toast("新故事来啦，慢慢读哦～");
+    }).catch(function (err) {
+      setStoryLoading(false);
+      var info = apiErrInfo(err);
+      var msg = err && err.message ? err.message : "请求失败";
+      setDiag(info);
+      toast("生成失败：" + info.title);
+      var box = $("#storyBox");
+      if (box) {
+        var tip = el("div", "story-empty");
+        tip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#FFB0B0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 7.5v5.5M12 16.2v.1"/></svg>';
+        tip.appendChild(el("div", "", "故事没生成出来：" + info.title));
+        var why = el("div", "", info.why + "（" + msg + "）");
+        why.style.fontSize = "12.5px";
+        why.style.marginTop = "4px";
+        tip.appendChild(why);
+        var hint = el("div", "", "解决建议：" + info.fix);
+        hint.style.fontSize = "13px";
+        hint.style.marginTop = "6px";
+        tip.appendChild(hint);
+        var hint2 = el("div", "", "也可以先点「试读示例故事」，或到「家长控制面板」查看运行日志。");
+        hint2.style.fontSize = "12.5px";
+        hint2.style.marginTop = "6px";
+        tip.appendChild(hint2);
+        box.appendChild(tip);
+      }
+    });
+  }
+  function applyNewStory(text) {
+    var flat = text.replace(/\s+/g, "");
+    var title = flat.slice(0, 12) + (flat.length > 12 ? "…" : "");
+    S.storyText = text;
+    S.storyTitle = title;
+    lastStoryKey = "";
+    recordStory(title);
+    renderStory();
+    renderHistory();
+    renderStatCards();
+    var box = $("#storyBox");
+    if (box) box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  function recordStory(title) {
+    S.stories.readTitles.push(title);
+    S.stories.history.push({ title: title, date: todayStr() });
+    if (S.stories.readTitles.length > 200) S.stories.readTitles = S.stories.readTitles.slice(-200);
+    if (S.stories.history.length > 200) S.stories.history = S.stories.history.slice(-200);
+    saveStories();
+  }
+  function loadDemoStory() {
+    var pick = SAMPLE_STORIES[Math.floor(Math.random() * SAMPLE_STORIES.length)];
+    S.storyText = pick.text;
+    S.storyTitle = "示例：" + pick.title;
+    lastStoryKey = "";
+    if (!S.stories.readTitles.filter(function (t) { return t === S.storyTitle; }).length) {
+      recordStory(S.storyTitle);
+    } else {
+      renderHistory(); renderStatCards();
+    }
+    renderStory();
+    toast("这是内置的示例故事，配置 API 后可以生成全新的哦");
+  }
+
+  /* ---------- 备份 / 恢复 ---------- */
+  function exportJSON() {
+    var pack = {
+      app: "grade2-workbench",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: {
+        settings: S.settings,
+        daily: S.daily,
+        mathSet: S.mathSet,
+        mastery: S.mastery,
+        wrong: S.wrong,
+        stories: S.stories,
+        flags: lsGet(LS.flags, {})
+      }
+    };
+    try {
+      var blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json;charset=utf-8" });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "二年级学习台备份-" + todayStr() + ".json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+      toast("备份已导出，记得存到安全的地方");
+    } catch (e) {
+      toast("导出失败：" + (e && e.message ? e.message : "未知错误"));
+    }
+  }
+  function importJSON(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var obj = JSON.parse(String(reader.result));
+        var d = obj && obj.data ? obj.data : obj;
+        if (!d || typeof d !== "object") throw new Error("文件格式不对");
+        if (d.settings) { S.settings = d.settings; saveSettings(); }
+        if (d.mastery) { S.mastery = d.mastery; saveMastery(); }
+        if (d.wrong) { S.wrong = d.wrong; saveWrong(); }
+        if (d.stories) { S.stories = d.stories; saveStories(); }
+        if (d.mathSet) { S.mathSet = d.mathSet; saveMath(); }
+        if (d.daily) { S.daily = d.daily; saveDaily(); }
+        if (d.flags) lsSet(LS.flags, d.flags);
+        ensureToday();
+        mathSig = "";
+        lastStoryKey = "";
+        S.storyText = "";
+        S.storyTitle = "";
+        renderSettingsForm();
+        refreshAll();
+        toast("数据已恢复");
+      } catch (e) {
+        toast("导入失败：" + (e && e.message ? e.message : "文件无法解析"));
+      }
+    };
+    reader.onerror = function () { toast("文件读取失败"); };
+    reader.readAsText(file, "utf-8");
+  }
+  function clearDemoData() {
+    if (!window.confirm("确定要清空示例数据吗？\n（只删除带「示例」标记的错题和故事，自己的数据不会动）")) return;
+    var m = [], c = [], h = [], t = [];
+    var i;
+    for (i = 0; i < S.wrong.math.length; i++) if (!S.wrong.math[i].demo) m.push(S.wrong.math[i]);
+    for (i = 0; i < S.wrong.chinese.length; i++) if (!S.wrong.chinese[i].demo) c.push(S.wrong.chinese[i]);
+    for (i = 0; i < S.stories.history.length; i++) if (!S.stories.history[i].demo) h.push(S.stories.history[i]);
+    for (i = 0; i < S.stories.readTitles.length; i++) if (S.stories.readTitles[i].indexOf("示例：") !== 0) t.push(S.stories.readTitles[i]);
+    S.wrong.math = m; S.wrong.chinese = c; S.stories.history = h; S.stories.readTitles = t;
+    saveWrong(); saveStories();
+    if (S.storyTitle && S.storyTitle.indexOf("示例：") === 0) { S.storyText = ""; S.storyTitle = ""; lastStoryKey = ""; }
+    refreshAll();
+    toast("示例数据已清空");
+  }
+
+  /* ---------- 家长面板 ---------- */
+  function togglePanel() {
+    var p = $("#panel");
+    if (!p) return;
+    var open = p.classList.toggle("open");
+    var t = $("#panelToggle");
+    if (t) t.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      var el2 = $("#panel");
+      if (el2) el2.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+  function readForm() {
+    var b = $("#cfgBaseUrl"), k = $("#cfgApiKey"), m = $("#cfgModel"), c = $("#cfgModelCustom");
+    S.settings.baseUrl = b ? b.value.trim() : "";
+    S.settings.apiKey = k ? k.value.trim() : "";
+    S.settings.model = m ? m.value : "gpt-4o-mini";
+    S.settings.customModel = c ? c.value.trim() : "";
+    var mm = $("#cfgMarkModel"), mc = $("#cfgMarkModelCustom");
+    S.settings.markModel = mm ? mm.value : "__same__";
+    S.settings.markModelCustom = mc ? mc.value.trim() : "";
+    saveSettings();
+  }
+  function saveConfig() {
+    readForm();
+    if (!S.settings.baseUrl) { toast("请先填写 API 基础路径"); return; }
+    toast("配置已保存到本机");
+  }
+  function testConfig() {
+    readForm();
+    var base = S.settings.baseUrl, key = S.settings.apiKey, model = currentModel();
+    if (!base || !key) {
+      toast("请先填写 Base URL 和 API Key");
+      dbg("warn", "测试连接已取消：配置不完整", (!base ? "· Base URL 为空\n" : "") + (!key ? "· API Key 为空" : ""));
+      openLogPanel();
+      return;
+    }
+    if (!model) {
+      toast("请先选择或填写模型名称");
+      dbg("warn", "测试连接已取消：未指定模型", "");
+      openLogPanel();
+      return;
+    }
+    var btn = $("#btnTestCfg");
+    if (btn && btn.disabled) return;           // 防重复点击
+    var orig = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.textContent = "测试中…"; }
+    toast("正在测试连接…");
+    setDiag(null);
+
+    apiFetch({
+      label: "测试连接",
+      url: buildChatUrl(base),
+      key: key,
+      model: model,
+      timeout: 20000,
+      body: { model: model, messages: [{ role: "user", content: "你好" }], max_tokens: 4 }
+    }).then(function () {
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      toast("连接成功！可以开始生成童话了");
+      openLogPanel();
+    }).catch(function (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+      var info = apiErrInfo(err);
+      setDiag(info);
+      toast("连接失败：" + info.title);
+      openLogPanel();
+      expandLogs(true);
+    });
+  }
+
+  /* ==================================================================
+     11. 事件绑定
+     ================================================================== */
+  function bindEvents() {
+    // 导航
+    var nav = $("#nav");
+    if (nav) {
+      nav.addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-view]");
+        if (b) switchView(b.getAttribute("data-view"));
+      });
+    }
+    // 任务 / 快速开始 → 跳转
+    document.addEventListener("click", function (e) {
+      var j = e.target.closest("[data-jump]");
+      if (j) {
+        switchView(j.getAttribute("data-jump"));
+        return;
+      }
+      var sp = e.target.closest("[data-speak]");
+      if (sp) {
+        if (readAllTimer) stopReadAll();
+        speak(sp.getAttribute("data-speak"));
+        return;
+      }
+    });
+
+    // 家长面板
+    var pt = $("#panelToggle");
+    if (pt) pt.addEventListener("click", togglePanel);
+    var gp = $("#btnGoPanel");
+    if (gp) gp.addEventListener("click", function () {
+      switchView("home");
+      var p = $("#panel");
+      if (p && !p.classList.contains("open")) togglePanel();
+      else if (p) p.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    var bk = $("#btnToggleKey");
+    if (bk) bk.addEventListener("click", function () {
+      var k = $("#cfgApiKey");
+      if (!k) return;
+      var show = k.type === "password";
+      k.type = show ? "text" : "password";
+      bk.textContent = show ? "隐藏" : "显示";
+    });
+    var cm = $("#cfgModel");
+    if (cm) cm.addEventListener("change", function () {
+      var c = $("#cfgModelCustom");
+      if (c) c.style.display = (cm.value === "__custom__") ? "block" : "none";
+      if (cm.value !== "__custom__" && c) c.value = "";
+      readForm();
+    });
+    var cc = $("#cfgModelCustom");
+    if (cc) cc.addEventListener("change", readForm);
+    var cmk = $("#cfgMarkModel");
+    if (cmk) cmk.addEventListener("change", function () {
+      var mc = $("#cfgMarkModelCustom");
+      if (mc) mc.style.display = (cmk.value === "__custom__") ? "block" : "none";
+      if (cmk.value !== "__custom__" && mc) mc.value = "";
+      readForm();
+    });
+    var cmkc = $("#cfgMarkModelCustom");
+    if (cmkc) cmkc.addEventListener("change", readForm);
+    var sb = $("#btnSaveCfg");
+    if (sb) sb.addEventListener("click", saveConfig);
+    var tb = $("#btnTestCfg");
+    if (tb) tb.addEventListener("click", testConfig);
+
+    // 网络自检 + 运行日志
+    var dg = $("#btnDiag");
+    if (dg) dg.addEventListener("click", runDiagnostics);
+    var dgo = $("#btnDiagOpen");
+    if (dgo) dgo.addEventListener("click", function () { expandLogs(!logOpenAll); });
+    var lc = $("#btnLogCopy");
+    if (lc) lc.addEventListener("click", copyLogs);
+    var lx = $("#btnLogClear");
+    if (lx) lx.addEventListener("click", function () {
+      clearLogs();
+      setDiag(null);
+      toast("日志已清空");
+    });
+    var llist = $("#logList");
+    if (llist) {
+      llist.addEventListener("click", function (e) {
+        var row = e.target.closest(".log-row");
+        if (row && row.getAttribute("data-log")) toggleLogRow(row.getAttribute("data-log"));
+      });
+    }
+
+    // 口算
+    var ml = $("#mathList");
+    if (ml) {
+      ml.addEventListener("input", function (e) {
+        var inp = e.target.closest(".m-in");
+        if (!inp) return;
+        var r = inp.closest(".m-row");
+        if (!r) return;
+        handleMathInput(parseInt(r.getAttribute("data-i"), 10), inp);
+      });
+      ml.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && e.target.classList.contains("m-in")) e.target.blur();
+      });
+    }
+    var nm = $("#btnNewMath");
+    if (nm) nm.addEventListener("click", function () {
+      buildMathSet();
+      renderMath();
+      renderTasks();
+      renderBadges();
+      toast("换了一批新题目，加油！");
+    });
+
+    // 语文
+    var ls2 = $("#lessonSel");
+    if (ls2) ls2.addEventListener("change", function () {
+      if (HW.on) endHandWrite(true);   // 换课文时结束当前手写轮次，避免字表错乱
+      S.lesson = ls2.value;
+      S.masked = false;
+      stopReadAll();
+      renderChinese();
+    });
+    var zg = $("#ziGrid");
+    if (zg) zg.addEventListener("click", function (e) {
+      // 生字方块（.zi-face）带 data-speak，交由文档级委托统一朗读，此处只处理打分
+      var mk = e.target.closest("[data-mark]");
+      if (mk) {
+        var ch = mk.getAttribute("data-char");
+        var st = mk.getAttribute("data-mark") === "1" ? 1 : 0;
+        markChar(ch, st);
+      }
+    });
+    var ds = $("#btnDictStart");
+    if (ds) ds.addEventListener("click", function () {
+      S.masked = !S.masked;
+      if (S.masked) {
+        toast("听写开始！音会念给你听，在纸上写下来吧");
+        var first = (SHENGZI[S.lesson] || [])[0];
+        if (first) speak(first);
+      } else {
+        completeTask("dictation");
+        toast("听写结束，来对对答案吧～");
+      }
+      renderChinese();
+    });
+    var ra = $("#btnReadAll");
+    if (ra) ra.addEventListener("click", function () {
+      if (readAllTimer) { stopReadAll(); toast("已停止朗读"); return; }
+      var chars = (SHENGZI[S.lesson] || []).slice();
+      var i = 0;
+      if (!chars.length) return;
+      speak(chars[0]);
+      setReadAllBtn(true);
+      toast("正在依次朗读，再点一次可停止");
+      readAllTimer = setInterval(function () {
+        i++;
+        if (i >= chars.length) { stopReadAll(); return; }
+        speak(chars[i]);
+      }, 1500);
+    });
+
+    // 屏上听写（手写 + AI 批改）
+    bindHandCanvas();
+    var hs = $("#btnHwStart");
+    if (hs) hs.addEventListener("click", startHandWrite);
+    var hsp = $("#btnHwSpeak");
+    if (hsp) hsp.addEventListener("click", speakHandChar);
+    var hcl = $("#btnHwClear");
+    if (hcl) hcl.addEventListener("click", function () {
+      clearHandInk();
+      setHandResult(null);
+      var nb = $("#hwNextBar");
+      if (nb) nb.style.display = "none";
+      toast("擦干净了，重新写一次吧");
+    });
+    var hsb = $("#btnHwSubmit");
+    if (hsb) hsb.addEventListener("click", submitHand);
+    var hrt = $("#btnHwRetry");
+    if (hrt) hrt.addEventListener("click", retryHand);
+    var hnx = $("#btnHwNext");
+    if (hnx) hnx.addEventListener("click", nextHand);
+    var hed = $("#btnHwEnd");
+    if (hed) hed.addEventListener("click", function () { endHandWrite(false); });
+    var hres = $("#hwRes");
+    if (hres) hres.addEventListener("click", function (e) {
+      if (e.target.closest("#btnHwManualOk")) { manualHand(true); return; }
+      if (e.target.closest("#btnHwManualNo")) { manualHand(false); return; }
+    });
+
+    // 童话
+    var gs = $("#btnGenStory");
+    if (gs) gs.addEventListener("click", generateStory);
+    var dm = $("#btnDemoStory");
+    if (dm) dm.addEventListener("click", loadDemoStory);
+    var ss = $("#btnSpeakStory");
+    if (ss) ss.addEventListener("click", function () {
+      if (!S.storyText) { toast("还没有故事哦"); return; }
+      speak(S.storyText.replace(/\n+/g, "。"));
+      toast("正在朗读，点右侧「结束计时」不会中断朗读");
+    });
+    var ts = $("#btnTimerStart");
+    if (ts) ts.addEventListener("click", startTimer);
+    var te = $("#btnTimerStop");
+    if (te) te.addEventListener("click", function () {
+      var ran = S.timer && S.timer.endAt ? Math.round((Date.now() - (S.timer.endAt - TIMER_SECONDS * 1000)) / 1000) : 0;
+      stopTimer();
+      if (ran >= 20) {
+        completeTask("reading");
+        toast("阅读完成！真棒");
+      } else {
+        toast("计时已结束");
+      }
+    });
+    var hl = $("#histList");
+    if (hl) hl.addEventListener("click", function (e) {
+      var x = e.target.closest("[data-del]");
+      if (!x) return;
+      var title = x.getAttribute("data-del");
+      var h = [], t = [];
+      for (var i = 0; i < S.stories.history.length; i++) if (S.stories.history[i].title !== title) h.push(S.stories.history[i]);
+      for (var j = 0; j < S.stories.readTitles.length; j++) if (S.stories.readTitles[j] !== title) t.push(S.stories.readTitles[j]);
+      S.stories.history = h; S.stories.readTitles = t;
+      saveStories();
+      renderHistory(); renderStatCards();
+      toast("已移除，之后可以再生成这个主题");
+    });
+
+    // 错题本
+    var tabs = document.querySelectorAll(".wb-tab");
+    for (var i = 0; i < tabs.length; i++) {
+      (function (tab) {
+        tab.addEventListener("click", function () {
+          S.wbTab = tab.getAttribute("data-wtab");
+          challenge = { type: "", id: "" };
+          renderWrong();
+        });
+      })(tabs[i]);
+    }
+    var wl = $("#wbList");
+    if (wl) {
+      wl.addEventListener("click", function (e) {
+        var st = e.target.closest("[data-wstart]");
+        if (st) {
+          challenge = { type: st.getAttribute("data-wtype"), id: st.getAttribute("data-wstart") };
+          renderWrong();
+          return;
+        }
+        var cn2 = e.target.closest("[data-wcancel]");
+        if (cn2) { challenge = { type: "", id: "" }; renderWrong(); return; }
+        var ok = e.target.closest("[data-wok]");
+        if (ok) {
+          var id = ok.getAttribute("data-wok");
+          removeWrong("chinese", id);
+          challenge = { type: "", id: "" };
+          renderWrong(); renderStatCards(); renderBadges();
+          playDing();
+          bumpReview();
+          toast("已从错字本擦掉，真棒！");
+        }
+      });
+      wl.addEventListener("input", function (e) {
+        var wi = e.target.closest("[data-wc]");
+        if (!wi) return;
+        var id = wi.getAttribute("data-wc");
+        var target = null;
+        for (var k = 0; k < S.wrong.math.length; k++) if (S.wrong.math[k].id === id) target = S.wrong.math[k];
+        if (!target) return;
+        var v = (wi.value || "").trim();
+        if (v === String(target.ans)) {
+          removeWrong("math", id);
+          challenge = { type: "", id: "" };
+          renderWrong(); renderStatCards(); renderBadges();
+          playDing();
+          bumpReview();
+          toast("算对啦！这道题从错题本擦掉了");
+        }
+      });
+      wl.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && e.target.classList.contains("m-in")) e.target.blur();
+      });
+    }
+
+    // 备份
+    var ex = $("#btnExport");
+    if (ex) ex.addEventListener("click", exportJSON);
+    var im = $("#btnImport");
+    if (im) im.addEventListener("click", function () {
+      var f = $("#importFile");
+      if (f) f.click();
+    });
+    var imp = $("#importFile");
+    if (imp) imp.addEventListener("change", function () {
+      if (imp.files && imp.files[0]) importJSON(imp.files[0]);
+      imp.value = "";
+    });
+    var cd = $("#btnClearDemo");
+    if (cd) cd.addEventListener("click", clearDemoData);
+
+    // 窗口尺寸变化重绘画布
+    window.addEventListener("resize", function () {
+      if (particles.length) resizeFx();
+      fitHandCanvas();
+    });
+  }
+
+  /* ==================================================================
+     12. 初始化
+     ================================================================== */
+  function populateLessonSelect() {
+    var sel = $("#lessonSel");
+    if (!sel) return;
+    sel.innerHTML = "";
+    for (var i = 0; i < LESSONS.length; i++) {
+      var o = document.createElement("option");
+      o.value = LESSONS[i]; o.textContent = LESSONS[i];
+      sel.appendChild(o);
+    }
+    if (LESSONS.indexOf(S.lesson) < 0) S.lesson = LESSONS[0];
+    sel.value = S.lesson;
+  }
+
+  function init() {
+    loadAll();
+    ensureToday();
+    seedSamples();
+    syncMathTaskFlag();
+    bindEvents();
+    populateLessonSelect();
+    resizeFx();
+    renderSettingsForm();
+
+    // 启动即记一条环境信息，方便排查连接问题
+    dbg("info", "工作台已启动",
+      "页面来源：" + location.origin + "（协议 " + location.protocol + "）\n打开时间：" + new Date().toLocaleString() +
+      "\n配置状态：" + ((S.settings.baseUrl && S.settings.apiKey) ? "已填写 Base URL 与 API Key" : "尚未填写完整的 API 配置"));
+    if (location.protocol === "file:") {
+      dbg("warn", "当前是「双击本地文件」方式打开（file://）",
+        "部分大模型接口不接受 file:// 这种来源。如果后面连接失败并提示 CORS，可以改用 http 服务打开，或把页面部署到线上。");
+    }
+
+    refreshAll();
+    fitHandCanvas();
+    resumeTimer();
+
+    // 异步加载拼音库：加载完成后重渲染故事与错字拼音
+    loadPinyin().then(function (ok) {
+      lastStoryKey = "";
+      renderStory();
+      // 拼音库是异步到的：到手后要把手写区的拼音提示补上（若此时正听写着）
+      if (ok) { renderWrong(); renderHandWrite(); }
+    });
+
+    // 首次使用引导
+    var flags = lsGet(LS.flags, {}) || {};
+    if (!flags.welcomed) {
+      flags.welcomed = true;
+      lsSet(LS.flags, flags);
+      setTimeout(function () { toast("欢迎来到二年级快乐学习台，先做一次口算热热身吧！"); }, 600);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
