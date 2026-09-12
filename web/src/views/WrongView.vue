@@ -125,7 +125,7 @@ function switchTab(next: "math" | "chinese"): void {
     <div v-if="!canReview" class="wb-lock">
       <Icon name="wrong" :size="18" />
       <span>
-        今天的错题复习要<b>先把「每日口算」和「语文听写一轮」做完</b>再来 ——
+        今天的错题复习要<b>先把「每日口算」和「语文听写」做完</b>再来 ——
         这两项还会往错题本里加题，做到一半题数就变了。<br />
         现在可以翻看下面的错题，但先不让改。
       </span>

@@ -17,12 +17,16 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/node_modules/playwright-core");
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:8788";
-const OUT = path.resolve("web/test/shots");
+// 截图目录按「脚本自身位置」推仓库根，不能用 cwd —— `npm run nav` 时 cwd 是 web/，
+// 用 cwd 会把截图错写到 web/web/test/shots。
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const OUT = path.join(REPO, "web", "test", "shots");
 mkdirSync(OUT, { recursive: true });
 
 const problems = [];
@@ -128,8 +132,8 @@ for (const r of ROUTES.slice(1)) {
 step("首页任务卡片 → 各功能页（应用内点击）");
 const shortcuts = [
   { card: "每日口算", path: "/math", sel: ".m-row", min: 20 },
-  { card: "语文听写一轮", path: "/chinese", sel: ".zi-grid", min: 1 },
-  { card: "童话阅读 15 分钟", path: "/story", sel: ".card", min: 1 },
+  { card: "语文听写", path: "/chinese", sel: ".zi-grid", min: 1 },
+  { card: "童话故事", path: "/story", sel: ".card", min: 1 },
   { card: "错题复习", path: "/wrong", sel: ".wb-tabs", min: 1 },
 ];
 for (const s of shortcuts) {

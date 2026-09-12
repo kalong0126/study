@@ -31,8 +31,8 @@ export interface TaskDef {
 
 export const TASK_DEFS: TaskDef[] = [
   { key: "math", name: "每日口算", desc: "20 道题全部作答", route: "/math", tone: "blue" },
-  { key: "dictation", name: "语文听写一轮", desc: "选一篇课文，完成一轮听写", route: "/chinese", tone: "orange" },
-  { key: "reading", name: "童话阅读 15 分钟", desc: "读一篇注音童话，计时满 15 分钟", route: "/story", tone: "purple" },
+  { key: "dictation", name: "语文听写", desc: "选一篇课文，完成一轮听写", route: "/chinese", tone: "orange" },
+  { key: "reading", name: "童话故事", desc: "读一篇注音童话，计时满 15 分钟", route: "/story", tone: "purple" },
   { key: "review", name: "错题复习", desc: "把错题本里的错题重做一遍", route: "/wrong", tone: "green" },
 ];
 
