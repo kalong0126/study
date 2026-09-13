@@ -15,16 +15,14 @@ import { useRouter } from "vue-router";
 import Icon from "@/components/Icon.vue";
 import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
-import { REWARDS, TASK_DEFS, rewardLabel, useProgressStore } from "@/stores/progress";
+import { TASK_DEFS, useProgressStore } from "@/stores/progress";
 import { useStoryStore } from "@/stores/story";
-import { useUiStore } from "@/stores/ui";
 
 const router = useRouter();
 const progress = useProgressStore();
 const mastery = useMasteryStore();
 const content = useContentStore();
 const story = useStoryStore();
-const ui = useUiStore();
 
 const toneColor: Record<string, string> = {
   blue: "#4FA3DC",
@@ -60,23 +58,6 @@ const stats = computed(() => [
   { n: mastery.wrongTotal, l: "错题待复习", c: "#C4486B", bg: "#FFEFF3" },
   { n: story.stories.length, l: "读过的故事", c: "#8E7BEF", bg: "#F3EFFF" },
 ]);
-
-/** 兑换奖励：确认 → 扣积分 → 庆祝。余额不足后端会返回错误，这里给提示。 */
-async function redeem(id: string): Promise<void> {
-  const r = REWARDS.find((x) => x.id === id);
-  if (!r) return;
-  if (progress.balance < r.cost) {
-    ui.toast(`积分不够哦，换「${r.label}」还要 ${r.cost - progress.balance} 分`);
-    return;
-  }
-  if (!window.confirm(`确定要用 ${r.cost} 积分兑换「${r.label}」吗？\n\n兑换后请让家长帮你兑现。`)) return;
-  try {
-    await progress.redeemPoints(id);
-    ui.celebrate({ title: "兑换成功！🎁", sub: `已兑换「${r.label}」，记得让家长兑现哦` });
-  } catch (e) {
-    ui.toast(e instanceof Error ? e.message : "兑换失败，稍后再试");
-  }
-}
 
 </script>
 
@@ -140,45 +121,6 @@ async function redeem(id: string): Promise<void> {
     <p class="tip">
       当前课文库共 {{ content.lessons.length }} 篇课文。家长可以登录内容后台继续录制新的篇章，孩子这边立刻就能选到。<br />
       （内容后台与数据备份都在 <code>/admin</code>，只能靠网址打开，孩子端不放入口。）
-    </p>
-  </section>
-
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #FFF6E0; color: #C97F00">
-        <Icon name="gift" :size="19" />
-      </span>
-      <div><h2>我的积分</h2><span class="sub">完成任务赚积分，攒够就能换奖励</span></div>
-      <div class="spacer"></div>
-      <span class="pts-balance">{{ progress.balance }}</span>
-    </div>
-
-    <div class="redeem-grid">
-      <button
-        v-for="r in REWARDS"
-        :key="r.id"
-        class="redeem-card"
-        type="button"
-        :class="{ can: progress.balance >= r.cost }"
-        :disabled="progress.balance < r.cost"
-        @click="redeem(r.id)"
-      >
-        <span class="rc-label">{{ r.label }}</span>
-        <span class="rc-cost">{{ r.cost }} 积分</span>
-      </button>
-    </div>
-
-    <div v-if="progress.redemptions.length" class="redeem-hist">
-      <div class="rh-hd">兑换记录</div>
-      <div v-for="rd in progress.redemptions.slice(0, 5)" :key="rd.id" class="rh-row">
-        <span class="rh-name">{{ rewardLabel(rd.reward) }}</span>
-        <span class="rh-time">{{ String(rd.createdAt).slice(0, 10) }}</span>
-      </div>
-    </div>
-
-    <p class="tip">
-      口算 / 听写完成各 +10，全对再各 +10，阅读 +20，四项全完成再 +10。
-      攒够 50 分就能换半小时平板或 1 块钱 —— 换完记得让家长帮你兑现。
     </p>
   </section>
 </template>

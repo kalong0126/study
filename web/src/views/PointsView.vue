@@ -11,11 +11,12 @@ import { computed, onMounted, ref } from "vue";
 import { api } from "@/api";
 import type { Redemption, RedemptionStats } from "@/api/types";
 import Icon from "@/components/Icon.vue";
-import { rewardLabel } from "@/stores/progress";
+import { REWARDS, rewardLabel, useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
 
 const PAGE_SIZE = 10;
 const ui = useUiStore();
+const progress = useProgressStore();
 
 const balance = ref(0);
 const items = ref<Redemption[]>([]);
@@ -59,6 +60,24 @@ function go(p: number): void {
   if (p < 1 || p > totalPages.value || p === page.value) return;
   page.value = p;
   void load();
+}
+
+/** 兑换奖励：确认 → 扣积分 → 刷新余额和历史。余额不足后端会返回错误，这里给提示。 */
+async function redeem(id: string): Promise<void> {
+  const r = REWARDS.find((x) => x.id === id);
+  if (!r) return;
+  if (balance.value < r.cost) {
+    ui.toast(`积分不够哦，换「${r.label}」还要 ${r.cost - balance.value} 分`);
+    return;
+  }
+  if (!window.confirm(`确定要用 ${r.cost} 积分兑换「${r.label}」吗？\n\n兑换后请让家长帮你兑现。`)) return;
+  try {
+    await progress.redeemPoints(id);
+    ui.celebrate({ title: "兑换成功！🎁", sub: `已兑换「${r.label}」，记得让家长兑现哦` });
+    await load();
+  } catch (e) {
+    ui.toast(e instanceof Error ? e.message : "兑换失败，稍后再试");
+  }
 }
 
 onMounted(load);
@@ -111,6 +130,31 @@ onMounted(load);
         <div class="ps-sub">共兑换 {{ stats.moneyCount }} 次</div>
       </div>
     </div>
+  </section>
+
+  <section class="card">
+    <div class="card-hd">
+      <span class="ico" style="background: #FFF6E0; color: #C97F00">
+        <Icon name="gift" :size="19" />
+      </span>
+      <div><h2>兑换奖励</h2><span class="sub">攒够 50 分就能换</span></div>
+    </div>
+
+    <div class="redeem-grid">
+      <button
+        v-for="r in REWARDS"
+        :key="r.id"
+        class="redeem-card"
+        type="button"
+        :class="{ can: balance >= r.cost }"
+        :disabled="balance < r.cost"
+        @click="redeem(r.id)"
+      >
+        <span class="rc-label">{{ r.label }}</span>
+        <span class="rc-cost">{{ r.cost }} 积分</span>
+      </button>
+    </div>
+    <p class="tip">兑换后请让家长帮你兑现（给平板时间 / 给零花钱）。</p>
   </section>
 
   <section class="card">
