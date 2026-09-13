@@ -397,7 +397,12 @@ export interface ResetStats {
   redemptions: number;
 }
 
-/** 重置「今天」的学习数据（保留历史日期 + 历史掌握度 + 历史错题 + 课文 + 故事 / 已读标题 / 判卷留痕） */
+/**
+ * 重置「今天」的学习数据。
+ * 清：今天的任务打勾、口算题组与计时、按日期的 KV、今天动过的掌握度、今天新进的错题、
+ *     今天发放的积分与今天发生的兑换（余额回退到今天开始前）。
+ * 保留：历史日期、历史错题、故事 / 已读标题、课文与生字、历史掌握度、历史积分与历史兑换。
+ */
 export async function resetToday(
   childId: number,
   date: string,
@@ -427,13 +432,20 @@ export async function resetToday(
       kv += Number(c?.n ?? 0);
     }
 
-    // 今天新赚的积分一并归零（完成/全对/全完成的 ref_key 形如 "math_done:2026-09-13"）。
-    // 兑换记录与兑换消费流水保留 —— 兑换是「花掉」，不该因重置进度而消失。
+    // 撤销「今日」的积分变动：今天发放的正分流水、今天发生的兑换（负分流水 + 兑换记录）一并清掉。
+    // 用 created_at 当天匹配（与 mastery 的 updated_at / wrong_items 的 created_at 同一边界），
+    // 只删今天动过的，历史累积的保留。余额 = SUM(delta) 自然回退到「今天开始前」的值，
+    // 也就是「总积分减去今日获取（净变化）」。
     const pc = await t.get<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM points_ledger WHERE child_id = ? AND ref_key LIKE ?",
-      [childId, `%:${date}`],
+      "SELECT COUNT(*) AS n FROM points_ledger WHERE child_id = ? AND created_at LIKE ?",
+      [childId, `${date}%`],
     );
-    await t.run("DELETE FROM points_ledger WHERE child_id = ? AND ref_key LIKE ?", [childId, `%:${date}`]);
+    await t.run("DELETE FROM points_ledger WHERE child_id = ? AND created_at LIKE ?", [childId, `${date}%`]);
+    const rc = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM redemptions WHERE child_id = ? AND created_at LIKE ?",
+      [childId, `${date}%`],
+    );
+    await t.run("DELETE FROM redemptions WHERE child_id = ? AND created_at LIKE ?", [childId, `${date}%`]);
 
     // 今天的掌握度清掉 —— 这是听写判卷（AI / 大人审核）的成果。
     // 按 updated_at 当天匹配，只删今天动过的；之前几天点过 ✓ 的字保留下来。
@@ -458,7 +470,7 @@ export async function resetToday(
       wrong: Number(wc?.n ?? 0),
       kv,
       points: Number(pc?.n ?? 0),
-      redemptions: 0,
+      redemptions: Number(rc?.n ?? 0),
     };
   });
 }

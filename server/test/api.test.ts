@@ -809,6 +809,50 @@ async function main(): Promise<void> {
     );
     const wrongA2 = (await api("GET", "/api/state")).json.wrong as { math: unknown[]; chinese: unknown[] };
     eq("R11 resetToday 清空今天的错题", wrongA2.math.length + wrongA2.chinese.length, 0);
+
+    // resetToday 撤销「今日」的积分变动：今天发放的正分、今天发生的兑换一起清掉，余额回到今天开始前。
+    // 攒 50 分（math_done 10 + dictation_done 10 + reading_done 20 + all_done 10），
+    // 兑一次（-50 → 0），再补一条当日发放（math_perfect +10 → 10），resetToday 后应回到 0 分 0 兑换。
+    await api("PATCH", "/api/state/daily", {
+      date: todayR,
+      tasks: { math: true, dictation: true, reading: true, review: true },
+    });
+    const pBefore = await api("GET", "/api/points");
+    eq("R12 重置前攒够 50 分", pBefore.json.balance, 50);
+    await api("POST", "/api/points/redeem", { reward: "screen_30min" });
+    await api("POST", "/api/points/award", { reason: "math_perfect" });
+    const pAfterAward = await api("GET", "/api/points");
+    eq("R13 兑换后再发当日积分，余额为 10", pAfterAward.json.balance, 10);
+    const rToday3 = await api("POST", "/api/admin/reset", { scope: "today" });
+    ok(
+      "R14 resetToday 返回含 removed.redemptions",
+      typeof rToday3.json.removed === "object" && "redemptions" in (rToday3.json.removed as Record<string, unknown>),
+    );
+    const pAfter = await api("GET", "/api/points");
+    eq("R15 resetToday 清空今日积分（余额回退到 0）", pAfter.json.balance, 0);
+    eq("R16 resetToday 清空今日兑换记录", (pAfter.json.redemptions as unknown[]).length, 0);
+
+    // R17：只撤销「今天」，保留「历史」兑换。再造一条今日兑换，把它的负分流水与兑换记录的
+    // created_at 都改成昨天，再 resetToday —— 今天的正分清掉，这条「昨天」的兑换应保留。
+    await api("PATCH", "/api/state/daily", {
+      date: todayR,
+      tasks: { math: true, dictation: true, reading: true, review: true },
+    });
+    await api("POST", "/api/points/redeem", { reward: "money_1yuan" });
+    const dbMod2 = new DbCtor(TEST_DB);
+    dbMod2
+      .prepare(
+        "UPDATE points_ledger SET created_at = ? WHERE child_id = (SELECT id FROM children LIMIT 1) AND reason = 'redeem'",
+      )
+      .run(`${yday}T12:00:00.000Z`);
+    dbMod2
+      .prepare("UPDATE redemptions SET created_at = ? WHERE child_id = (SELECT id FROM children LIMIT 1)")
+      .run(`${yday}T12:00:00.000Z`);
+    dbMod2.pragma("wal_checkpoint(FULL)");
+    dbMod2.close();
+    await api("POST", "/api/admin/reset", { scope: "today" });
+    const pAfter2 = await api("GET", "/api/points");
+    eq("R17 历史兑换记录保留（只清今天的）", (pAfter2.json.redemptions as unknown[]).length, 1);
   } finally {
     app.kill();
     mock.kill();
