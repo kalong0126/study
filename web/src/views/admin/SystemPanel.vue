@@ -179,23 +179,26 @@ async function applyVoice(name: string): Promise<void> {
 
 /**
  * 重置「今天」的学习数据。
- * 清：今天的 daily 任务打勾、今天的口算题组与计时、今天的 review 目标与已挑战数。
- * 不动：历史日期、错题本、故事、已读标题、课文/生字/掌握度。
+ * 清：今天的 daily 任务打勾、今天的口算题组与计时、今天的 review 目标与已挑战数、
+ *     今天新写的掌握度（生字 ✓/✗ 标记）。
+ * 不动：历史日期、错题本、故事、已读标题、课文与生字、历史掌握度、全部兑换记录。
  */
 async function resetToday(): Promise<void> {
   if (
     !window.confirm(
       "确认要重置【今天】的学习进度吗？\n\n" +
-        "会清掉：今天的任务打勾（口算/听写/阅读/复习）、今天的口算题组与计时、今天的复习目标。\n" +
-        "不会动：错题本、历史日期、故事、课文与生字、掌握度。",
+        "会清掉：今天的任务打勾（口算/听写/阅读/复习）、今天的口算题组与计时、今天的复习目标、" +
+        "今天新打的生字掌握度（按 ✓/✗）。\n" +
+        "不会动：错题本、历史日期、故事、课文与生字、历史掌握度、兑换记录。",
     )
   )
     return;
   busy.value = "reset-today";
   try {
     const r = await adminApi.reset("today");
+    const rm = r.removed as { daily?: number; math?: number; mastery?: number; kv?: number; points?: number };
     const msg =
-      `今日已重置：任务 ${r.removed.daily} 行、口算 ${r.removed.math} 题组、KV ${r.removed.kv} 条（${r.date}）`;
+      `今日已重置：任务 ${rm.daily ?? 0} 行、口算 ${rm.math ?? 0} 题组、掌握度 ${rm.mastery ?? 0} 字、KV ${rm.kv ?? 0} 条（${r.date}）`;
     ui.toast(msg);
     void loadHealth();
   } catch (e) {

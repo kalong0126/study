@@ -387,6 +387,7 @@ export async function kvSet(childId: number, k: string, v: unknown): Promise<voi
 export interface ResetStats {
   daily: number;
   math: number;
+  mastery: number;
   wrong: number;
   stories: number;
   reads: number;
@@ -396,11 +397,11 @@ export interface ResetStats {
   redemptions: number;
 }
 
-/** 重置「今天」的学习数据（保留历史日期 + 掌握度 + 课文 + 计时器 / 已读标题 / 故事 / 判卷留痕） */
+/** 重置「今天」的学习数据（保留历史日期 + 历史掌握度 + 课文 + 故事 / 已读标题 / 判卷留痕） */
 export async function resetToday(
   childId: number,
   date: string,
-): Promise<Pick<ResetStats, "daily" | "math" | "kv" | "points" | "redemptions">> {
+): Promise<Pick<ResetStats, "daily" | "math" | "mastery" | "kv" | "points" | "redemptions">> {
   const d = db();
   return d.tx(async (t) => {
     const c1 = await t.get<{ n: number }>(
@@ -434,9 +435,19 @@ export async function resetToday(
     );
     await t.run("DELETE FROM points_ledger WHERE child_id = ? AND ref_key LIKE ?", [childId, `%:${date}`]);
 
+    // 今天的掌握度清掉 —— 这是听写判卷（AI / 大人审核）的成果。
+    // 按 updated_at 当天匹配，只删今天动过的；之前几天点过 ✓ 的字保留下来。
+    // 错题本不动 —— 它是「长期累积」，跟 mastery 是两个维度的事。
+    const mc = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM mastery WHERE child_id = ? AND updated_at LIKE ?",
+      [childId, `${date}%`],
+    );
+    await t.run("DELETE FROM mastery WHERE child_id = ? AND updated_at LIKE ?", [childId, `${date}%`]);
+
     return {
       daily: Number(c1?.n ?? 0),
       math: Number(c2?.n ?? 0),
+      mastery: Number(mc?.n ?? 0),
       kv,
       points: Number(pc?.n ?? 0),
       redemptions: 0,
@@ -462,6 +473,8 @@ export async function resetAll(childId: number): Promise<ResetStats> {
     kv: await c("app_kv WHERE child_id = ?", [childId]),
     points: await c("points_ledger WHERE child_id = ?", [childId]),
     redemptions: await c("redemptions WHERE child_id = ?", [childId]),
+    // mastery 不在清空范围：保留长期掌握度（设计意图）。这里给个 0 让字段类型完整。
+    mastery: 0,
   };
   const markItems = await d.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM mark_items WHERE task_id IN (SELECT id FROM mark_tasks WHERE child_id = ?)",

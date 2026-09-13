@@ -704,6 +704,89 @@ async function main(): Promise<void> {
     const nf = await api("GET", "/api/does-not-exist");
     eq("H12 未知接口返回 404 JSON", nf.status, 404);
     ok("H13 404 响应是 JSON", nf.json.ok === false);
+
+    /* ============================ R. 重置 ============================ */
+    group("R. 重置（resetToday 清 mastery · resetAll 不动 mastery）");
+    const todayR = (await api("GET", "/api/state")).json.date as string;
+    const lessonsR = (await api("GET", "/api/lessons")).json.lessons as { id: number }[];
+    const lessonR = lessonsR[0]?.id ?? 0;
+
+    // 先写两条 mastery（一个掌握、一个未掌握）。updated_at 是后端 nowIso() 写入的，会落在 today。
+    await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "肚", state: 1 });
+    await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "皮", state: 0 });
+    const before = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
+    eq(
+      "R1 重置前本课 mastery 已有「肚」「皮」两条",
+      [before[String(lessonR)]?.["肚"], before[String(lessonR)]?.["皮"]],
+      [1, 0],
+    );
+
+    const rToday = await api("POST", "/api/admin/reset", { scope: "today" });
+    eq("R2 resetToday 状态码 200", rToday.status, 200);
+    ok("R3 返回值含 removed.mastery 字段", typeof rToday.json.removed === "object" && "mastery" in (rToday.json.removed as Record<string, unknown>));
+    eq(
+      "R4 本课 mastery 被清空（至少「肚」「皮」两条没了）",
+      ((await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>)[String(lessonR)] ?? {},
+      {},
+    );
+
+    // 验证「只删今天、保留历史」：先把两条 mastery 都写为 1，然后把其中一条的 updated_at 改成昨天，
+    // 再 resetToday —— 应该只删今天的「皮」，保留昨天的「肚」。
+    const yday = (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+    // 1) 先把两条 mastery 都写为今天的状态
+    await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "肚", state: 1 });
+    await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "皮", state: 1 });
+    const beforePre = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
+    ok(
+      "R5a 两条 mastery 都已写入（肚/皮=1）",
+      beforePre[String(lessonR)]?.["肚"] === 1 && beforePre[String(lessonR)]?.["皮"] === 1,
+    );
+
+    // 2) 用 better-sqlite3 把「肚」的 updated_at 改回昨天，模拟「历史掌握度」
+    const DatabaseMod = await import("better-sqlite3");
+    const DbCtor = DatabaseMod.default as unknown as new (p: string) => {
+      prepare: (s: string) => { run: (...a: unknown[]) => unknown; all: (...a: unknown[]) => unknown[] };
+      close: () => void;
+      pragma: (s: string) => unknown;
+    };
+    const dbMod = new DbCtor(TEST_DB);
+    const upd = dbMod
+      .prepare(
+        "UPDATE mastery SET updated_at = ? WHERE child_id = (SELECT id FROM children LIMIT 1) AND lesson_id = ? AND ch = ?",
+      )
+      .run(`${yday}T12:00:00.000Z`, lessonR, "肚") as { changes: number };
+    dbMod.pragma("wal_checkpoint(FULL)");
+    dbMod.close();
+
+    // 3) 直接读 db 确认「肚」确实是昨天的时间戳（不依赖服务进程缓存）
+    const dbChk = new DbCtor(TEST_DB);
+    const checkRows = dbChk
+      .prepare("SELECT ch, updated_at FROM mastery WHERE lesson_id = ? ORDER BY ch")
+      .all(lessonR) as { ch: string; updated_at: string }[];
+    dbChk.close();
+    const checkMap = Object.fromEntries(checkRows.map((r) => [r.ch, r.updated_at]));
+    const duYday = checkMap["肚"]?.startsWith(yday);
+    const piToday = checkMap["皮"]?.startsWith(todayR);
+    ok(
+      `R5b db 视角：「肚」=昨天时间戳（${checkMap["肚"]}）、「皮」=今天时间戳（${checkMap["皮"]}） · UPDATE 影响 ${upd.changes} 行`,
+      Boolean(duYday && piToday),
+    );
+
+    // 4) resetToday：只删今天的，保留昨天的
+    await api("POST", "/api/admin/reset", { scope: "today" });
+    const afterR6 = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
+    eq("R6 只删今天：保留昨天动过的「肚」", afterR6[String(lessonR)]?.["肚"], 1);
+    eq("R7 删掉今天的「皮」", afterR6[String(lessonR)]?.["皮"], undefined);
+
+    // resetAll 不动 mastery（保住设计意图）
+    await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "孩", state: 1 });
+    const rAll = await api("POST", "/api/admin/reset", { scope: "all" });
+    const afterR8 = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
+    eq("R8 resetAll 不动 mastery（保留长期掌握度）", afterR8[String(lessonR)]?.["孩"], 1);
   } finally {
     app.kill();
     mock.kill();
