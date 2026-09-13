@@ -97,7 +97,7 @@ export const api = {
   /* ---------------------------------------------------------------- 打卡 */
 
   patchDaily: (body: { date?: string; tasks?: Record<string, boolean>; reviewCount?: number; reviewTarget?: number | null }) =>
-    request<{ daily: DailyState }>("/state/daily", { method: "PATCH", body: JSON.stringify(body) }),
+    request<{ daily: DailyState; balance?: number }>("/state/daily", { method: "PATCH", body: JSON.stringify(body) }),
 
   /** 错题复习开闸：把这一轮的目标题数定死（幂等，已定过就原样返回） */
   openReview: (body: { date?: string } = {}) =>

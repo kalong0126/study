@@ -125,7 +125,9 @@ stateRouter.patch(
         if (Number.isFinite(t)) await setReviewTarget(childId, date, Math.max(0, Math.trunc(t)));
       }
     }
-    ok(res, { daily: await getDaily(childId, date) });
+    // 返回最新余额：完成类积分（口算/听写/阅读完成、全部完成）在本接口自动入账，
+    // 前端必须拿到余额才能实时刷新「我的积分」，否则只会在启动/全对时更新一次。
+    ok(res, { daily: await getDaily(childId, date), balance: await getBalance(childId) });
   }),
 );
 
