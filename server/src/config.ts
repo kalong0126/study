@@ -278,33 +278,86 @@ export interface ResolvedLlm {
 }
 
 /**
+ * 家长后台可填写的运行时覆盖（模型名 / 密钥，优先级最高）。
+ * 与 tts 的 runtimeVoice 同一套路：进程内变量即时生效，重启后由 index.ts
+ * 从 app_kv（child_id=0，系统级）读回再 setLlmRuntimeOverride 恢复。
+ * 字段留空（undefined）表示「不覆盖，回落 config.yaml / 环境变量」。
+ */
+export interface LlmRuntimeOverride {
+  storyModel?: string;
+  storyApiKey?: string;
+  markModel?: string;
+  markApiKey?: string;
+}
+
+let runtimeOverride: LlmRuntimeOverride = {};
+
+export function setLlmRuntimeOverride(o: LlmRuntimeOverride): void {
+  runtimeOverride = {
+    storyModel: o.storyModel?.trim() || undefined,
+    storyApiKey: o.storyApiKey?.trim() || undefined,
+    markModel: o.markModel?.trim() || undefined,
+    markApiKey: o.markApiKey?.trim() || undefined,
+  };
+}
+
+export function getLlmRuntimeOverride(): LlmRuntimeOverride {
+  return { ...runtimeOverride };
+}
+
+/**
+ * 各用途的默认固定接口地址（家长在后台看不到、也不用配）：
+ *   · story → DeepSeek（纯文本，便宜）
+ *   · mark  → 阿里云百炼（OpenAI 兼容模式，视觉模型 qwen-vl-* 在这里）
+ *   · suggest 未固定，继续回落全局 baseUrl
+ * 若 config.yaml 里显式配了某用途独立的 *BaseUrl（storyBaseUrl/markBaseUrl），
+ * 则优先用显式值 —— 供测试 mock、自建网关等特殊场景覆盖。
+ */
+const FIXED_BASE_URL: Partial<Record<LlmPurpose, string>> = {
+  story: "https://api.deepseek.com/v1",
+  mark: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+};
+
+function runtimePick(purpose: LlmPurpose): { model?: string; apiKey?: string } {
+  if (purpose === "story") return { model: runtimeOverride.storyModel, apiKey: runtimeOverride.storyApiKey };
+  if (purpose === "mark") return { model: runtimeOverride.markModel, apiKey: runtimeOverride.markApiKey };
+  return {};
+}
+
+/**
  * 把「某用途该用哪家、哪个模型、多少超时」解析成一个确定的对象。
  *
- * 回落规则：某用途的 baseUrl/apiKey 留空 → 用 llm.baseUrl / llm.apiKey。
- * 这样「单厂商多模型」和「多厂商多模型」两种用法都自然成立，
- * 而且老配置（只写全局 baseUrl）行为完全不变。
+ * 优先级（高 → 低）：
+ *   1. 运行时覆盖（家长后台填的模型名 / 密钥）
+ *   2. 该用途独立的 *BaseUrl / *ApiKey / *Model
+ *   3. 全局 baseUrl / apiKey（单厂商多模型场景）
+ * story / mark 的接口地址被固定，不再受 config 影响。
  */
 export function resolveLlm(cfg: AppConfig, purpose: LlmPurpose): ResolvedLlm {
-  const own: Record<LlmPurpose, { baseUrl: string; apiKey: string; model: string }> = {
+  const own = {
     story: { baseUrl: cfg.llm.storyBaseUrl, apiKey: cfg.llm.storyApiKey, model: cfg.llm.storyModel },
     mark: { baseUrl: cfg.llm.markBaseUrl, apiKey: cfg.llm.markApiKey, model: cfg.llm.markModel },
     suggest: { baseUrl: cfg.llm.suggestBaseUrl, apiKey: cfg.llm.suggestApiKey, model: cfg.llm.suggestModel },
-  };
+  }[purpose];
 
-  const me = own[purpose];
-  const baseUrl = (me.baseUrl || cfg.llm.baseUrl || "").trim();
-  const apiKey = me.apiKey || cfg.llm.apiKey;
+  const ov = runtimePick(purpose);
+  const model = ov.model ?? own.model;
+  // 用 `||` 而不是 `??`：own.apiKey 是空字符串时要继续回落到全局 apiKey
+  const apiKey = ov.apiKey || own.apiKey || cfg.llm.apiKey;
+  // 接口地址：该用途独立 baseUrl 显式配置时优先（测试 / 换网关用），
+  // 否则 story/mark 用固定地址，suggest 回落全局 baseUrl。
+  const baseUrl = (own.baseUrl || FIXED_BASE_URL[purpose] || cfg.llm.baseUrl || "").trim();
 
   return {
     purpose,
     baseUrl,
     chatUrl: buildChatUrl(baseUrl),
     apiKey,
-    model: me.model,
+    model,
     timeoutMs: cfg.llm.timeoutMs[purpose],
     temperature: cfg.llm.temperature[purpose],
-    usingOwnProvider: Boolean(me.baseUrl || me.apiKey),
-    configured: Boolean(apiKey && me.model),
+    usingOwnProvider: Boolean(own.baseUrl || own.apiKey || ov.apiKey),
+    configured: Boolean(apiKey && model),
   };
 }
 

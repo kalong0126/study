@@ -330,6 +330,14 @@ export const adminApi = {
   setVoice: (voice: string) =>
     request<{ voice: string }>("/admin/tts/voice", { method: "POST", body: JSON.stringify({ voice }) }),
 
+  /** 保存故事/判卷的模型名与 API Key（留空字段不修改；保存即生效并持久化） */
+  updateLlm: (body: {
+    storyModel?: string;
+    storyApiKey?: string;
+    markModel?: string;
+    markApiKey?: string;
+  }) => request<{ saved: Record<string, unknown> }>("/admin/llm", { method: "POST", body: JSON.stringify(body) }),
+
   seed: (reset = false) => request<{ result: Record<string, unknown> }>("/admin/seed", {
     method: "POST",
     body: JSON.stringify({ reset }),

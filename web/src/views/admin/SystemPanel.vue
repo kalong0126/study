@@ -24,6 +24,9 @@ const previewPlaying = ref("");
 const busy = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
 
+/** 大模型配置表单（服务状态里可编辑保存）。model 预填生效值，key 留空表示不修改。 */
+const llmForm = ref({ storyModel: "", storyApiKey: "", markModel: "", markApiKey: "" });
+
 /** 积分余额与兑换记录（家长查看孩子攒了多少分、换了什么） */
 const pointsBalance = ref(0);
 const redemptions = ref<Redemption[]>([]);
@@ -42,6 +45,11 @@ async function loadHealth(): Promise<void> {
   try {
     health.value = await api.health();
     if (health.value?.tts?.voice) currentVoice.value = health.value.tts.voice;
+    // 预填模型名（生效值）；API Key 后端只给脱敏形态，无法回填完整值，留空 = 不修改
+    if (health.value?.llm) {
+      llmForm.value.storyModel = health.value.llm.storyModel || "";
+      llmForm.value.markModel = health.value.llm.markModel || "";
+    }
   } catch (e) {
     ui.toast(describeApiError(e));
   }
@@ -70,6 +78,27 @@ onMounted(() => {
   void loadFiles();
   void loadPoints();
 });
+
+/** 保存故事/判卷的模型名与 API Key（留空字段不修改），保存即生效并持久化。 */
+async function saveLlm(): Promise<void> {
+  busy.value = "llm";
+  try {
+    await adminApi.updateLlm({
+      storyModel: llmForm.value.storyModel,
+      storyApiKey: llmForm.value.storyApiKey,
+      markModel: llmForm.value.markModel,
+      markApiKey: llmForm.value.markApiKey,
+    });
+    llmForm.value.storyApiKey = "";
+    llmForm.value.markApiKey = "";
+    await loadHealth();
+    ui.toast("模型配置已保存并生效");
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  } finally {
+    busy.value = "";
+  }
+}
 
 async function runBackup(): Promise<void> {
   busy.value = "backup";
@@ -279,20 +308,46 @@ async function resetAll(): Promise<void> {
             已缓存 {{ health.tts.cacheCount }} 个文件 · {{ Math.round((health.tts.cacheBytes / 1024 / 1024) * 10) / 10 }} MB
           </div>
         </div>
-        <div class="field">
-          <label>故事模型</label>
-          <div class="badge-lite">{{ health.llm.storyModel || "未配置" }}</div>
-        </div>
-        <div class="field">
-          <label>判卷模型（需支持看图）</label>
-          <div class="badge-lite" :class="health.llm.markModel ? 'ok' : 'err'">{{ health.llm.markModel || "未配置 —— 手写判卷不可用" }}</div>
-        </div>
       </div>
 
-      <div class="field">
-        <label>接口地址</label>
-        <div class="badge-lite">{{ health.llm.chatUrl }}</div>
-        <div style="margin-top: 6px; font-size: 12.5px; color: var(--ink3)">API Key：{{ health.llm.apiKey || "未配置" }}</div>
+      <div class="field" style="margin-top: 4px">
+        <label>大模型配置（保存即生效）</label>
+        <div class="grid2">
+          <div class="field">
+            <label>故事模型名 · DeepSeek</label>
+            <input v-model="llmForm.storyModel" class="inp" placeholder="deepseek-chat" />
+          </div>
+          <div class="field">
+            <label>判卷模型名 · 阿里千问（需看图）</label>
+            <input v-model="llmForm.markModel" class="inp" placeholder="qwen-vl-max" />
+          </div>
+          <div class="field">
+            <label>故事 API Key</label>
+            <input
+              v-model="llmForm.storyApiKey"
+              type="password"
+              class="inp"
+              autocomplete="off"
+              :placeholder="health.llm.storyApiKeyMasked ? `已配置 ${health.llm.storyApiKeyMasked}，留空则不修改` : 'sk-…'"
+            />
+          </div>
+          <div class="field">
+            <label>判卷 API Key</label>
+            <input
+              v-model="llmForm.markApiKey"
+              type="password"
+              class="inp"
+              autocomplete="off"
+              :placeholder="health.llm.markApiKeyMasked ? `已配置 ${health.llm.markApiKeyMasked}，留空则不修改` : 'sk-…'"
+            />
+          </div>
+        </div>
+        <div class="row" style="justify-content: space-between; align-items: center; gap: 12px">
+          <span class="tip" style="margin: 0; flex: 1">接口地址已固定：故事走 DeepSeek、判卷走阿里千问。</span>
+          <button class="btn primary sm" type="button" :disabled="busy === 'llm'" @click="saveLlm()">
+            {{ busy === 'llm' ? '保存中…' : '保存配置' }}
+          </button>
+        </div>
       </div>
 
       <div v-for="(w, i) in health.warnings" :key="i" class="tip" style="border-left-color: var(--yellow-d)">⚠️ {{ w }}</div>

@@ -155,6 +155,9 @@ export interface HealthInfo {
     markModel: string;
     suggestModel: string;
     chatUrl: string;
+    /** 生效密钥的脱敏形态（如 "sk-…abcd"），前端用于「已配置，留空则不修改」占位提示 */
+    storyApiKeyMasked: string;
+    markApiKeyMasked: string;
   };
   tts: {
     provider: string;

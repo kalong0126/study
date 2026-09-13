@@ -10,7 +10,7 @@
  * `TypeError: Failed to fetch`，页面上根本没法区分。服务端能拿到真实原因，
  * 所以这里把 kind 明确区分出来，供日志与前端提示使用。
  */
-import { buildChatUrl, loadConfig, maskKey, resolveAllLlm, type ResolvedLlm } from "../config.js";
+import { buildChatUrl, loadConfig, maskKey, resolveLlm, type ResolvedLlm } from "../config.js";
 import { logLlm } from "../logger.js";
 
 export type LlmErrorKind = "config" | "timeout" | "network" | "http" | "parse" | "empty";
@@ -286,7 +286,10 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
  */
 export function llmConfigSummary(): Record<string, unknown> {
   const cfg = loadConfig();
-  const purposes = resolveAllLlm(cfg).map((p) => ({
+  const story = resolveLlm(cfg, "story");
+  const mark = resolveLlm(cfg, "mark");
+  const suggest = resolveLlm(cfg, "suggest");
+  const purposes = [story, mark, suggest].map((p) => ({
     purpose: p.purpose,
     model: p.model || "(未配置)",
     baseUrl: p.baseUrl,
@@ -305,10 +308,13 @@ export function llmConfigSummary(): Record<string, unknown> {
     retries: cfg.llm.retries,
     // 各用途解析结果
     purposes,
-    // 为了兼容老前端的字段
-    storyModel: cfg.llm.storyModel,
-    markModel: cfg.llm.markModel,
-    suggestModel: cfg.llm.suggestModel,
+    // 为了兼容老前端的字段（这里返回「生效值」，已含运行时覆盖）
+    storyModel: story.model,
+    markModel: mark.model,
+    suggestModel: suggest.model,
+    // 前端表单用：只给脱敏状态，用于「已配置，留空则不修改」的占位提示
+    storyApiKeyMasked: story.apiKey ? maskKey(story.apiKey) : "",
+    markApiKeyMasked: mark.apiKey ? maskKey(mark.apiKey) : "",
     timeouts: cfg.llm.timeoutMs,
   };
 }

@@ -5,7 +5,7 @@
  * 内网不鉴权，靠「不告诉孩子这个网址」做隔离；将来要上公网再开 auth.enabled。
  */
 import { Router } from "express";
-import { loadConfig, resolveLlm } from "../config.js";
+import { getLlmRuntimeOverride, loadConfig, resolveLlm, setLlmRuntimeOverride } from "../config.js";
 import { todayStr } from "../db/index.js";
 import {
   bulkImportChars,
@@ -23,7 +23,7 @@ import { currentChildId } from "../services/child.js";
 import { clearCache } from "../services/tts/cache.js";
 import { listEdgeVoices } from "../services/tts/edge.js";
 import { effectiveVoice, setRuntimeVoice } from "../services/tts/index.js";
-import { chat } from "../services/llm.js";
+import { chat, llmConfigSummary } from "../services/llm.js";
 import { SUGGEST_SYSTEM, buildWordSuggestPrompt, parseWordSuggest } from "../services/prompts/wordSuggest.js";
 import { seedLessons } from "../seed/index.js";
 import { SEED_STATS } from "../seed/lessons.js";
@@ -255,6 +255,33 @@ adminRouter.post(
     setRuntimeVoice(voice);
     await kvSet(0, "ttsVoice", voice);
     ok(res, { voice });
+  }),
+);
+
+/* ------------------------------------------------------------ 模型配置
+ * 家长在后台「服务状态」里填故事/判卷的模型名与 API Key，保存即生效。
+ * 接口地址已固定（story→DeepSeek、mark→阿里千问兼容模式），前端不再展示。
+ * 字段留空 = 不修改（保留原覆盖或回落 config.yaml / 环境变量），
+ * 所以「只改模型名不动 key」或「只补 key 不动模型名」都成立。 */
+adminRouter.post(
+  "/admin/llm",
+  ah(async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const cur = getLlmRuntimeOverride();
+    const next = { ...cur };
+
+    const storyModel = bStr(body.storyModel).trim();
+    const storyApiKey = bStr(body.storyApiKey).trim();
+    const markModel = bStr(body.markModel).trim();
+    const markApiKey = bStr(body.markApiKey).trim();
+    if (storyModel) next.storyModel = storyModel;
+    if (storyApiKey) next.storyApiKey = storyApiKey;
+    if (markModel) next.markModel = markModel;
+    if (markApiKey) next.markApiKey = markApiKey;
+
+    setLlmRuntimeOverride(next);
+    await kvSet(0, "llmRuntime", next);
+    ok(res, { saved: llmConfigSummary() });
   }),
 );
 

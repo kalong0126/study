@@ -10,7 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { SERVER_ROOT, ensureDirs, loadConfig, maskKey, resolveAllLlm, startupWarnings } from "./config.js";
+import { SERVER_ROOT, ensureDirs, loadConfig, maskKey, resolveAllLlm, setLlmRuntimeOverride, startupWarnings } from "./config.js";
 import { dotEnvCandidates, dotEnvSummary } from "./env.js";
 import { closeDb, initDb } from "./db/index.js";
 import { kvGet } from "./db/repo/state.js";
@@ -172,6 +172,18 @@ async function main(): Promise<void> {
   if (savedVoice) {
     setRuntimeVoice(savedVoice);
     logSys.info({ voice: savedVoice }, "已恢复上次选择的音色");
+  }
+
+  // 恢复家长上次在后台填的模型名 / API Key（存 app_kv child_id=0，系统级）
+  const savedLlm = await kvGet<Record<string, string>>(0, "llmRuntime");
+  if (savedLlm && typeof savedLlm === "object") {
+    setLlmRuntimeOverride({
+      storyModel: savedLlm.storyModel,
+      storyApiKey: savedLlm.storyApiKey,
+      markModel: savedLlm.markModel,
+      markApiKey: savedLlm.markApiKey,
+    });
+    logSys.info({ keys: Object.keys(savedLlm).join("、") }, "已恢复上次填写的模型配置");
   }
 
   const childId = await currentChildId();

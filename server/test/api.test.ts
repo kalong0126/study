@@ -124,6 +124,8 @@ db:
 llm:
   baseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   apiKey: sk-test-mock-key
+  storyBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
+  markBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   storyModel: mock-story
   markModel: mock-vision
   suggestModel: mock-story
