@@ -21,6 +21,8 @@ export interface Lesson {
   unit: string;
   sortNo: number;
   note?: string;
+  /** 课文原文全文（第 1 页展示 + 朗读 + 生字红标） */
+  content: string;
   chars: LessonChar[];
 }
 

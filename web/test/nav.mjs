@@ -44,7 +44,7 @@ function fail(m) {
 const ROUTES = [
   { path: "/", name: "今日", nav: "今日", sel: ".task", min: 1, what: "任务卡片" },
   { path: "/math", name: "口算", nav: "口算", sel: ".m-row", eq: 20, what: "口算题行" },
-  { path: "/chinese", name: "语文", nav: "语文", sel: ".zi-grid", min: 1, what: "生字格" },
+  { path: "/chinese", name: "语文", nav: "语文", sel: ".story-text", min: 1, what: "课文原文" },
   { path: "/story", name: "童话", nav: "童话", sel: ".card", min: 1, what: "卡片" },
   { path: "/wrong", name: "错题本", nav: "错题本", sel: ".wb-tabs", min: 1, what: "分区标签" },
 ];
@@ -132,7 +132,7 @@ for (const r of ROUTES.slice(1)) {
 step("首页任务卡片 → 各功能页（应用内点击）");
 const shortcuts = [
   { card: "每日口算", path: "/math", sel: ".m-row", min: 20 },
-  { card: "语文听写", path: "/chinese", sel: ".zi-grid", min: 1 },
+  { card: "语文听写", path: "/chinese", sel: ".story-text", min: 1 },
   { card: "童话故事", path: "/story", sel: ".card", min: 1 },
   { card: "错题复习", path: "/wrong", sel: ".wb-tabs", min: 1 },
 ];
@@ -153,6 +153,17 @@ for (const s of shortcuts) {
   const n = await page.locator(s.sel).count();
   n >= s.min ? pass(`  ${s.sel} = ${n}`) : fail(`  ${s.sel} = ${n}（太少，期望 ≥${s.min}）`);
 }
+
+// ————————————————————————————— 4c. 语文两页式：课文原文 + 生字红标 → 生字听写
+step("语文 /chinese 两页式（课文朗读页 + 生字红标 → 生字听写页）");
+await page.goto(`${BASE}/chinese`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1200);
+const redCount = await page.locator(".lesson-new").count();
+redCount > 0 ? pass(`课文页生字红标 ${redCount} 处`) : fail("课文页没有生字红标（.lesson-new）");
+await page.locator("button.wb-tab", { hasText: "生字听写" }).first().click();
+await page.waitForTimeout(800);
+const ziN = await page.locator(".zi-grid").count();
+ziN >= 1 ? pass(`切到听写页后生字格 ${ziN} 个`) : fail("切到听写页后生字格缺失（.zi-grid）");
 
 // ————————————————————————————— 4b. 孩子端不得出现任何家长「可点」入口
 step("孩子端不出现家长可点入口（防误点）");

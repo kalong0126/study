@@ -29,6 +29,7 @@ export function schemaStatements(d: Driver): string[] {
   unit VARCHAR(100) NULL,
   sort_no INT NOT NULL DEFAULT 0,
   note TEXT NULL,
+  content TEXT NULL,
   created_at VARCHAR(32) NOT NULL,
   updated_at VARCHAR(32) NOT NULL${pk}
 )${opt}`,

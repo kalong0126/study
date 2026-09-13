@@ -201,10 +201,35 @@ async function createMysql(cfg: AppConfig): Promise<MysqlDb> {
 }
 
 /* ================================================================ 迁移与单例 */
+
+/** 判断某张表是否已有某列（sqlite 用 PRAGMA，mysql 用 information_schema） */
+async function hasColumn(d: Db, table: string, col: string): Promise<boolean> {
+  if (d.driver === "sqlite") {
+    const rows = await d.all<{ name: string }>(`PRAGMA table_info(${table})`);
+    return rows.some((r) => r.name === col);
+  }
+  const rows = await d.all<{ COLUMN_NAME: string }>(
+    "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+    [table, col],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * 轻量列迁移：CREATE TABLE IF NOT EXISTS 不会给已存在的表加新列，
+ * 所以后来新增的列都要在这里补 ALTER。每列只做一次（先查后加，幂等）。
+ */
+async function ensureColumn(d: Db, table: string, col: string, def: string): Promise<void> {
+  if (await hasColumn(d, table, col)) return;
+  await d.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+
 export async function migrate(d: Db): Promise<void> {
   for (const sql of schemaStatements(d.driver)) {
     await d.exec(sql);
   }
+  // —— 后续新增字段的迁移（对已存在的库补列）——
+  await ensureColumn(d, "lessons", "content", "TEXT NULL");
   for (const sql of indexStatements(d.driver)) {
     try {
       await d.exec(sql);

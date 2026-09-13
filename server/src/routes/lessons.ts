@@ -16,6 +16,8 @@ lessonsRouter.get(
         id: l.id,
         title: l.title,
         unit: l.unit,
+        note: l.note,
+        content: l.content,
         sortNo: l.sortNo,
         chars: l.chars.filter((c) => !c.hidden),
       })),

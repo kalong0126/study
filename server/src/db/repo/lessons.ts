@@ -24,6 +24,8 @@ export interface Lesson {
   title: string;
   unit: string;
   note: string;
+  /** 课文原文全文（第 1 页展示 + 朗读 + 生字红标用）。可能为空（家长尚未录入）。 */
+  content: string;
   sortNo: number;
   chars: LessonChar[];
 }
@@ -33,6 +35,7 @@ interface LessonRow {
   title: string;
   unit: string | null;
   note: string | null;
+  content: string | null;
   sort_no: number;
 }
 
@@ -56,12 +59,13 @@ function mapChar(r: CharRow): LessonChar {
 
 export async function listLessons(withChars = true): Promise<Lesson[]> {
   const d = db();
-  const rows = await d.all<LessonRow>("SELECT id, title, unit, note, sort_no FROM lessons ORDER BY sort_no, id");
+  const rows = await d.all<LessonRow>("SELECT id, title, unit, note, content, sort_no FROM lessons ORDER BY sort_no, id");
   const lessons: Lesson[] = rows.map((r) => ({
     id: Number(r.id),
     title: r.title,
     unit: r.unit ?? "",
     note: r.note ?? "",
+    content: r.content ?? "",
     sortNo: Number(r.sort_no),
     chars: [],
   }));
@@ -82,7 +86,7 @@ export async function listLessons(withChars = true): Promise<Lesson[]> {
 
 export async function getLesson(id: number): Promise<Lesson | undefined> {
   const d = db();
-  const row = await d.get<LessonRow>("SELECT id, title, unit, note, sort_no FROM lessons WHERE id = ?", [id]);
+  const row = await d.get<LessonRow>("SELECT id, title, unit, note, content, sort_no FROM lessons WHERE id = ?", [id]);
   if (!row) return undefined;
   const chars = await d.all<CharRow>(
     "SELECT ch, word, pinyin, sort_no, hidden FROM lesson_chars WHERE lesson_id = ? ORDER BY sort_no",
@@ -93,6 +97,7 @@ export async function getLesson(id: number): Promise<Lesson | undefined> {
     title: row.title,
     unit: row.unit ?? "",
     note: row.note ?? "",
+    content: row.content ?? "",
     sortNo: Number(row.sort_no),
     chars: chars.map(mapChar),
   };
@@ -100,12 +105,18 @@ export async function getLesson(id: number): Promise<Lesson | undefined> {
 
 export async function findLessonByTitle(title: string): Promise<Lesson | undefined> {
   const d = db();
-  const row = await d.get<LessonRow>("SELECT id, title, unit, note, sort_no FROM lessons WHERE title = ?", [title]);
+  const row = await d.get<LessonRow>("SELECT id, title, unit, note, content, sort_no FROM lessons WHERE title = ?", [title]);
   if (!row) return undefined;
   return getLesson(Number(row.id));
 }
 
-export async function createLesson(input: { title: string; unit?: string; note?: string; sortNo?: number }): Promise<number> {
+export async function createLesson(input: {
+  title: string;
+  unit?: string;
+  note?: string;
+  content?: string;
+  sortNo?: number;
+}): Promise<number> {
   const d = db();
   let sortNo = input.sortNo;
   if (sortNo === undefined || sortNo === null) {
@@ -113,19 +124,15 @@ export async function createLesson(input: { title: string; unit?: string; note?:
     sortNo = Number(max?.m ?? 0) + 1;
   }
   const ts = nowIso();
-  return d.insert("INSERT INTO lessons (title, unit, note, sort_no, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)", [
-    input.title,
-    input.unit ?? "",
-    input.note ?? "",
-    sortNo,
-    ts,
-    ts,
-  ]);
+  return d.insert(
+    "INSERT INTO lessons (title, unit, note, content, sort_no, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    [input.title, input.unit ?? "", input.note ?? "", input.content ?? "", sortNo, ts, ts],
+  );
 }
 
 export async function updateLesson(
   id: number,
-  patch: { title?: string; unit?: string; note?: string; sortNo?: number },
+  patch: { title?: string; unit?: string; note?: string; content?: string; sortNo?: number },
 ): Promise<void> {
   const d = db();
   const sets: string[] = [];
@@ -142,6 +149,10 @@ export async function updateLesson(
     sets.push("note = ?");
     params.push(patch.note);
   }
+  if (patch.content !== undefined) {
+    sets.push("content = ?");
+    params.push(patch.content);
+  }
   if (patch.sortNo !== undefined) {
     sets.push("sort_no = ?");
     params.push(patch.sortNo);
@@ -151,6 +162,12 @@ export async function updateLesson(
   params.push(nowIso());
   params.push(id);
   await d.run(`UPDATE lessons SET ${sets.join(", ")} WHERE id = ?`, params);
+}
+
+/** 仅回填课文原文（种子数据用，避免动到其它字段） */
+export async function setLessonContent(id: number, content: string): Promise<void> {
+  const d = db();
+  await d.run("UPDATE lessons SET content = ?, updated_at = ? WHERE id = ?", [content, nowIso(), id]);
 }
 
 export async function deleteLesson(id: number): Promise<void> {

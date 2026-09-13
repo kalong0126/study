@@ -16,6 +16,7 @@ import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
 import { useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
+import { speakableSentences } from "@/utils/sentences";
 
 const content = useContentStore();
 const mastery = useMasteryStore();
@@ -27,7 +28,74 @@ const masked = ref(false);
 /** 顺序朗读是否进行中（与页面朗读状态解耦，用于按钮文案） */
 const readingAll = ref(false);
 
+/** 两页式：text = 课文原文（朗读 + 生字红标）；dictation = 生字听写 */
+const tab = ref<"text" | "dictation">("text");
+
 const chars = computed(() => content.chars);
+
+/** 课文原文（可能为空——家长尚未录入） */
+const lessonText = computed(() => (content.current?.content ?? "").trim());
+
+/** 生字集合（用于在课文里红色标注） */
+const newCharSet = computed(() => new Set(chars.value.map((c) => c.ch)));
+
+/**
+ * 课文分段：按自然段（\n）切，每段再按「是否生字」切成长短片段，
+ * 生字段用 .lesson-new 红色渲染，非生字段原样输出。
+ */
+const paragraphs = computed(() => {
+  const set = newCharSet.value;
+  return lessonText.value
+    .split("\n")
+    .filter((p) => p.trim())
+    .map((para) => {
+      const segs: { text: string; isNew: boolean }[] = [];
+      let cur = "";
+      let curNew = false;
+      for (const ch of para) {
+        const isNew = set.has(ch);
+        if (cur && isNew !== curNew) {
+          segs.push({ text: cur, isNew: curNew });
+          cur = "";
+        }
+        cur += ch;
+        curNew = isNew;
+      }
+      if (cur) segs.push({ text: cur, isNew: curNew });
+      return segs;
+    });
+});
+
+const lessonPlaying = ref(false);
+
+function switchTab(next: "text" | "dictation"): void {
+  if (tab.value === next) return;
+  tab.value = next;
+  stopAudio();
+  readingAll.value = false;
+  lessonPlaying.value = false;
+}
+
+/** 朗读整篇课文（分句串行，点一次读、再点停止） */
+async function toggleLessonRead(): Promise<void> {
+  if (lessonPlaying.value || isPlaying.value) {
+    lessonPlaying.value = false;
+    stopAudio();
+    ui.toast("已停止朗读");
+    return;
+  }
+  const sentences = speakableSentences(lessonText.value);
+  if (!sentences.length) {
+    ui.toast("这篇课文还没有原文，先选一篇有原文的吧");
+    return;
+  }
+  lessonPlaying.value = true;
+  await playSequence(
+    sentences.map((s) => ({ text: s, kind: "sentence" as const })),
+    { onIndex: (i) => { if (i < 0) lessonPlaying.value = false; } },
+  );
+  lessonPlaying.value = false;
+}
 const stat = computed(() => mastery.lessonStats(content.current?.id ?? 0, chars.value.map((c) => c.ch)));
 
 function speakChar(ch: string, word: string): void {
@@ -132,59 +200,100 @@ watch(
           {{ l.title }}<template v-if="l.unit"> · {{ l.unit }}</template>
         </option>
       </select>
-      <button class="btn" :class="masked ? 'yellow' : 'green'" type="button" @click="toggleMask()">
-        <Icon :name="masked ? 'check' : 'play'" :size="18" />{{ masked ? "结束听写" : "开始听写" }}
+    </div>
+
+    <div class="wb-tabs">
+      <button class="wb-tab" :class="{ on: tab === 'text' }" type="button" @click="switchTab('text')">
+        <Icon name="story" :size="17" />课文朗读
       </button>
-      <button class="btn" :class="readingAll || isPlaying ? 'yellow' : 'ghost'" type="button" @click="toggleReadAll()">
-        <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
+      <button class="wb-tab" :class="{ on: tab === 'dictation' }" type="button" @click="switchTab('dictation')">
+        <Icon name="chinese" :size="17" />生字听写 <span class="n">{{ chars.length }}</span>
       </button>
     </div>
 
-    <DictationPanel />
-
-    <div class="zi-grid" :class="{ masked }">
-      <div
-        v-for="c in chars"
-        :key="c.ch"
-        class="zi"
-        :class="mastery.charState(content.current?.id ?? 0, c.ch) === 1 ? 'mastered' : mastery.charState(content.current?.id ?? 0, c.ch) === 0 ? 'failed' : ''"
-      >
-        <button class="zi-face" type="button" :aria-label="`朗读 ${c.ch}`" @click="speakChar(c.ch, c.word)">
-          <span class="zi-char">{{ c.ch }}</span>
-          <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
+    <!-- 第 1 页：课文原文（支持朗读 + 生字红标） -->
+    <template v-if="tab === 'text'">
+      <div class="row">
+        <button class="btn" :class="lessonPlaying || isPlaying ? 'yellow' : 'green'" type="button" @click="toggleLessonRead()">
+          <Icon :name="lessonPlaying || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ lessonPlaying || isPlaying ? "停止朗读" : "朗读课文" }}
         </button>
-        <div class="zi-btns">
-          <button
-            class="zi-b"
-            :class="{ 'on-ok': mastery.charState(content.current?.id ?? 0, c.ch) === 1 }"
-            type="button"
-            title="已掌握"
-            @click="mark(c.ch, 1)"
-          >
-            <Icon name="check" :size="16" :stroke="2.6" />
+        <span v-if="newCharSet.size" class="sub">红色是本课生字，点「朗读课文」听全文</span>
+      </div>
+
+      <div v-if="paragraphs.length" class="story-text lesson-text">
+        <p v-for="(segs, pi) in paragraphs" :key="pi">
+          <template v-for="(seg, si) in segs" :key="si">
+            <span v-if="seg.isNew" class="lesson-new">{{ seg.text }}</span>
+            <template v-else>{{ seg.text }}</template>
+          </template>
+        </p>
+      </div>
+      <div v-else class="wb-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        </svg>
+        这篇课文还没有录入原文，家长可以在内容后台补上。
+      </div>
+    </template>
+
+    <!-- 第 2 页：生字听写（原内容） -->
+    <template v-else>
+      <div class="row">
+        <button class="btn" :class="masked ? 'yellow' : 'green'" type="button" @click="toggleMask()">
+          <Icon :name="masked ? 'check' : 'play'" :size="18" />{{ masked ? "结束听写" : "开始听写" }}
+        </button>
+        <button class="btn" :class="readingAll || isPlaying ? 'yellow' : 'ghost'" type="button" @click="toggleReadAll()">
+          <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
+        </button>
+      </div>
+
+      <DictationPanel />
+
+      <div class="zi-grid" :class="{ masked }">
+        <div
+          v-for="c in chars"
+          :key="c.ch"
+          class="zi"
+          :class="mastery.charState(content.current?.id ?? 0, c.ch) === 1 ? 'mastered' : mastery.charState(content.current?.id ?? 0, c.ch) === 0 ? 'failed' : ''"
+        >
+          <button class="zi-face" type="button" :aria-label="`朗读 ${c.ch}`" @click="speakChar(c.ch, c.word)">
+            <span class="zi-char">{{ c.ch }}</span>
+            <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
           </button>
-          <button
-            class="zi-b"
-            :class="{ 'on-no': mastery.charState(content.current?.id ?? 0, c.ch) === 0 }"
-            type="button"
-            title="未掌握，加入错字本"
-            @click="mark(c.ch, 0)"
-          >
-            <Icon name="cross" :size="16" :stroke="2.6" />
-          </button>
+          <div class="zi-btns">
+            <button
+              class="zi-b"
+              :class="{ 'on-ok': mastery.charState(content.current?.id ?? 0, c.ch) === 1 }"
+              type="button"
+              title="已掌握"
+              @click="mark(c.ch, 1)"
+            >
+              <Icon name="check" :size="16" :stroke="2.6" />
+            </button>
+            <button
+              class="zi-b"
+              :class="{ 'on-no': mastery.charState(content.current?.id ?? 0, c.ch) === 0 }"
+              type="button"
+              title="未掌握，加入错字本"
+              @click="mark(c.ch, 0)"
+            >
+              <Icon name="cross" :size="16" :stroke="2.6" />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="zi-stat">
-      <span><span class="dot" style="background: #8FE0C2"></span>已掌握 <b>{{ stat.ok }}</b></span>
-      <span><span class="dot" style="background: #FFBDBD"></span>未掌握 <b>{{ stat.no }}</b></span>
-      <span><span class="dot" style="background: #DDE9F5"></span>未检查 <b>{{ stat.none }}</b></span>
-    </div>
+      <div class="zi-stat">
+        <span><span class="dot" style="background: #8FE0C2"></span>已掌握 <b>{{ stat.ok }}</b></span>
+        <span><span class="dot" style="background: #FFBDBD"></span>未掌握 <b>{{ stat.no }}</b></span>
+        <span><span class="dot" style="background: #DDE9F5"></span>未检查 <b>{{ stat.none }}</b></span>
+      </div>
 
-    <p class="tip">
-      点击生字方块可以听读音（先读组词、再读单字，用来区分「睛 / 晴」这类音近字）。<br />
-      纸上听写模式下生字会变成「?」，写完再点「结束听写」揭晓答案；屏上听写则会自动批改并记录到错字本。
-    </p>
+      <p class="tip">
+        点击生字方块可以听读音（先读组词、再读单字，用来区分「睛 / 晴」这类音近字）。<br />
+        纸上听写模式下生字会变成「?」，写完再点「结束听写」揭晓答案；屏上听写则会自动批改并记录到错字本。
+      </p>
+    </template>
   </section>
 </template>

@@ -5,7 +5,7 @@
  * reset=true 时会先清空 lessons 与 lesson_chars，用于「恢复出厂内容」。
  */
 import { db, nowIso } from "../db/index.js";
-import { createLesson, findLessonByTitle, replaceChars } from "../db/repo/lessons.js";
+import { createLesson, findLessonByTitle, replaceChars, setLessonContent } from "../db/repo/lessons.js";
 import { logSeed } from "../logger.js";
 import { SEED_LESSONS, SEED_STATS } from "./lessons.js";
 
@@ -34,10 +34,20 @@ export async function seedLessons(opts: { reset?: boolean } = {}): Promise<SeedR
     const l = SEED_LESSONS[i];
     const existing = await findLessonByTitle(l.title);
     if (existing) {
+      // 已存在：若课文原文还空着就回填（幂等，不覆盖家长在后台手动录入/改过的原文）
+      if (!existing.content && l.content) {
+        await setLessonContent(existing.id, l.content);
+      }
       skipped++;
       continue;
     }
-    const id = await createLesson({ title: l.title, unit: l.unit, note: l.note ?? "", sortNo: i + 1 });
+    const id = await createLesson({
+      title: l.title,
+      unit: l.unit,
+      note: l.note ?? "",
+      content: l.content,
+      sortNo: i + 1,
+    });
     await replaceChars(
       id,
       l.chars.map((c) => ({ ch: c.ch, word: c.word })),
