@@ -38,7 +38,6 @@ const board = ref<InstanceType<typeof HandBoard> | null>(null);
 
 const phase = ref<Phase>("idle");
 const roundSize = ref(6);
-const roundStart = ref(0);
 const roundNo = ref(0);
 const index = ref(0);
 /** 本轮字表 */
@@ -97,21 +96,18 @@ function speakCurrent(): void {
 /* ------------------------------------------------------------------ 开始一轮 */
 
 function start(): void {
-  if (!canStart.value || !lesson.value) {
+  const les = lesson.value;
+  if (!canStart.value || !les) {
     ui.toast("这篇课文还没有生字表，请家长先到内容后台录入");
     return;
   }
   const all = lessonChars.value.map((c) => ({ ch: c.ch, word: c.word, pinyin: content.pinyinOf(c.ch, c) }));
-  const size = Math.max(1, Math.min(roundSize.value, all.length, 8));
-  // 从上次结束的位置继续，读完整篇后回到开头
-  let from = roundStart.value;
-  if (from >= all.length) from = 0;
-  let win = all.slice(from, from + size);
-  if (win.length < Math.min(size, all.length)) {
-    win = all.slice(0, size);
-    from = 0;
-  }
-  roundStart.value = (from + win.length) % all.length;
+  // 「再来一轮」练还没掌握的字：写错的（状态 0）和还没写到的（undefined）都留下，
+  // 已写对/已掌握的（状态 1）跳过，不再从头重来。全部掌握后回退到全部，允许自由重练。
+  const remaining = all.filter((c) => mastery.charState(les.id, c.ch) !== 1);
+  const pool = remaining.length > 0 ? remaining : all;
+  const size = Math.max(1, Math.min(roundSize.value, pool.length, 8));
+  const win = pool.slice(0, size);
   roundNo.value += 1;
 
   targets.value = win;
@@ -428,10 +424,17 @@ function statusText(it: MarkItem | undefined): string {
   return "";
 }
 
-/** 本轮结束后还剩多少个字没覆盖到 */
+/** 本轮结束后还剩多少个字没掌握（下次「再来一轮」会练这些） */
 const remainingAfterRound = computed(() => {
-  if (!lessonChars.value.length) return 0;
-  return Math.max(0, lessonChars.value.length - roundStart.value);
+  const les = lesson.value;
+  if (!les || !lessonChars.value.length) return 0;
+  return lessonChars.value.filter((c) => mastery.charState(les.id, c.ch) !== 1).length;
+});
+
+/** 「再来一轮」按钮文案：有剩余就提示数量，全掌握则改为「再练一遍」 */
+const nextRoundHint = computed(() => {
+  const n = remainingAfterRound.value;
+  return n > 0 ? `再来一轮（还有 ${n} 个字没掌握）` : "全部掌握啦，再练一遍";
 });
 
 watch(
@@ -439,7 +442,6 @@ watch(
   () => {
     // 换课文时结束当前轮次，避免字表错位
     if (phase.value !== "idle") end();
-    roundStart.value = 0;
     roundNo.value = 0;
   },
 );
@@ -477,7 +479,7 @@ function onImageError(e: Event): void {
         <Icon name="pen" :size="18" />开始屏上听写
       </button>
       <p v-if="!canStart" class="tip" style="text-align: left">这篇课文还没有生字表，请家长先到内容后台录入生字。</p>
-      <p v-if="roundNo > 0" class="tip" style="text-align: left">已完成 {{ roundNo }} 轮，再开始会接着后面的字。</p>
+      <p v-if="roundNo > 0" class="tip" style="text-align: left">已完成 {{ roundNo }} 轮，再开始会练还没掌握的字。</p>
     </div>
 
     <!-- ------------------------------------------------------ 逐字书写中 -->
@@ -600,7 +602,7 @@ function onImageError(e: Event): void {
           <Icon name="refresh" :size="18" />刷新掌握状态
         </button>
         <button class="btn green" type="button" @click="start()">
-          <Icon name="arrowRight" :size="18" />再来一轮（还剩 {{ remainingAfterRound }} 个字）
+          <Icon name="arrowRight" :size="18" />{{ nextRoundHint }}
         </button>
       </div>
       <div class="hw-tools">

@@ -15,6 +15,7 @@
     "test:mathtimer": "node test/math-timer.mjs",
     "test:wrong": "node test/wrong-answer.mjs",
     "test:review": "node test/review-gate.mjs",
+    "test:dictation": "node test/dictation-continue.mjs",
     "test:sentences": "node ../server/node_modules/tsx/dist/cli.mjs test/sentences.test.ts"
   },
   "dependencies": {
