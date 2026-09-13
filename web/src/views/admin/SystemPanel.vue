@@ -8,6 +8,7 @@ import { onMounted, ref } from "vue";
 import { adminApi, api, describeApiError } from "@/api";
 import type { HealthInfo } from "@/api/types";
 import Icon from "@/components/Icon.vue";
+import { clearAudioCache } from "@/composables/useAudio";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
@@ -15,12 +16,27 @@ const ui = useUiStore();
 const health = ref<HealthInfo | null>(null);
 const files = ref<{ file: string; kb: number; at: string }[]>([]);
 const voices = ref<{ name: string; gender: string }[]>([]);
+/** 当前生效音色（health.tts.voice 初始，拉取列表 / 切换后更新） */
+const currentVoice = ref("");
+/** 正在试听的音色名（用于喇叭按钮切「停止」图标） */
+const previewPlaying = ref("");
 const busy = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
+
+let previewAudio: HTMLAudioElement | null = null;
+
+/** Edge 返回的 Gender 是英文（Female/Male），转成中文；未知值原样显示 */
+function genderLabel(g: string): string {
+  const m = (g || "").toLowerCase();
+  if (m === "female") return "女声";
+  if (m === "male") return "男声";
+  return g || "—";
+}
 
 async function loadHealth(): Promise<void> {
   try {
     health.value = await api.health();
+    if (health.value?.tts?.voice) currentVoice.value = health.value.tts.voice;
   } catch (e) {
     ui.toast(describeApiError(e));
   }
@@ -91,8 +107,51 @@ async function onImport(e: Event): Promise<void> {
 async function loadVoices(): Promise<void> {
   busy.value = "voices";
   try {
-    voices.value = await adminApi.voices();
+    const r = await adminApi.voices();
+    voices.value = r.voices;
+    currentVoice.value = r.current ?? "";
     ui.toast(`拿到 ${voices.value.length} 个中文音色`);
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  } finally {
+    busy.value = "";
+  }
+}
+
+/** 试听某个音色：用该音色现合成一句示例朗读；再点一次停止 */
+function previewVoice(name: string): void {
+  if (previewPlaying.value === name) {
+    previewAudio?.pause();
+    previewAudio = null;
+    previewPlaying.value = "";
+    return;
+  }
+  previewAudio?.pause();
+  const a = new Audio(api.ttsPreviewUrl(name));
+  previewAudio = a;
+  previewPlaying.value = name;
+  const stop = (): void => {
+    if (previewPlaying.value === name) previewPlaying.value = "";
+  };
+  a.onended = stop;
+  a.onerror = (): void => {
+    stop();
+    ui.toast(`试听失败：${name} 可能不可用`);
+  };
+  void a.play().catch(() => {
+    stop();
+    ui.toast(`试听失败：${name}`);
+  });
+}
+
+/** 使用某个音色：选中即生效，并作废前端缓存的旧音色音频 */
+async function applyVoice(name: string): Promise<void> {
+  busy.value = "voice-apply";
+  try {
+    await adminApi.setVoice(name);
+    currentVoice.value = name;
+    clearAudioCache();
+    ui.toast(`已切换到 ${name}，孩子端刷新即生效`);
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {
@@ -271,7 +330,7 @@ async function resetAll(): Promise<void> {
       <span class="ico" style="background: #F3EFFF; color: var(--purple-d)"><Icon name="speakerLoud" :size="19" /></span>
       <div>
         <h2>可选音色</h2>
-        <span class="sub">列出 Edge TTS 的中文音色，把中意的名字填到 config.yaml 的 tts.voice</span>
+        <span class="sub">点「试听」听一句样例，点「使用」立即切换朗读音色</span>
       </div>
       <div class="spacer"></div>
       <button class="btn ghost sm" type="button" :disabled="busy === 'voices'" @click="loadVoices()">
@@ -279,15 +338,39 @@ async function resetAll(): Promise<void> {
       </button>
     </div>
 
-    <div v-if="voices.length" class="chip-list">
-      <span v-for="v in voices" :key="v.name" class="chip">
-        {{ v.name }}
-        <span class="c-w">{{ v.gender }}</span>
-      </span>
+    <div v-if="currentVoice" class="badge-lite" style="margin-bottom: 10px">
+      当前音色：<b style="font-family: ui-monospace, monospace">{{ currentVoice }}</b>
     </div>
+
+    <div v-if="voices.length" class="voice-list">
+      <div v-for="v in voices" :key="v.name" class="voice-row" :class="{ cur: v.name === currentVoice }">
+        <button class="btn ghost sm" type="button" @click="previewVoice(v.name)">
+          <Icon :name="previewPlaying === v.name ? 'stop' : 'speaker'" :size="16" />
+          {{ previewPlaying === v.name ? "停止" : "试听" }}
+        </button>
+        <div class="v-main">
+          <div class="v-name">{{ v.name }}</div>
+          <div class="v-sub">{{ genderLabel(v.gender) }}</div>
+        </div>
+        <button
+          v-if="v.name === currentVoice"
+          class="btn ghost sm"
+          type="button"
+          disabled
+          title="当前正在使用的音色"
+        >
+          <Icon name="check" :size="16" />当前
+        </button>
+        <button v-else class="btn green sm" type="button" :disabled="busy !== ''" @click="applyVoice(v.name)">
+          <Icon name="check" :size="16" />使用
+        </button>
+      </div>
+    </div>
+    <div v-else class="wb-empty">还没拉取音色列表，点右上角「拉取音色列表」。</div>
     <p class="tip">
-      推荐 <code>zh-CN-XiaoyiNeural</code>（女声、亲切）或 <code>zh-CN-YunxiNeural</code>（男声）。
-      改完 config.yaml 重启后端生效；<b>改了音色之后记得清一次语音缓存</b>，否则还是旧音色。
+      点「试听」听一句样例（用该音色现合成），满意就点「使用」——<b>立即生效，不用改配置、不用重启</b>。
+      切换后旧音色的缓存音频会自动作废，孩子端刷新页面即用新音色。推荐 <code>zh-CN-XiaoyiNeural</code>（女声、亲切）或
+      <code>zh-CN-YunxiNeural</code>（男声）。
     </p>
   </section>
 </template>

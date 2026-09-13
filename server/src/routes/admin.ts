@@ -18,10 +18,11 @@ import {
   updateChar,
   updateLesson,
 } from "../db/repo/lessons.js";
-import { resetAll, resetToday } from "../db/repo/state.js";
+import { kvSet, resetAll, resetToday } from "../db/repo/state.js";
 import { currentChildId } from "../services/child.js";
 import { clearCache } from "../services/tts/cache.js";
 import { listEdgeVoices } from "../services/tts/edge.js";
+import { effectiveVoice, setRuntimeVoice } from "../services/tts/index.js";
 import { chat } from "../services/llm.js";
 import { SUGGEST_SYSTEM, buildWordSuggestPrompt, parseWordSuggest } from "../services/prompts/wordSuggest.js";
 import { seedLessons } from "../seed/index.js";
@@ -233,10 +234,27 @@ adminRouter.get(
   ah(async (_req, res) => {
     try {
       const voices = await listEdgeVoices("zh-");
-      ok(res, { voices });
+      ok(res, { voices, current: effectiveVoice() });
     } catch (e) {
       fail(res, 503, `获取音色列表失败：${e instanceof Error ? e.message : String(e)}`);
     }
+  }),
+);
+
+/* ------------------------------------------------------------ 音色选择
+ * 家长在后台「使用」某个音色后，立即覆盖内存里的 tts.voice 并持久化到
+ * app_kv（child_id=0，系统级，不会被「重置学习数据」清掉），下次重启自动恢复。 */
+adminRouter.post(
+  "/admin/tts/voice",
+  ah(async (req, res) => {
+    const voice = bStr(req.body?.voice).trim();
+    if (!voice) {
+      fail(res, 400, "缺少 voice");
+      return;
+    }
+    setRuntimeVoice(voice);
+    await kvSet(0, "ttsVoice", voice);
+    ok(res, { voice });
   }),
 );
 

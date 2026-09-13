@@ -18,6 +18,25 @@ export { cacheStats, clearCache, enforceMaxSize, buildCacheKey, keyToPath } from
 
 export type TtsKind = "word" | "char" | "sentence";
 
+/* ------------------------------------------------------------- 运行时音色覆盖
+ * 家长在后台选了音色后，希望「选中即生效」，而不是改 config.yaml + 重启。
+ * 这里用一个进程内变量覆盖 config 里的 tts.voice；进程重启后由 index.ts 从
+ * app_kv（child_id=0，系统级）读回再 setRuntimeVoice 恢复。 */
+let runtimeVoice: string | null = null;
+
+export function setRuntimeVoice(v: string | null): void {
+  runtimeVoice = v && v.trim() ? v.trim() : null;
+}
+
+export function getRuntimeVoice(): string | null {
+  return runtimeVoice;
+}
+
+/** 实际生效的音色（运行时覆盖优先于 config） */
+export function effectiveVoice(): string {
+  return runtimeVoice ?? loadConfig().tts.voice;
+}
+
 export interface TtsResult {
   buf: Buffer;
   cached: boolean;
@@ -73,10 +92,11 @@ export async function synthesize(text: string, kind: TtsKind = "word"): Promise<
     logTts.warn({ len: raw.length, max: cfg.tts.maxTextLen }, "文本超长已截断");
   }
 
+  const voice = runtimeVoice ?? cfg.tts.voice;
   const rate = rateForKind(kind, cfg.tts.rate);
   const key = buildCacheKey({
     provider: cfg.tts.provider,
-    voice: cfg.tts.voice,
+    voice,
     rate,
     volume: cfg.tts.volume,
     pitch: cfg.tts.pitch,
@@ -93,7 +113,7 @@ export async function synthesize(text: string, kind: TtsKind = "word"): Promise<
   try {
     if (cfg.tts.provider === "edge") {
       buf = await synthesizeEdge(clipped, {
-        voice: cfg.tts.voice,
+        voice,
         rate,
         volume: cfg.tts.volume,
         pitch: cfg.tts.pitch,
@@ -104,7 +124,7 @@ export async function synthesize(text: string, kind: TtsKind = "word"): Promise<
   } catch (e) {
     const kindName = e instanceof TtsError ? e.kind : "provider";
     logTts.error(
-      { text: clipped, kind, voice: cfg.tts.voice, rate, errKind: kindName, err: e, ms: Date.now() - t0 },
+      { text: clipped, kind, voice, rate, errKind: kindName, err: e, ms: Date.now() - t0 },
       "语音合成失败",
     );
     throw e;
@@ -112,7 +132,7 @@ export async function synthesize(text: string, kind: TtsKind = "word"): Promise<
 
   await writeCache(key, buf);
   logTts.info(
-    { text: clipped, kind, voice: cfg.tts.voice, rate, bytes: buf.length, cache: "MISS", ms: Date.now() - t0 },
+    { text: clipped, kind, voice, rate, bytes: buf.length, cache: "MISS", ms: Date.now() - t0 },
     "语音合成成功",
   );
 
@@ -186,7 +206,7 @@ export function ttsInfo(): Record<string, unknown> {
   const cfg = loadConfig();
   return {
     provider: cfg.tts.provider,
-    voice: cfg.tts.voice,
+    voice: runtimeVoice ?? cfg.tts.voice,
     rate: cfg.tts.rate,
     volume: cfg.tts.volume,
     pitch: cfg.tts.pitch,

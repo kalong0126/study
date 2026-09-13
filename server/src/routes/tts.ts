@@ -8,8 +8,10 @@
  * 前端拿它当普通音频 URL 用（<audio src> 或 fetch 成 Blob 预加载）。
  */
 import { Router, type Response } from "express";
+import { loadConfig } from "../config.js";
 import { listLessons } from "../db/repo/lessons.js";
-import { TtsError, dictationTexts, prewarmChars, synthesize, ttsStats } from "../services/tts/index.js";
+import { TtsError, dictationTexts, isSpeakableText, prewarmChars, synthesize, ttsStats } from "../services/tts/index.js";
+import { synthesizeEdge } from "../services/tts/edge.js";
 import { ah, bStr, fail, ok } from "./helpers.js";
 
 export const ttsRouter = Router();
@@ -48,6 +50,41 @@ ttsRouter.get(
     res.setHeader("Cache-Control", "public, max-age=604800, immutable");
     res.setHeader("ETag", `"${r.key}"`);
     res.end(r.buf);
+  }),
+);
+
+/* -------------------------------------------------- 试听（指定音色，不落缓存）
+ * 家长后台点某个音色「试听」时用。这里用请求里指定的 voice 现合成一段，
+ * 不走磁盘缓存，避免试听把缓存目录堆满一堆只听过一次的音频。 */
+ttsRouter.get(
+  "/tts/preview",
+  ah(async (req, res) => {
+    const voice = bStr(req.query.voice).trim();
+    const text = bStr(req.query.text, "你好，我是朗读小助手，很高兴为你朗读课文。").trim();
+    if (!voice) {
+      fail(res, 400, "缺少 voice 参数");
+      return;
+    }
+    if (!isSpeakableText(text)) {
+      fail(res, 400, "缺少可朗读的文本");
+      return;
+    }
+    const cfg = loadConfig();
+    try {
+      const buf = await synthesizeEdge(text, {
+        voice,
+        rate: cfg.tts.rate,
+        volume: cfg.tts.volume,
+        pitch: cfg.tts.pitch,
+      });
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Content-Length", String(buf.length));
+      res.setHeader("Cache-Control", "no-store");
+      res.end(buf);
+    } catch (e) {
+      if (handleTtsError(res, e)) return;
+      throw e;
+    }
   }),
 );
 

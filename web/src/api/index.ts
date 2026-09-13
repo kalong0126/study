@@ -192,6 +192,10 @@ export const api = {
   ttsUrl: (text: string, kind: "word" | "char" | "sentence" = "word") =>
     `${BASE}/tts${qs({ text, kind })}`,
 
+  /** 指定音色的试听 URL（家长后台选音色时用，不落缓存） */
+  ttsPreviewUrl: (voice: string, text = "你好，我是朗读小助手，很高兴为你朗读课文。") =>
+    `${BASE}/tts/preview${qs({ voice, text })}`,
+
   prewarm: (lessonId: number) =>
     request<{ jobId: string; total: number; status: string }>("/tts/prewarm", {
       method: "POST",
@@ -292,7 +296,12 @@ export const adminApi = {
 
   prewarmStatus: (jobId: string) => api.prewarmStatus(jobId),
 
-  voices: () => request<{ voices: { name: string; gender: string }[] }>("/admin/voices").then((r) => r.voices),
+  voices: () =>
+    request<{ voices: { name: string; gender: string }[]; current: string }>("/admin/voices"),
+
+  /** 切换 TTS 音色（选中即生效，持久化，下次重启自动恢复） */
+  setVoice: (voice: string) =>
+    request<{ voice: string }>("/admin/tts/voice", { method: "POST", body: JSON.stringify({ voice }) }),
 
   seed: (reset = false) => request<{ result: Record<string, unknown> }>("/admin/seed", {
     method: "POST",

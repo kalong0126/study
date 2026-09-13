@@ -13,6 +13,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { SERVER_ROOT, ensureDirs, loadConfig, maskKey, resolveAllLlm, startupWarnings } from "./config.js";
 import { dotEnvCandidates, dotEnvSummary } from "./env.js";
 import { closeDb, initDb } from "./db/index.js";
+import { kvGet } from "./db/repo/state.js";
 import { logHttp, logSys } from "./logger.js";
 import { adminRouter } from "./routes/admin.js";
 import { backupRouter } from "./routes/backup.js";
@@ -28,7 +29,7 @@ import { seedLessons } from "./seed/index.js";
 import { scheduleDailyBackup, stopDailyBackup } from "./services/backup.js";
 import { currentChildId } from "./services/child.js";
 import { failStaleTasks } from "./services/mark.js";
-import { ttsInfo } from "./services/tts/index.js";
+import { setRuntimeVoice, ttsInfo } from "./services/tts/index.js";
 
 function localAddresses(port: number): string[] {
   const out: string[] = [];
@@ -163,6 +164,14 @@ async function main(): Promise<void> {
   for (const w of startupWarnings(cfg)) logSys.warn(w);
 
   await initDb();
+
+  // 恢复家长上次在后台选的音色（存 app_kv child_id=0，系统级）
+  const savedVoice = await kvGet<string>(0, "ttsVoice");
+  if (savedVoice) {
+    setRuntimeVoice(savedVoice);
+    logSys.info({ voice: savedVoice }, "已恢复上次选择的音色");
+  }
+
   const childId = await currentChildId();
   logSys.info({ childId }, "当前孩子上下文就绪");
 
