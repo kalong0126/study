@@ -67,11 +67,22 @@ function cancelCn(): void {
 
 async function finishCorrect(it: WrongItem): Promise<void> {
   if (!canReview.value) return; // 没开闸就不该发生（输入是禁用的），兜一下
+  // 语文错字重新挑战写对后：除了擦掉错题，还要把它标记为「已掌握」，
+  // 让生字听写页该字从 ✗ 变 ✓（与「做对 = 掌握」一致）。
+  if (it.type === "chinese") {
+    const lessonId = Number(it.payload.lessonId ?? 0);
+    const ch = charOf(it);
+    if (lessonId > 0 && ch) {
+      await mastery
+        .setCharState(lessonId, ch, 1, { lessonTitle: lessonOf(it), skipWrongBook: true })
+        .catch(() => undefined);
+    }
+  }
   await mastery.removeWrongItem(it.type, it.id);
   cnChallengeId.value = 0;
   playDing();
   await progress.bumpReview();
-  ui.toast(it.type === "math" ? "算对啦！这道题从错题本擦掉了" : "已从错字本擦掉，真棒！");
+  ui.toast(it.type === "math" ? "算对啦！这道题从错题本擦掉了" : "写对啦！已标记为已掌握，从错字本擦掉了 ✓");
 }
 
 /** 数学：边输入边判，一旦和正确答案一致就立刻擦掉这道题 */
