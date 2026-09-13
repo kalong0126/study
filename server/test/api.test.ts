@@ -787,6 +787,26 @@ async function main(): Promise<void> {
     const rAll = await api("POST", "/api/admin/reset", { scope: "all" });
     const afterR8 = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
     eq("R8 resetAll 不动 mastery（保留长期掌握度）", afterR8[String(lessonR)]?.["孩"], 1);
+
+    // resetToday 按 created_at 当天清今天的错题（resetAll 之后错题本是干净的，这里先造今天的错题）
+    await api("POST", "/api/state/wrong", { type: "math", refKey: "9 × 9 =", payload: { text: "9 × 9 =", ans: 81 } });
+    await api("POST", "/api/state/wrong", {
+      type: "chinese",
+      refKey: `${lessonR}:今`,
+      payload: { char: "今", lessonId: lessonR },
+    });
+    const wrongB2 = (await api("GET", "/api/state")).json.wrong as { math: unknown[]; chinese: unknown[] };
+    ok(
+      "R9 重置前错题本有今天的数学 + 语文错题",
+      wrongB2.math.length >= 1 && wrongB2.chinese.length >= 1,
+    );
+    const rToday2 = await api("POST", "/api/admin/reset", { scope: "today" });
+    ok(
+      "R10 resetToday 返回含 removed.wrong 字段",
+      typeof rToday2.json.removed === "object" && "wrong" in (rToday2.json.removed as Record<string, unknown>),
+    );
+    const wrongA2 = (await api("GET", "/api/state")).json.wrong as { math: unknown[]; chinese: unknown[] };
+    eq("R11 resetToday 清空今天的错题", wrongA2.math.length + wrongA2.chinese.length, 0);
   } finally {
     app.kill();
     mock.kill();

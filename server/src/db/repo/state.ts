@@ -397,11 +397,11 @@ export interface ResetStats {
   redemptions: number;
 }
 
-/** 重置「今天」的学习数据（保留历史日期 + 历史掌握度 + 课文 + 故事 / 已读标题 / 判卷留痕） */
+/** 重置「今天」的学习数据（保留历史日期 + 历史掌握度 + 历史错题 + 课文 + 故事 / 已读标题 / 判卷留痕） */
 export async function resetToday(
   childId: number,
   date: string,
-): Promise<Pick<ResetStats, "daily" | "math" | "mastery" | "kv" | "points" | "redemptions">> {
+): Promise<Pick<ResetStats, "daily" | "math" | "mastery" | "wrong" | "kv" | "points" | "redemptions">> {
   const d = db();
   return d.tx(async (t) => {
     const c1 = await t.get<{ n: number }>(
@@ -437,17 +437,25 @@ export async function resetToday(
 
     // 今天的掌握度清掉 —— 这是听写判卷（AI / 大人审核）的成果。
     // 按 updated_at 当天匹配，只删今天动过的；之前几天点过 ✓ 的字保留下来。
-    // 错题本不动 —— 它是「长期累积」，跟 mastery 是两个维度的事。
     const mc = await t.get<{ n: number }>(
       "SELECT COUNT(*) AS n FROM mastery WHERE child_id = ? AND updated_at LIKE ?",
       [childId, `${date}%`],
     );
     await t.run("DELETE FROM mastery WHERE child_id = ? AND updated_at LIKE ?", [childId, `${date}%`]);
 
+    // 今天的错题本一并清掉 —— 今天做口算/听写做错的题与字，重置后重新来过。
+    // 按 created_at 当天匹配（与 mastery 的 updated_at 同一边界），只删今天新进的，历史累积的保留。
+    const wc = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM wrong_items WHERE child_id = ? AND created_at LIKE ?",
+      [childId, `${date}%`],
+    );
+    await t.run("DELETE FROM wrong_items WHERE child_id = ? AND created_at LIKE ?", [childId, `${date}%`]);
+
     return {
       daily: Number(c1?.n ?? 0),
       math: Number(c2?.n ?? 0),
       mastery: Number(mc?.n ?? 0),
+      wrong: Number(wc?.n ?? 0),
       kv,
       points: Number(pc?.n ?? 0),
       redemptions: 0,
