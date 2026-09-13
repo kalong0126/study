@@ -69,6 +69,23 @@ export interface TimerState {
   endAt: number;
 }
 
+/** 一条积分兑换记录（孩子用积分换的奖励，家长线下兑现） */
+export interface Redemption {
+  id: number;
+  reward: string;
+  cost: number;
+  createdAt: string;
+}
+
+/** 一条积分流水（delta 正数加分、负数扣分） */
+export interface PointsLedgerEntry {
+  id: number;
+  delta: number;
+  reason: string;
+  refKey: string;
+  createdAt: string;
+}
+
 export interface StateSnapshot {
   date: string;
   daily: DailyState;
@@ -80,6 +97,10 @@ export interface StateSnapshot {
   stories: StoryRow[];
   readTitles: string[];
   timer: TimerState;
+  /** 当前积分余额（跨天累计钱包） */
+  balance: number;
+  /** 最近的兑换记录 */
+  redemptions: Redemption[];
 }
 
 export type MarkStatus = "pending" | "running" | "done" | "failed";

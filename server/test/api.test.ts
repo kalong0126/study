@@ -328,6 +328,60 @@ async function main(): Promise<void> {
     // 收尾：把目标退回未开闸，别影响后面的用例
     await api("PATCH", "/api/state/daily", { date: today, reviewTarget: null });
 
+    /* ============================ 积分系统 ============================ */
+    group("积分系统");
+    // 上文 B3 已经打勾 math=true，完成积分 math_done +10 应已自动入账
+    const p0 = await api("GET", "/api/points");
+    eq("P1 口算完成已自动 +10", p0.json.balance, 10);
+
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { math: true } });
+    const pt1 = await api("GET", "/api/points");
+    eq("P2 重复打勾不重复加分（幂等）", pt1.json.balance, 10);
+
+    const a1 = await api("POST", "/api/points/award", { reason: "math_perfect" });
+    eq("P3 口算全对 +10", a1.json.balance, 20);
+    const a2 = await api("POST", "/api/points/award", { reason: "math_perfect" });
+    eq("P4 全对重复发幂等", a2.json.balance, 20);
+    eq("P4b 幂等返回 awarded=false", a2.json.awarded, false);
+
+    const aBad = await api("POST", "/api/points/award", { reason: "math_done" });
+    eq("P5 完成类积分不允许前端手动发", aBad.status, 400);
+
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { dictation: true } });
+    const p2 = await api("GET", "/api/points");
+    eq("P6 听写完成 +10", p2.json.balance, 30);
+
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { reading: true } });
+    const p3 = await api("GET", "/api/points");
+    eq("P7 阅读完成 +20", p3.json.balance, 50);
+
+    const a3 = await api("POST", "/api/points/award", { reason: "dictation_perfect" });
+    eq("P8 听写全对 +10", a3.json.balance, 60);
+
+    // 打勾最后一项 review → 四项全完成，自动 +10
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { review: true } });
+    const p4 = await api("GET", "/api/points");
+    eq("P9 四项全完成再 +10", p4.json.balance, 70);
+
+    const r1 = await api("POST", "/api/points/redeem", { reward: "screen_30min" });
+    eq("P10 兑换半小时平板扣 50 分", r1.json.balance, 20);
+    const rd = await api("GET", "/api/points");
+    eq("P11 兑换记录可查询", (rd.json.redemptions as unknown[]).length, 1);
+
+    const r2 = await api("POST", "/api/points/redeem", { reward: "money_1yuan" });
+    eq("P12 余额不足返回 400", r2.status, 400);
+
+    const r3 = await api("POST", "/api/points/redeem", { reward: "xxx" });
+    eq("P13 未知兑换项目返回 400", r3.status, 400);
+
+    const stP = await api("GET", "/api/state");
+    eq("P14 /api/state 返回 balance", stP.json.balance, 20);
+    ok("P15 /api/state 返回 redemptions", Array.isArray(stP.json.redemptions));
+
+    // 收尾：清掉积分，避免影响后面用例的 balance 断言（后面不再测积分）
+    const resetAllP = await api("POST", "/api/admin/reset", { scope: "all" });
+    ok("P16 resetAll 清空积分与兑换记录", typeof resetAllP.json.removed === "object");
+
     /* ============================ C. 故事生成 ============================ */
     group("C. 故事生成（mock）");
     await resetMock();

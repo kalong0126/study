@@ -6,9 +6,10 @@
  */
 import { onMounted, ref } from "vue";
 import { adminApi, api, describeApiError } from "@/api";
-import type { HealthInfo } from "@/api/types";
+import type { HealthInfo, Redemption } from "@/api/types";
 import Icon from "@/components/Icon.vue";
 import { clearAudioCache } from "@/composables/useAudio";
+import { rewardLabel } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
@@ -22,6 +23,10 @@ const currentVoice = ref("");
 const previewPlaying = ref("");
 const busy = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
+
+/** 积分余额与兑换记录（家长查看孩子攒了多少分、换了什么） */
+const pointsBalance = ref(0);
+const redemptions = ref<Redemption[]>([]);
 
 let previewAudio: HTMLAudioElement | null = null;
 
@@ -50,9 +55,20 @@ async function loadFiles(): Promise<void> {
   }
 }
 
+async function loadPoints(): Promise<void> {
+  try {
+    const r = await api.listPoints();
+    pointsBalance.value = r.balance;
+    redemptions.value = r.redemptions;
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  }
+}
+
 onMounted(() => {
   void loadHealth();
   void loadFiles();
+  void loadPoints();
 });
 
 async function runBackup(): Promise<void> {
@@ -371,6 +387,34 @@ async function resetAll(): Promise<void> {
       点「试听」听一句样例（用该音色现合成），满意就点「使用」——<b>立即生效，不用改配置、不用重启</b>。
       切换后旧音色的缓存音频会自动作废，孩子端刷新页面即用新音色。推荐 <code>zh-CN-XiaoyiNeural</code>（女声、亲切）或
       <code>zh-CN-YunxiNeural</code>（男声）。
+    </p>
+  </section>
+
+  <section class="card">
+    <div class="card-hd">
+      <span class="ico" style="background: #FFF6E0; color: #C97F00"><Icon name="gift" :size="19" /></span>
+      <div>
+        <h2>积分与兑换</h2>
+        <span class="sub">孩子当前积分余额与兑换记录（家长线下兑现）</span>
+      </div>
+      <div class="spacer"></div>
+      <span class="pts-balance">{{ pointsBalance }}</span>
+      <button class="btn ghost sm" type="button" @click="loadPoints()"><Icon name="refresh" :size="16" />刷新</button>
+    </div>
+
+    <div v-if="!redemptions.length" class="wb-empty">
+      还没有兑换记录。孩子完成任务攒够 50 分，就能在首页兑换奖励。
+    </div>
+    <div v-else class="redeem-hist">
+      <div v-for="rd in redemptions" :key="rd.id" class="rh-row">
+        <span class="rh-name">{{ rewardLabel(rd.reward) }}</span>
+        <span class="rh-time">{{ String(rd.createdAt).replace("T", " ").slice(0, 16) }}</span>
+        <span class="badge-lite">-{{ rd.cost }} 分</span>
+      </div>
+    </div>
+    <p class="tip">
+      规则：口算 / 听写完成各 +10，全对再各 +10，阅读 +20，四项全完成再 +10。
+      50 分可换「半小时平板娱乐时间」或「1 块钱」。孩子端在首页操作兑换，这里只查看记录、线下兑现。
     </p>
   </section>
 </template>

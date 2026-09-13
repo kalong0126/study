@@ -16,7 +16,9 @@ import {
   type MarkTaskView,
   type MathQuestion,
   type MathSetState,
+  type PointsLedgerEntry,
   type PrewarmJob,
+  type Redemption,
   type StateSnapshot,
   type StoryRow,
   type TimerState,
@@ -163,6 +165,26 @@ export const api = {
 
   setTimer: (timer: TimerState) =>
     request<{ timer: TimerState }>("/state/timer", { method: "PATCH", body: JSON.stringify(timer) }),
+
+  /* ------------------------------------------------------------------ 积分 */
+
+  /** 发「全对」奖励（math_perfect / dictation_perfect，后端幂等） */
+  awardPoints: (reason: "math_perfect" | "dictation_perfect") =>
+    request<{ awarded: boolean; balance: number }>("/points/award", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  /** 兑换奖励：扣对应积分并生成兑换记录 */
+  redeem: (reward: string) =>
+    request<{ balance: number; redemption: Redemption }>("/points/redeem", {
+      method: "POST",
+      body: JSON.stringify({ reward }),
+    }),
+
+  /** 积分余额 + 兑换记录 + 流水（家长后台看历史用） */
+  listPoints: () =>
+    request<{ balance: number; redemptions: Redemption[]; ledger: PointsLedgerEntry[] }>("/points"),
 
   /* ---------------------------------------------------------------- 判卷 */
 

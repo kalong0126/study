@@ -1,0 +1,157 @@
+/**
+ * 仓储：积分系统
+ *
+ * 规则（与前端 progress store 的完成链路一一对应）：
+ *   · 口算完成 +10、语文听写完成 +10、阅读完成 +20（这 3 项在 setTaskDone 时由后端自动发）
+ *   · 口算全对 +10、听写全对 +10（前端判定「全对」后显式调 /points/award）
+ *   · 四项任务全部完成再 +10（后端在 setTaskDone 后检查自动发）
+ *   · 兑换：50 分 = 半小时平板娱乐时间 / 1 块钱（扣除对应积分，生成兑换记录）
+ *
+ * 幂等设计：所有「奖励」类入账都带 ref_key（如 "math_done:2026-09-13"），
+ * 靠 (child_id, ref_key) 唯一约束保证重复调用不会重复加分。兑换的 ref_key 用毫秒时间戳，
+ * 天然唯一（家庭单用户场景不会同毫秒兑两次）。
+ */
+import { db, nowIso } from "../index.js";
+
+/** 各积分原因对应的分值 */
+export const POINT_VALUES: Record<string, number> = {
+  math_done: 10,
+  math_perfect: 10,
+  dictation_done: 10,
+  dictation_perfect: 10,
+  reading_done: 20,
+  all_done: 10,
+};
+
+/** 任务 key → 完成积分原因（review 不加分，故不在此表） */
+export const POINT_REASONS: Record<string, string> = {
+  math: "math_done",
+  dictation: "dictation_done",
+  reading: "reading_done",
+};
+
+export interface Reward {
+  id: string;
+  label: string;
+  cost: number;
+}
+
+/** 可兑换奖励（与前端 REWARDS 保持一致） */
+export const REWARDS: Reward[] = [
+  { id: "screen_30min", label: "半小时平板娱乐时间", cost: 50 },
+  { id: "money_1yuan", label: "1 块钱", cost: 50 },
+];
+
+export function findReward(id: string): Reward | undefined {
+  return REWARDS.find((r) => r.id === id);
+}
+
+export interface LedgerEntry {
+  id: number;
+  delta: number;
+  reason: string;
+  refKey: string;
+  createdAt: string;
+}
+
+export interface Redemption {
+  id: number;
+  reward: string;
+  cost: number;
+  createdAt: string;
+}
+
+/** 当前积分余额 = 所有流水的 delta 之和（不可能为负，兑换前已校验） */
+export async function getBalance(childId: number): Promise<number> {
+  const d = db();
+  const r = await d.get<{ s: number | null }>("SELECT SUM(delta) AS s FROM points_ledger WHERE child_id = ?", [childId]);
+  return Math.max(0, Math.trunc(Number(r?.s ?? 0) || 0));
+}
+
+/** 幂等加分：reason 必须在 POINT_VALUES 里，ref_key 已存在则不重复发 */
+export async function awardPoints(
+  childId: number,
+  reason: string,
+  refKey: string,
+): Promise<{ awarded: boolean; balance: number }> {
+  const points = POINT_VALUES[reason];
+  if (!points) return { awarded: false, balance: await getBalance(childId) };
+
+  const d = db();
+  const dup = await d.get<{ id: number }>("SELECT id FROM points_ledger WHERE child_id = ? AND ref_key = ?", [
+    childId,
+    refKey,
+  ]);
+  if (dup) return { awarded: false, balance: await getBalance(childId) };
+
+  await d.insert(
+    "INSERT INTO points_ledger (child_id, delta, reason, ref_key, created_at) VALUES (?, ?, ?, ?, ?)",
+    [childId, points, reason, refKey, nowIso()],
+  );
+  return { awarded: true, balance: await getBalance(childId) };
+}
+
+export async function listLedger(childId: number, limit = 100): Promise<LedgerEntry[]> {
+  const d = db();
+  const rows = await d.all<{ id: number; delta: number; reason: string; ref_key: string; created_at: string }>(
+    "SELECT id, delta, reason, ref_key, created_at FROM points_ledger WHERE child_id = ? ORDER BY id DESC LIMIT ?",
+    [childId, limit],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    delta: Number(r.delta),
+    reason: r.reason,
+    refKey: r.ref_key,
+    createdAt: r.created_at,
+  }));
+}
+
+export async function listRedemptions(childId: number, limit = 100): Promise<Redemption[]> {
+  const d = db();
+  const rows = await d.all<{ id: number; reward: string; cost: number; created_at: string }>(
+    "SELECT id, reward, cost, created_at FROM redemptions WHERE child_id = ? ORDER BY id DESC LIMIT ?",
+    [childId, limit],
+  );
+  return rows.map((r) => ({
+    id: Number(r.id),
+    reward: r.reward,
+    cost: Number(r.cost),
+    createdAt: r.created_at,
+  }));
+}
+
+/**
+ * 兑换：事务内先查余额，够则扣分（入账一条负流水）+ 生成兑换记录。
+ * 余额不足抛出带 kind='insufficient' 的错误，路由层转成友好提示。
+ */
+export async function redeemPoints(
+  childId: number,
+  reward: Reward,
+): Promise<{ balance: number; redemption: Redemption }> {
+  const d = db();
+  return d.tx(async (t) => {
+    const cur = await t.get<{ s: number | null }>("SELECT SUM(delta) AS s FROM points_ledger WHERE child_id = ?", [
+      childId,
+    ]);
+    const balance = Math.max(0, Math.trunc(Number(cur?.s ?? 0) || 0));
+    if (balance < reward.cost) {
+      const err = new Error("积分不够") as Error & { kind?: string };
+      err.kind = "insufficient";
+      throw err;
+    }
+
+    const refKey = `redeem:${Date.now()}`;
+    await t.insert(
+      "INSERT INTO points_ledger (child_id, delta, reason, ref_key, created_at) VALUES (?, ?, 'redeem', ?, ?)",
+      [childId, -reward.cost, refKey, nowIso()],
+    );
+    const rid = await t.insert(
+      "INSERT INTO redemptions (child_id, reward, cost, created_at) VALUES (?, ?, ?, ?)",
+      [childId, reward.id, reward.cost, nowIso()],
+    );
+    return {
+      balance: balance - reward.cost,
+      redemption: { id: Number(rid), reward: reward.id, cost: reward.cost, createdAt: nowIso() },
+    };
+  });
+}

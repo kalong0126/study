@@ -22,6 +22,7 @@ import { fail } from "./routes/helpers.js";
 import { healthRouter } from "./routes/health.js";
 import { lessonsRouter } from "./routes/lessons.js";
 import { markRouter } from "./routes/mark.js";
+import { pointsRouter } from "./routes/points.js";
 import { stateRouter } from "./routes/state.js";
 import { storyRouter } from "./routes/story.js";
 import { ttsRouter } from "./routes/tts.js";
@@ -94,6 +95,7 @@ function createApp(): express.Express {
   api.use(storyRouter);
   api.use(ttsRouter);
   api.use(markRouter);
+  api.use(pointsRouter);
   api.use(stateRouter);
   api.use(adminRouter);
   api.use(backupRouter);

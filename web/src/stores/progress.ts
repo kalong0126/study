@@ -16,7 +16,7 @@
 import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 import { api } from "@/api";
-import type { DailyState, MathQuestion, MathSetState, StateSnapshot, TaskKey } from "@/api/types";
+import type { DailyState, MathQuestion, MathSetState, Redemption, StateSnapshot, TaskKey } from "@/api/types";
 import { useMasteryStore } from "./mastery";
 import { useUiStore } from "./ui";
 import { lsGet, lsSet, randInt, shuffle, todayStr } from "@/utils/local";
@@ -38,6 +38,20 @@ export const TASK_DEFS: TaskDef[] = [
 
 /** 错题复习一轮最多重做几道（与服务端 REVIEW_MAX 保持一致） */
 export const REVIEW_MAX = 3;
+
+/**
+ * 积分规则（与服务端 db/repo/points.ts 保持一致）：
+ *   · 口算完成 +10、听写完成 +10、阅读完成 +20、全部完成 +10（后端自动发）
+ *   · 口算全对 +10、听写全对 +10（前端判定全对后调 awardPoints）
+ */
+export const REWARDS = [
+  { id: "screen_30min", label: "半小时平板娱乐时间", cost: 50 },
+  { id: "money_1yuan", label: "1 块钱", cost: 50 },
+] as const;
+
+export function rewardLabel(id: string): string {
+  return REWARDS.find((r) => r.id === id)?.label ?? id;
+}
 
 /** 开始复习前必须先完成的任务：它们会往错题本里加题 */
 const REVIEW_GATE: TaskKey[] = ["math", "dictation"];
@@ -122,6 +136,10 @@ export const useProgressStore = defineStore("progress", () => {
   const mathSet = ref<MathSetState | null>(null);
   const mathBusy = ref(false);
 
+  /** 积分余额（跨天累计钱包）与最近的兑换记录 */
+  const balance = ref(0);
+  const redemptions = ref<Redemption[]>([]);
+
   // 只在本地保留的辅助信息：孩子输入的原始答案、已入错题本的题号、满分是否已庆祝
   const answers = ref<Record<string, string>>({});
   const wrongAdded = ref<Record<string, boolean>>({});
@@ -160,6 +178,8 @@ export const useProgressStore = defineStore("progress", () => {
     daily.value = s.daily ?? blankDaily(s.date);
     mathSet.value = s.mathSet;
     mathElapsedMs.value = Math.max(0, Number(s.mathElapsedMs) || 0);
+    balance.value = Math.max(0, Number(s.balance) || 0);
+    redemptions.value = s.redemptions ?? [];
     if (!mathSet.value) {
       answers.value = {};
       wrongAdded.value = {};
@@ -210,6 +230,29 @@ export const useProgressStore = defineStore("progress", () => {
       ui.celebrate();
     }
     return false;
+  }
+
+  /* ---------------------------------------------------------------- 积分 */
+
+  /**
+   * 发「全对」奖励（口算全对 / 听写全对）。后端按 reason+日期 幂等，重复调用不会重复加分。
+   * 完成类积分（口算/听写/阅读完成、全部完成）由后端在 setTaskDone 链路里自动发，前端无需关心。
+   */
+  async function awardPoints(reason: "math_perfect" | "dictation_perfect"): Promise<void> {
+    try {
+      const r = await api.awardPoints(reason);
+      balance.value = r.balance;
+    } catch {
+      // 加分失败不打扰孩子，下次触发会再试（后端幂等，不会重复入账）
+    }
+  }
+
+  /** 兑换奖励：成功后更新余额并把记录插到列表头部 */
+  async function redeemPoints(reward: string): Promise<Redemption> {
+    const r = await api.redeem(reward);
+    balance.value = r.balance;
+    redemptions.value = [r.redemption, ...redemptions.value];
+    return r.redemption;
   }
 
   /* ---------------------------------------------------------- 错题复习 */
@@ -536,6 +579,8 @@ export const useProgressStore = defineStore("progress", () => {
     if (perfect.value) return;
     perfect.value = true;
     persistMathLocal();
+    // 口算全对 → 额外 +10（后端幂等，重复调用不会重复加分）
+    await awardPoints("math_perfect");
     const ui = useUiStore();
     ui.celebratePerfect(filled ? "20 道全对，今天的任务也全部完成啦" : "20 道口算一道都没错，太厉害啦");
   }
@@ -563,6 +608,10 @@ export const useProgressStore = defineStore("progress", () => {
     allDone,
     isDone,
     completeTask,
+    balance,
+    redemptions,
+    awardPoints,
+    redeemPoints,
     bumpReview,
     reviewOpen,
     reviewCount,

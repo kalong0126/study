@@ -57,6 +57,7 @@ const ICONS: Record<string, string> = {
   grid4: '<rect x="3.5" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="13" y="3.5" width="7.5" height="7.5" rx="2"/><rect x="3.5" y="13" width="7.5" height="7.5" rx="2"/><rect x="13" y="13" width="7.5" height="7.5" rx="2"/>',
   back: '<path d="M19 12H6M11.5 6l-6 6 6 6"/>',
   save: '<path d="M5 4.5h11L19.5 8v11.5H5z"/><path d="M8.5 4.5v5h7v-5M8.5 19.5v-5.5h7v5.5"/>',
+  gift: '<rect x="4" y="10.5" width="16" height="9.5" rx="1.5"/><path d="M4 7.5h16v3H4zM12 7.5V20"/><path d="M12 7.5c-1.8-2.8-5-2.5-5 0s2 1.8 5 0zM12 7.5c1.8-2.8 5-2.5 5 0s-2 1.8-5 0z"/>',
 };
 
 const inner = computed(() => ICONS[props.name] ?? "");

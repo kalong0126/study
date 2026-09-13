@@ -350,6 +350,22 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .cand { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1.5px solid #D6E6F8; background: #F4F9FF; color: var(--blue-d); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
 .cand:hover { background: #E6F2FF; }
 
+/* ---------- 积分与兑换 ---------- */
+.pts-balance { font-size: 30px; font-weight: 900; color: #C97F00; font-variant-numeric: tabular-nums; line-height: 1; }
+.pts-balance::after { content: " 分"; font-size: 13px; font-weight: 700; color: var(--ink3); }
+.redeem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.redeem-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 14px 16px; border-radius: 15px; border: 1.5px solid var(--line2); background: #FAFCFF; cursor: pointer; font-family: inherit; text-align: left; transition: .18s; }
+.redeem-card.can { border-color: #FFD98A; background: #FFF9EC; }
+.redeem-card:disabled { cursor: not-allowed; opacity: .55; }
+.redeem-card .rc-label { font-size: 15px; font-weight: 800; color: var(--ink); }
+.redeem-card .rc-cost { font-size: 12.5px; font-weight: 700; color: #C97F00; }
+.redeem-hist { margin-top: 14px; }
+.redeem-hist .rh-hd { font-size: 13px; font-weight: 800; color: var(--ink2); margin-bottom: 6px; }
+.redeem-hist .rh-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 4px; border-bottom: 1px dashed var(--line); }
+.redeem-hist .rh-row:last-child { border-bottom: none; }
+.redeem-hist .rh-name { font-size: 13.5px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
+.redeem-hist .rh-time { font-size: 12px; color: var(--ink3); font-weight: 600; }
+
 /* ---------- 提示 / 特效 ---------- */
 #fxCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
 #toast { position: fixed; left: 50%; bottom: 110px; transform: translate(-50%, 20px); background: rgba(55, 72, 92, .94); color: #fff; font-size: 14.5px; font-weight: 600; padding: 11px 20px; border-radius: 14px; opacity: 0; pointer-events: none; transition: .32s; z-index: 10000; max-width: 86vw; text-align: center; }
@@ -410,6 +426,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .hw-tools .btn { flex: 1 1 100%; min-height: 48px; }
   .hw-pin { font-size: 18px; }
   .timer-clock { font-size: 26px; min-width: 104px; }
+  .redeem-grid { grid-template-columns: 1fr; }
   #toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
   .banner .b-t { font-size: 32px; }
   .banner.gold .b-t { font-size: 36px; letter-spacing: 3px; }

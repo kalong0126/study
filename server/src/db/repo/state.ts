@@ -392,13 +392,15 @@ export interface ResetStats {
   reads: number;
   marks: number;
   kv: number;
+  points: number;
+  redemptions: number;
 }
 
 /** 重置「今天」的学习数据（保留历史日期 + 掌握度 + 课文 + 计时器 / 已读标题 / 故事 / 判卷留痕） */
 export async function resetToday(
   childId: number,
   date: string,
-): Promise<Pick<ResetStats, "daily" | "math" | "kv">> {
+): Promise<Pick<ResetStats, "daily" | "math" | "kv" | "points" | "redemptions">> {
   const d = db();
   return d.tx(async (t) => {
     const c1 = await t.get<{ n: number }>(
@@ -423,7 +425,22 @@ export async function resetToday(
       await t.run("DELETE FROM app_kv WHERE child_id = ? AND k = ?", [childId, k]);
       kv += Number(c?.n ?? 0);
     }
-    return { daily: Number(c1?.n ?? 0), math: Number(c2?.n ?? 0), kv };
+
+    // 今天新赚的积分一并归零（完成/全对/全完成的 ref_key 形如 "math_done:2026-09-13"）。
+    // 兑换记录与兑换消费流水保留 —— 兑换是「花掉」，不该因重置进度而消失。
+    const pc = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM points_ledger WHERE child_id = ? AND ref_key LIKE ?",
+      [childId, `%:${date}`],
+    );
+    await t.run("DELETE FROM points_ledger WHERE child_id = ? AND ref_key LIKE ?", [childId, `%:${date}`]);
+
+    return {
+      daily: Number(c1?.n ?? 0),
+      math: Number(c2?.n ?? 0),
+      kv,
+      points: Number(pc?.n ?? 0),
+      redemptions: 0,
+    };
   });
 }
 
@@ -443,6 +460,8 @@ export async function resetAll(childId: number): Promise<ResetStats> {
     reads: await c("read_titles WHERE child_id = ?", [childId]),
     marks: await c("mark_tasks WHERE child_id = ?", [childId]),
     kv: await c("app_kv WHERE child_id = ?", [childId]),
+    points: await c("points_ledger WHERE child_id = ?", [childId]),
+    redemptions: await c("redemptions WHERE child_id = ?", [childId]),
   };
   const markItems = await d.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM mark_items WHERE task_id IN (SELECT id FROM mark_tasks WHERE child_id = ?)",
@@ -461,6 +480,8 @@ export async function resetAll(childId: number): Promise<ResetStats> {
     );
     await t.run("DELETE FROM mark_tasks WHERE child_id = ?", [childId]);
     await t.run("DELETE FROM app_kv WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM points_ledger WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM redemptions WHERE child_id = ?", [childId]);
   });
 
   return { ...counts, marks: counts.marks + Number(markItems?.n ?? 0) };

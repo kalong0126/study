@@ -30,10 +30,12 @@ import {
   setReviewCount,
   setReviewTarget,
   setTaskDone,
+  TASK_KEYS,
   type MasteryState,
   type MathQuestion,
   type WrongType,
 } from "../db/repo/state.js";
+import { awardPoints, getBalance, listRedemptions, POINT_REASONS } from "../db/repo/points.js";
 import { currentChildId } from "../services/child.js";
 import { ah, bStr, fail, ok, qInt } from "./helpers.js";
 
@@ -55,7 +57,7 @@ stateRouter.get(
     const childId = await currentChildId();
     const date = normDate(req.query.date);
 
-    const [daily, mathSet, mastery, wrongMath, wrongChinese, stories, readTitles, timer, mathElapsedMs] =
+    const [daily, mathSet, mastery, wrongMath, wrongChinese, stories, readTitles, timer, mathElapsedMs, balance, redemptions] =
       await Promise.all([
         getDaily(childId, date),
         getMathSet(childId, date),
@@ -66,6 +68,8 @@ stateRouter.get(
         listReadTitles(childId),
         kvGet<{ running: boolean; endAt: number }>(childId, "timer"),
         getMathElapsed(childId, date),
+        getBalance(childId),
+        listRedemptions(childId, 10),
       ]);
 
     ok(res, {
@@ -78,6 +82,8 @@ stateRouter.get(
       stories,
       readTitles,
       timer: timer ?? { running: false, endAt: 0 },
+      balance,
+      redemptions,
     });
   }),
 );
@@ -94,7 +100,17 @@ stateRouter.patch(
     if (tasks && typeof tasks === "object") {
       for (const [k, v] of Object.entries(tasks as Record<string, unknown>)) {
         await setTaskDone(childId, date, k, v === true);
+        // 完成任务自动发积分（幂等）：口算 +10 / 听写 +10 / 阅读 +20；错题复习不加分
+        if (v === true) {
+          const reason = POINT_REASONS[k];
+          if (reason) await awardPoints(childId, reason, `${reason}:${date}`);
+        }
       }
+    }
+    // 四项任务全部完成 → 额外 +10（幂等）
+    const afterTasks = await getDaily(childId, date);
+    if (TASK_KEYS.every((k) => afterTasks.tasks[k])) {
+      await awardPoints(childId, "all_done", `all_done:${date}`);
     }
     if (body.reviewCount !== undefined) {
       const n = Number(body.reviewCount);

@@ -134,6 +134,27 @@ export function schemaStatements(d: Driver): string[] {
   v TEXT NULL,
   updated_at VARCHAR(32) NOT NULL${compositePkClause(["child_id", "k"])}
 )${opt}`,
+
+    // ---------------- 积分 ----------------
+    // 积分流水：delta 正数加分、负数扣分。ref_key 是幂等键（如 "math_done:2026-09-13"），
+    // 靠唯一约束保证同一笔奖励/兑换不会重复入账。
+    `CREATE TABLE IF NOT EXISTS points_ledger (
+  ${id},
+  child_id INT NOT NULL,
+  delta INT NOT NULL,
+  reason VARCHAR(32) NOT NULL,
+  ref_key VARCHAR(160) NOT NULL,
+  created_at VARCHAR(32) NOT NULL${pk}${uniqueClause(d, "uk_points_ref", ["child_id", "ref_key"])}
+)${opt}`,
+
+    // 兑换记录（孩子用积分换的奖励，家长线下兑现）
+    `CREATE TABLE IF NOT EXISTS redemptions (
+  ${id},
+  child_id INT NOT NULL,
+  reward VARCHAR(32) NOT NULL,
+  cost INT NOT NULL,
+  created_at VARCHAR(32) NOT NULL${pk}
+)${opt}`,
   ];
 }
 
@@ -151,6 +172,8 @@ export function indexStatements(d: Driver): string[] {
       "CREATE INDEX IF NOT EXISTS idx_stories_child ON stories (child_id)",
       "CREATE INDEX IF NOT EXISTS idx_markitems_task ON mark_items (task_id)",
       "CREATE INDEX IF NOT EXISTS idx_daily_child ON daily_progress (child_id, date)",
+      "CREATE INDEX IF NOT EXISTS idx_points_child ON points_ledger (child_id)",
+      "CREATE INDEX IF NOT EXISTS idx_redemptions_child ON redemptions (child_id)",
     ];
   }
   return [
@@ -160,5 +183,7 @@ export function indexStatements(d: Driver): string[] {
     "CREATE INDEX idx_stories_child ON stories (child_id)",
     "CREATE INDEX idx_markitems_task ON mark_items (task_id)",
     "CREATE INDEX idx_daily_child ON daily_progress (child_id, date)",
+    "CREATE INDEX idx_points_child ON points_ledger (child_id)",
+    "CREATE INDEX idx_redemptions_child ON redemptions (child_id)",
   ];
 }

@@ -267,6 +267,8 @@ async function onMarkSettled(task: MarkTaskView): Promise<void> {
   const ok = task.items.filter((i) => i.correct).length;
   if (ok === task.items.length && ok > 0) {
     playDing();
+    // 听写这一轮全对 → 额外 +10（后端幂等）
+    await progress.awardPoints("dictation_perfect");
     ui.celebrate({ title: "这一轮全写对啦！🎉", sub: `${task.items.length} 个字一个都没错` });
   } else {
     playBuzz();
@@ -318,6 +320,9 @@ async function saveParentReview(): Promise<void> {
       });
     }
     ui.toast(`已保存 ${judged.length} 个字的结果`);
+    // 本轮全部字都判定且都写对 → 听写全对 +10（后端幂等）
+    const allCorrect = judged.length === targets.value.length && judged.every((j) => j.correct);
+    if (allCorrect) await progress.awardPoints("dictation_perfect");
     if (judged.some((j) => j.correct)) playDing();
     else playBuzz();
     await finishRound(judged.length);
