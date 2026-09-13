@@ -35,6 +35,8 @@ const title = ref("");
 const unit = ref("");
 const sortNo = ref<number>(0);
 const note = ref("");
+/** 课文原文（第 1 页展示 + 朗读 + 生字红标）。可能为空（家长尚未录入）。 */
+const contentText = ref("");
 
 const loading = ref(true);
 const busy = ref("");
@@ -67,6 +69,7 @@ function applyLesson(l: Lesson): void {
   unit.value = l.unit;
   sortNo.value = l.sortNo;
   note.value = l.note ?? "";
+  contentText.value = l.content ?? "";
   rows.value = l.chars.map((c) => ({ ch: c.ch, word: c.word, pinyin: c.pinyin, hidden: !!c.hidden }));
   dirty.value = false;
 }
@@ -115,6 +118,26 @@ async function saveMeta(): Promise<void> {
     applyLesson(l);
     await content.load(true);
     ui.toast("课文信息已保存");
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  } finally {
+    busy.value = "";
+  }
+}
+
+/* -------------------------------------------------------------- 课文原文 */
+
+const contentLen = computed(() => contentText.value.replace(/\s/g, "").length);
+const contentParas = computed(() => contentText.value.split("\n").filter((p) => p.trim()).length);
+const contentDirty = computed(() => contentText.value !== (lesson.value?.content ?? ""));
+
+async function saveContent(): Promise<void> {
+  busy.value = "content";
+  try {
+    const l = await adminApi.updateLesson(lessonId.value, { content: contentText.value.trim() });
+    applyLesson(l);
+    await content.load(true);
+    ui.toast("课文原文已保存");
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {
@@ -329,6 +352,35 @@ async function clearTtsCache(): Promise<void> {
           <Icon name="save" :size="18" />保存信息
         </button>
       </div>
+    </section>
+
+    <!-- 课文原文 -->
+    <section class="card">
+      <div class="card-hd">
+        <span class="ico" style="background: #FFF3E0; color: #D9714E"><Icon name="story" :size="19" /></span>
+        <div>
+          <h2>课文原文</h2>
+          <span class="sub">
+            孩子端「课文朗读」页展示的内容 · 共 {{ contentLen }} 字 / {{ contentParas }} 个自然段
+          </span>
+        </div>
+        <div class="spacer"></div>
+        <button class="btn primary" type="button" :disabled="busy === 'content' || !contentDirty" @click="saveContent()">
+          <Icon name="save" :size="18" />{{ busy === "content" ? "保存中…" : "保存原文" }}
+        </button>
+      </div>
+
+      <textarea
+        v-model="contentText"
+        class="inp"
+        rows="12"
+        placeholder="把课文原文粘贴到这里。&#10;&#10;换行 = 一个自然段。&#10;生字表里的字会在孩子端课文页自动用红色标出，无需手动标记。"
+      ></textarea>
+
+      <p class="tip">
+        换行会按<b>自然段</b>分行展示；生字标红<b>自动</b>跟随下面的生字表，不用单独设置。<br />
+        发现原文有错字，直接在这里改完点「保存原文」即可，孩子端刷新即生效。
+      </p>
     </section>
 
     <!-- 批量粘贴 -->

@@ -244,10 +244,10 @@ export const adminApi = {
 
   getLesson: (id: number) => request<{ lesson: Lesson }>(`/admin/lessons/${id}`).then((r) => r.lesson),
 
-  createLesson: (body: { title: string; unit?: string; note?: string; sortNo?: number }) =>
+  createLesson: (body: { title: string; unit?: string; note?: string; content?: string; sortNo?: number }) =>
     request<{ id: number; lesson: Lesson }>("/admin/lessons", { method: "POST", body: JSON.stringify(body) }),
 
-  updateLesson: (id: number, body: { title?: string; unit?: string; note?: string; sortNo?: number }) =>
+  updateLesson: (id: number, body: { title?: string; unit?: string; note?: string; content?: string; sortNo?: number }) =>
     request<{ lesson: Lesson }>(`/admin/lessons/${id}`, { method: "PUT", body: JSON.stringify(body) }).then((r) => r.lesson),
 
   deleteLesson: (id: number) => request<{ deleted: number }>(`/admin/lessons/${id}`, { method: "DELETE" }),

@@ -59,6 +59,7 @@ adminRouter.post(
       title,
       unit: bStr(req.body?.unit),
       note: bStr(req.body?.note),
+      content: bStr(req.body?.content),
       sortNo: Number.isFinite(Number(req.body?.sortNo)) ? Number(req.body.sortNo) : undefined,
     });
     ok(res, { id, lesson: await getLesson(id) });
@@ -79,6 +80,7 @@ adminRouter.put(
       title: body.title !== undefined ? String(body.title).trim() : undefined,
       unit: body.unit !== undefined ? String(body.unit) : undefined,
       note: body.note !== undefined ? String(body.note) : undefined,
+      content: body.content !== undefined ? String(body.content) : undefined,
       sortNo: Number.isFinite(Number(body.sortNo)) ? Number(body.sortNo) : undefined,
     });
     ok(res, { lesson: await getLesson(id) });
