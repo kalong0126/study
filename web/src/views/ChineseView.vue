@@ -24,7 +24,12 @@ const progress = useProgressStore();
 const ui = useUiStore();
 const { playing: isPlaying } = useAudioState();
 
-const masked = ref(false);
+/** 纸上听写是否遮住生字（开始听写 → 生字变「?」） */
+const paperMasked = ref(false);
+/** 屏上听写是否进行中（进行中同样要遮住下方生字，防止偷看答案） */
+const screenDictating = ref(false);
+/** 生字是否需要遮住：纸上听写 或 屏上听写进行中，任一为真就遮 */
+const masked = computed(() => paperMasked.value || screenDictating.value);
 /** 顺序朗读是否进行中（与页面朗读状态解耦，用于按钮文案） */
 const readingAll = ref(false);
 
@@ -104,8 +109,8 @@ function speakChar(ch: string, word: string): void {
 }
 
 function toggleMask(): void {
-  masked.value = !masked.value;
-  if (masked.value) {
+  paperMasked.value = !paperMasked.value;
+  if (paperMasked.value) {
     readingAll.value = false;
     const first = chars.value[0];
     ui.toast("听写开始！音会念给你听，在纸上写下来吧");
@@ -126,7 +131,7 @@ async function toggleReadAll(): Promise<void> {
     return;
   }
   if (!chars.value.length) return;
-  masked.value = false;
+  paperMasked.value = false;
   readingAll.value = true;
   ui.toast("正在依次朗读，再点一次可停止");
   // 只读单字，串行推进（用 ended 事件，不用定时器）
@@ -166,8 +171,13 @@ function onLessonChange(e: Event): void {
   const id = Number((e.target as HTMLSelectElement).value);
   stopAudio();
   readingAll.value = false;
-  masked.value = false;
+  paperMasked.value = false;
   content.selectLesson(id);
+}
+
+/** 屏上听写开始/结束时回调：进行中遮住下方生字，结束再恢复显示 */
+function onScreenDictation(active: boolean): void {
+  screenDictating.value = active;
 }
 
 /** 进入课文（或换课）时，后台把该课生字的音频拉进 Blob 缓存，点击即播 */
@@ -240,15 +250,15 @@ watch(
     <!-- 第 2 页：生字听写（原内容） -->
     <template v-else>
       <div class="row">
-        <button class="btn" :class="masked ? 'yellow' : 'green'" type="button" @click="toggleMask()">
-          <Icon :name="masked ? 'check' : 'play'" :size="18" />{{ masked ? "结束听写" : "开始听写" }}
+        <button class="btn" :class="paperMasked ? 'yellow' : 'green'" type="button" @click="toggleMask()">
+          <Icon :name="paperMasked ? 'check' : 'play'" :size="18" />{{ paperMasked ? "结束听写" : "开始听写" }}
         </button>
         <button class="btn" :class="readingAll || isPlaying ? 'yellow' : 'ghost'" type="button" @click="toggleReadAll()">
           <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
         </button>
       </div>
 
-      <DictationPanel />
+      <DictationPanel @active="onScreenDictation" />
 
       <div class="zi-grid" :class="{ masked }">
         <div

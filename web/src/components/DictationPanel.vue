@@ -36,6 +36,14 @@ type Phase = "idle" | "writing" | "reviewing" | "marking" | "result";
 
 const board = ref<InstanceType<typeof HandBoard> | null>(null);
 
+/**
+ * 对外通知「屏上听写进行中」的状态变化：
+ *   · start() 开始一轮时 emit("active", true)
+ *   · end() 结束本轮回到 idle 时 emit("active", false)
+ * 父页面据此把下方生字网格遮住，避免孩子偷看答案。
+ */
+const emit = defineEmits<{ (e: "active", v: boolean): void }>();
+
 const phase = ref<Phase>("idle");
 /** 每轮固定最多 6 个字（判卷拼图 4×2 最清晰，孩子一轮 6 个也坐得住） */
 const ROUND_SIZE = 6;
@@ -121,6 +129,7 @@ function start(): void {
   summary.value = "";
   completedThisRound = false;
   phase.value = "writing";
+  emit("active", true);
 
   void nextTick(() => {
     board.value?.clear();
@@ -390,6 +399,7 @@ function end(): void {
   errorMsg.value = "";
   phase.value = "idle";
   summary.value = "";
+  emit("active", false);
 }
 
 /* ------------------------------------------------------------------ 展示辅助 */
