@@ -9,8 +9,11 @@ import { adminApi, api, describeApiError } from "@/api";
 import type { HealthInfo, Redemption } from "@/api/types";
 import Icon from "@/components/Icon.vue";
 import { clearAudioCache } from "@/composables/useAudio";
-import { rewardLabel } from "@/stores/progress";
+import { useMasteryStore } from "@/stores/mastery";
+import { rewardLabel, useProgressStore } from "@/stores/progress";
+import { useStoryStore } from "@/stores/story";
 import { useUiStore } from "@/stores/ui";
+import { todayStr } from "@/utils/local";
 
 const ui = useUiStore();
 
@@ -207,6 +210,25 @@ async function applyVoice(name: string): Promise<void> {
 /* ---------------------------------------------------------------- 重置 */
 
 /**
+ * 重置后重新拉一次全量学习状态快照，同步刷新掌握度 / 进度 / 故事三个 store。
+ * 否则家长在后台重置后，孩子端（同一 SPA、同一 Pinia 实例）的「已掌握生字」、
+ * 顶栏积分、任务勾选等还停留在旧缓存，要手动刷新页面才更新。
+ */
+async function refreshLearning(): Promise<void> {
+  const mastery = useMasteryStore();
+  const progress = useProgressStore();
+  const story = useStoryStore();
+  try {
+    const snap = await api.listState(todayStr(), 30);
+    mastery.snapshot(snap.mastery, snap.wrong);
+    progress.applySnapshot(snap);
+    story.applySnapshot(snap);
+  } catch {
+    /* 拉不到就算了，孩子端下次刷新 / 跨天会自动重拉 */
+  }
+}
+
+/**
  * 重置「今天」的学习数据。
  * 清：今天的 daily 任务打勾、今天的口算题组与计时、今天的 review 目标与已挑战数、
  *     今天新写的掌握度（生字 ✓/✗ 标记）、今天新进错题本的错题、
@@ -242,6 +264,7 @@ async function resetToday(): Promise<void> {
     ui.toast(msg);
     void loadHealth();
     void loadPoints();
+    void refreshLearning();
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {
@@ -280,6 +303,7 @@ async function resetAll(): Promise<void> {
     );
     void loadHealth();
     void loadPoints();
+    void refreshLearning();
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {
