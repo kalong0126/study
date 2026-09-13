@@ -214,17 +214,16 @@ export const useProgressStore = defineStore("progress", () => {
     const ui = useUiStore();
     daily.value = { ...daily.value, tasks: { ...daily.value.tasks, [key]: true } };
 
-    api
-      .patchDaily({ date: date.value, tasks: { [key]: true } })
-      .then((r) => {
-        // 完成类积分由后端在 setTaskDone 链路自动入账，这里用返回的余额实时刷新「我的积分」，
-        // 否则只会在启动 / 全对奖励时更新一次，做完任务看到的余额会一直停在旧值。
-        if (r && typeof r.balance === "number") balance.value = r.balance;
-      })
-      .catch(() => {
-        daily.value = { ...daily.value, tasks: { ...daily.value.tasks, [key]: false } };
-        ui.toast("这一步没能保存到服务器，检查一下网络");
-      });
+    try {
+      const r = await api.patchDaily({ date: date.value, tasks: { [key]: true } });
+      // 完成类积分由后端在 setTaskDone 链路自动入账，这里用返回的余额实时刷新「我的积分」。
+      // 必须 await：口算/听写全对时，这里会和 awardPoints 并发（本函数没等，调用方紧接着就发全对奖），
+      // 若不等待，patchDaily 的旧余额快照可能后到，把 awardPoints 已刷新的新余额覆盖掉（少 10 分）。
+      if (r && typeof r.balance === "number") balance.value = r.balance;
+    } catch {
+      daily.value = { ...daily.value, tasks: { ...daily.value.tasks, [key]: false } };
+      ui.toast("这一步没能保存到服务器，检查一下网络");
+    }
 
     const c = completedCount.value;
     if (c >= TASK_DEFS.length) {
