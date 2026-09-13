@@ -6,6 +6,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/chinese", name: "chinese", component: () => import("@/views/ChineseView.vue"), meta: { title: "语文" } },
   { path: "/story", name: "story", component: () => import("@/views/StoryView.vue"), meta: { title: "童话" } },
   { path: "/wrong", name: "wrong", component: () => import("@/views/WrongView.vue"), meta: { title: "错题本" } },
+  { path: "/points", name: "points", component: () => import("@/views/PointsView.vue"), meta: { title: "我的积分" } },
   {
     path: "/admin",
     component: () => import("@/views/admin/AdminView.vue"),

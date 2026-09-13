@@ -19,6 +19,7 @@ import {
   type PointsLedgerEntry,
   type PrewarmJob,
   type Redemption,
+  type RedemptionHistory,
   type StateSnapshot,
   type StoryRow,
   type TimerState,
@@ -185,6 +186,10 @@ export const api = {
   /** 积分余额 + 兑换记录 + 流水（家长后台看历史用） */
   listPoints: () =>
     request<{ balance: number; redemptions: Redemption[]; ledger: PointsLedgerEntry[] }>("/points"),
+
+  /** 兑换历史（分页）+ 累计统计（积分页用） */
+  listRedemptionHistory: (page = 1, pageSize = 10) =>
+    request<RedemptionHistory>(`/points/history${qs({ page, pageSize })}`),
 
   /* ---------------------------------------------------------------- 判卷 */
 

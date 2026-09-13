@@ -42,6 +42,31 @@ const full = computed(() => progress.completedCount >= total);
         </span>
         <div class="bar"><div class="fill" :style="{ width: `${pct}%` }"></div></div>
       </div>
+
+      <!-- 我的积分入口：数字 + 闪光五角星，点进兑换历史页 -->
+      <RouterLink to="/points" class="pts-pill" aria-label="我的积分" :title="`我的积分 ${progress.balance} 分，点开看兑换历史`">
+        <span class="pts-star" aria-hidden="true">
+          <svg viewBox="0 0 24 24" class="star">
+            <defs>
+              <linearGradient id="ptsGold" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#FFE873" />
+                <stop offset="1" stop-color="#F5A623" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M12 2.5 14.9 8.6 21.5 9.4 16.7 14 18 20.6 12 17.3 6 20.6 7.3 14 2.5 9.4 9.1 8.6z"
+              fill="url(#ptsGold)"
+              stroke="#E8A800"
+              stroke-width="1.1"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <svg viewBox="0 0 24 24" class="spark">
+            <path d="M12 3 13.4 9.6 20 11l-6.6 1.4L12 19l-1.4-6.6L4 11l6.6-1.4z" fill="#FFFFFF" />
+          </svg>
+        </span>
+        <b>{{ progress.balance }}</b>
+      </RouterLink>
     </header>
   </div>
 </template>

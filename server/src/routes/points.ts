@@ -14,8 +14,10 @@ import {
   awardPoints,
   findReward,
   getBalance,
+  getRedemptionStats,
   listLedger,
   listRedemptions,
+  listRedemptionsPaged,
   redeemPoints,
 } from "../db/repo/points.js";
 import { currentChildId } from "../services/child.js";
@@ -37,6 +39,26 @@ pointsRouter.get(
       listLedger(childId, limit),
     ]);
     ok(res, { balance, redemptions, ledger });
+  }),
+);
+
+/**
+ * 兑换历史（分页）+ 累计统计，供「积分页」使用。
+ *  page / pageSize 从 query 读，page 从 1 开始；stats 是全部历史的总计，
+ *  与当前页无关（分页只影响列表，不影响「总共换了多久 / 多少钱」）。
+ */
+pointsRouter.get(
+  "/points/history",
+  ah(async (req, res) => {
+    const childId = await currentChildId();
+    const page = qInt(req.query.page, 1, 1, 100000);
+    const pageSize = qInt(req.query.pageSize, 10, 1, 100);
+    const [balance, paged, stats] = await Promise.all([
+      getBalance(childId),
+      listRedemptionsPaged(childId, page, pageSize),
+      getRedemptionStats(childId),
+    ]);
+    ok(res, { balance, items: paged.items, total: paged.total, page: paged.page, pageSize: paged.pageSize, stats });
   }),
 );
 

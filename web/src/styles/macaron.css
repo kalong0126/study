@@ -366,6 +366,51 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .redeem-hist .rh-name { font-size: 13.5px; font-weight: 700; color: var(--ink); flex: 1; min-width: 0; }
 .redeem-hist .rh-time { font-size: 12px; color: var(--ink3); font-weight: 600; }
 
+/* ---------- 顶栏积分入口（闪光五角星） ---------- */
+.pts-pill {
+  display: flex; align-items: center; gap: 5px;
+  background: linear-gradient(135deg, #FFF6D6, #FFEDB0);
+  border: 1px solid #F3D775;
+  border-radius: 999px; padding: 4px 12px 4px 6px;
+  cursor: pointer; text-decoration: none;
+  box-shadow: 0 3px 12px rgba(232, 168, 0, .30);
+  white-space: nowrap; transition: transform .15s ease;
+}
+.pts-pill:active { transform: scale(.94); }
+.pts-pill b { font-size: 16px; font-weight: 900; color: #B8860B; font-variant-numeric: tabular-nums; line-height: 1; }
+.pts-star { position: relative; width: 24px; height: 24px; flex: none; display: flex; align-items: center; justify-content: center; }
+.pts-star svg.star { width: 22px; height: 22px; filter: drop-shadow(0 2px 4px rgba(232, 168, 0, .45)); }
+.pts-star svg.spark {
+  position: absolute; top: -1px; right: -1px; width: 10px; height: 10px;
+  animation: ptsSpark 1.7s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, .9));
+}
+@keyframes ptsSpark {
+  0%, 100% { opacity: 0; transform: scale(.4) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.2) rotate(22deg); }
+}
+
+/* ---------- 积分页（余额 / 统计 / 历史 / 分页） ---------- */
+.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--blue-d); text-decoration: none; white-space: nowrap; }
+.back-link:hover { opacity: .8; }
+.pts-balance-lg { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 14px; }
+.pts-balance-lg .pts-num { font-size: 52px; font-weight: 900; line-height: 1; color: #C97F00; font-variant-numeric: tabular-nums; text-shadow: 0 3px 14px rgba(232, 168, 0, .35); }
+.pts-balance-lg .pts-unit { font-size: 18px; font-weight: 800; color: var(--ink3); }
+.pts-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.pts-stat { border-radius: 16px; padding: 16px 14px; text-align: center; }
+.pts-stat .ps-ico { font-size: 26px; line-height: 1; }
+.pts-stat .ps-val { font-size: 20px; font-weight: 900; color: var(--ink); margin-top: 8px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.pts-stat .ps-lbl { font-size: 12.5px; font-weight: 700; color: var(--ink2); margin-top: 4px; }
+.pts-stat .ps-sub { font-size: 11.5px; color: var(--ink3); font-weight: 600; margin-top: 2px; }
+.pts-hist { margin-top: 6px; }
+.pts-hist .ph-row { display: flex; align-items: center; gap: 10px; padding: 11px 4px; border-bottom: 1px dashed var(--line); }
+.pts-hist .ph-row:last-child { border-bottom: none; }
+.pts-hist .ph-name { font-size: 14px; font-weight: 800; color: var(--ink); flex: 1; min-width: 0; }
+.pts-hist .ph-cost { font-size: 13px; font-weight: 800; color: #E95252; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pts-hist .ph-time { font-size: 12px; color: var(--ink3); font-weight: 600; white-space: nowrap; }
+.pts-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; }
+.pts-pager .pg-info { font-size: 13px; font-weight: 700; color: var(--ink2); font-variant-numeric: tabular-nums; }
+
 /* ---------- 提示 / 特效 ---------- */
 #fxCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
 #toast { position: fixed; left: 50%; bottom: 110px; transform: translate(-50%, 20px); background: rgba(55, 72, 92, .94); color: #fff; font-size: 14.5px; font-weight: 600; padding: 11px 20px; border-radius: 14px; opacity: 0; pointer-events: none; transition: .32s; z-index: 10000; max-width: 86vw; text-align: center; }

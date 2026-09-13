@@ -77,6 +77,24 @@ export interface Redemption {
   createdAt: string;
 }
 
+/** 兑换累计统计：总共换了多久平板、多少钱 */
+export interface RedemptionStats {
+  screenCount: number;
+  screenMinutes: number;
+  moneyCount: number;
+  moneyYuan: number;
+}
+
+/** 兑换历史分页响应（积分页用） */
+export interface RedemptionHistory {
+  balance: number;
+  items: Redemption[];
+  total: number;
+  page: number;
+  pageSize: number;
+  stats: RedemptionStats;
+}
+
 /** 一条积分流水（delta 正数加分、负数扣分） */
 export interface PointsLedgerEntry {
   id: number;

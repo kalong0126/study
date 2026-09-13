@@ -165,6 +165,25 @@ await page.waitForTimeout(800);
 const ziN = await page.locator(".zi-grid").count();
 ziN >= 1 ? pass(`切到听写页后生字格 ${ziN} 个`) : fail("切到听写页后生字格缺失（.zi-grid）");
 
+// ————————————————————————————— 4d. 顶栏积分入口 → 兑换历史页（分页 + 统计）
+step("顶栏积分入口 → 兑换历史页");
+await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+await page.waitForTimeout(1100);
+const pillCnt = await page.locator(".pts-pill").count();
+pillCnt === 1 ? pass("顶栏右上积分入口存在（.pts-pill）") : fail(`顶栏积分入口数量 ${pillCnt}（期望 1）`);
+if (pillCnt === 1) {
+  await page.locator(".pts-pill").first().click();
+  await page.waitForTimeout(1100);
+  const stP = await viewState();
+  stP.path === "/points" && stP.childCount >= 1
+    ? pass("点积分入口 → /points 已挂载")
+    : fail(`点积分入口 → ${stP.path}（期望 /points，childCount=${stP.childCount}）`);
+  const statCnt = await page.locator(".pts-stat").count();
+  statCnt === 2 ? pass("兑换统计两块卡片（平板时长 / 现金）") : fail(`兑换统计卡片 ${statCnt} 个（期望 2）`);
+  const histExists = (await page.locator(".pts-hist, .wb-empty").count()) >= 1;
+  histExists ? pass("兑换历史 / 空态都正常渲染") : fail("兑换历史区未渲染");
+}
+
 // ————————————————————————————— 4b. 孩子端不得出现任何家长「可点」入口
 step("孩子端不出现家长可点入口（防误点）");
 // 背景：首页原来有「快速开始」卡片和「数据安全」卡片（含 导出 JSON 备份 / 导入恢复 /

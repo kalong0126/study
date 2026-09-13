@@ -121,6 +121,74 @@ export async function listRedemptions(childId: number, limit = 100): Promise<Red
 }
 
 /**
+ * 每种奖励兑换一次折算出的「实物量」：平板按分钟计、现金按元计。
+ * 与 REWARDS 一一对应，统计页靠它把兑换记录换算成孩子看得懂的总数。
+ */
+export const REWARD_META: Record<string, { screenMinutes?: number; moneyYuan?: number }> = {
+  screen_30min: { screenMinutes: 30 },
+  money_1yuan: { moneyYuan: 1 },
+};
+
+export interface RedemptionStats {
+  screenCount: number;
+  screenMinutes: number;
+  moneyCount: number;
+  moneyYuan: number;
+}
+
+/** 兑换累计统计：总共换了多久平板、多少钱 */
+export async function getRedemptionStats(childId: number): Promise<RedemptionStats> {
+  const d = db();
+  const rows = await d.all<{ reward: string; cnt: number }>(
+    "SELECT reward, COUNT(*) AS cnt FROM redemptions WHERE child_id = ? GROUP BY reward",
+    [childId],
+  );
+  let screenCount = 0;
+  let moneyCount = 0;
+  for (const r of rows) {
+    if (r.reward === "screen_30min") screenCount = Math.trunc(Number(r.cnt) || 0);
+    else if (r.reward === "money_1yuan") moneyCount = Math.trunc(Number(r.cnt) || 0);
+  }
+  const screenMinutes = screenCount * (REWARD_META.screen_30min?.screenMinutes ?? 0);
+  const moneyYuan = moneyCount * (REWARD_META.money_1yuan?.moneyYuan ?? 0);
+  return { screenCount, screenMinutes, moneyCount, moneyYuan };
+}
+
+export interface RedemptionPage {
+  items: Redemption[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** 兑换记录分页查询（page 从 1 开始，按 id 倒序，最新的在前） */
+export async function listRedemptionsPaged(
+  childId: number,
+  page: number,
+  pageSize: number,
+): Promise<RedemptionPage> {
+  const d = db();
+  const totalRow = await d.get<{ n: number }>("SELECT COUNT(*) AS n FROM redemptions WHERE child_id = ?", [
+    childId,
+  ]);
+  const total = Math.max(0, Math.trunc(Number(totalRow?.n ?? 0) || 0));
+  const safePage = Math.max(1, Math.trunc(page) || 1);
+  const safeSize = Math.min(100, Math.max(1, Math.trunc(pageSize) || 10));
+  const offset = (safePage - 1) * safeSize;
+  const rows = await d.all<{ id: number; reward: string; cost: number; created_at: string }>(
+    "SELECT id, reward, cost, created_at FROM redemptions WHERE child_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+    [childId, safeSize, offset],
+  );
+  const items = rows.map((r) => ({
+    id: Number(r.id),
+    reward: r.reward,
+    cost: Number(r.cost),
+    createdAt: r.created_at,
+  }));
+  return { items, total, page: safePage, pageSize: safeSize };
+}
+
+/**
  * 兑换：事务内先查余额，够则扣分（入账一条负流水）+ 生成兑换记录。
  * 余额不足抛出带 kind='insufficient' 的错误，路由层转成友好提示。
  */
