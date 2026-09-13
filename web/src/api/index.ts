@@ -298,6 +298,14 @@ export const adminApi = {
     method: "POST",
     body: JSON.stringify({ reset }),
   }),
+
+  /** 重置学习数据：scope=today 仅清今天；scope=all 清全部（保留课文/生字/掌握度） */
+  reset: (scope: "today" | "all" = "today", date?: string) =>
+    request<{
+      scope: "today" | "all";
+      removed: { daily: number; math: number; kv: number; wrong?: number; stories?: number; reads?: number; marks?: number };
+      date: string;
+    }>("/admin/reset", { method: "POST", body: JSON.stringify({ scope, date }) }),
 };
 
 /* ------------------------------------------------------------ 错误文案 */

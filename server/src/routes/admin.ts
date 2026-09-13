@@ -6,6 +6,7 @@
  */
 import { Router } from "express";
 import { loadConfig, resolveLlm } from "../config.js";
+import { todayStr } from "../db/index.js";
 import {
   bulkImportChars,
   createLesson,
@@ -17,6 +18,8 @@ import {
   updateChar,
   updateLesson,
 } from "../db/repo/lessons.js";
+import { resetAll, resetToday } from "../db/repo/state.js";
+import { currentChildId } from "../services/child.js";
 import { clearCache } from "../services/tts/cache.js";
 import { listEdgeVoices } from "../services/tts/edge.js";
 import { chat } from "../services/llm.js";
@@ -242,5 +245,32 @@ adminRouter.post(
   ah(async (req, res) => {
     const reset = req.body?.reset === true;
     ok(res, { result: await seedLessons({ reset }) });
+  }),
+);
+
+/* ---------------------------------------------------------- 重置学习数据 */
+
+/**
+ * 重置孩子的学习数据（开发自测 / 重新开始用）
+ *   · scope=today（默认）：只清今天 —— 任务打勾、口算题组、今天相关 KV
+ *   · scope=all：清掉该孩子的全部 daily / math_sets / wrong / stories / read_titles / mark_* / app_kv
+ *     保留：lessons / lesson_chars / mastery / children / 系统级 KV（seeded_at 等）
+ *   · date（可选）：重置日期；scope=today 时用，scope=all 时忽略
+ */
+adminRouter.post(
+  "/admin/reset",
+  ah(async (req, res) => {
+    const childId = await currentChildId();
+    const scope = req.body?.scope === "all" ? "all" : "today";
+    const dateRaw = bStr(req.body?.date).trim();
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : todayStr();
+
+    if (scope === "all") {
+      const removed = await resetAll(childId);
+      ok(res, { scope, removed, date });
+      return;
+    }
+    const removed = await resetToday(childId, date);
+    ok(res, { scope, removed, date });
   }),
 );

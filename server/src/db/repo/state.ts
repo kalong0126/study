@@ -374,3 +374,94 @@ export async function kvSet(childId: number, k: string, v: unknown): Promise<voi
     nowIso(),
   ]);
 }
+
+/* ----------------------------------------------------------- 重置（家长后台）
+
+设计原则：
+  · 保留 lessons / lesson_chars（内容数据，由「重新导入内置课文」管）
+  · 保留 mastery（孩子的「已掌握 / 未掌握」标记，与内容耦合）
+  · 保留 children 表（账号本身）
+  · 保留 seeded_at 这类系统级 KV（child_id=0，不属于任何孩子）
+  · 清掉其它所有「按孩子累积的学习数据」
+*/
+export interface ResetStats {
+  daily: number;
+  math: number;
+  wrong: number;
+  stories: number;
+  reads: number;
+  marks: number;
+  kv: number;
+}
+
+/** 重置「今天」的学习数据（保留历史日期 + 掌握度 + 课文 + 计时器 / 已读标题 / 故事 / 判卷留痕） */
+export async function resetToday(
+  childId: number,
+  date: string,
+): Promise<Pick<ResetStats, "daily" | "math" | "kv">> {
+  const d = db();
+  return d.tx(async (t) => {
+    const c1 = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM daily_progress WHERE child_id = ? AND date = ?",
+      [childId, date],
+    );
+    const c2 = await t.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM math_sets WHERE child_id = ? AND date = ?",
+      [childId, date],
+    );
+    await t.run("DELETE FROM daily_progress WHERE child_id = ? AND date = ?", [childId, date]);
+    await t.run("DELETE FROM math_sets WHERE child_id = ? AND date = ?", [childId, date]);
+
+    // 只清按日期生成的 KV 键，跨天键（timer / seeded_at / 系统设置）一律保留
+    const dailyKeys = [`reviewCount:${date}`, `reviewTarget:${date}`, `mathElapsed:${date}`];
+    let kv = 0;
+    for (const k of dailyKeys) {
+      const c = await t.get<{ n: number }>(
+        "SELECT COUNT(*) AS n FROM app_kv WHERE child_id = ? AND k = ?",
+        [childId, k],
+      );
+      await t.run("DELETE FROM app_kv WHERE child_id = ? AND k = ?", [childId, k]);
+      kv += Number(c?.n ?? 0);
+    }
+    return { daily: Number(c1?.n ?? 0), math: Number(c2?.n ?? 0), kv };
+  });
+}
+
+/** 清空该孩子的全部学习数据。保留：lessons / lesson_chars / mastery / children 表 */
+export async function resetAll(childId: number): Promise<ResetStats> {
+  const d = db();
+  const c = async (sql: string, params: unknown[]): Promise<number> => {
+    const r = await d.get<{ n: number }>("SELECT COUNT(*) AS n FROM " + sql, params);
+    return Number(r?.n ?? 0);
+  };
+  // 先 count（事务外只是读，不影响 delete 计数；同事务里串行即可）
+  const counts = {
+    daily: await c("daily_progress WHERE child_id = ?", [childId]),
+    math: await c("math_sets WHERE child_id = ?", [childId]),
+    wrong: await c("wrong_items WHERE child_id = ?", [childId]),
+    stories: await c("stories WHERE child_id = ?", [childId]),
+    reads: await c("read_titles WHERE child_id = ?", [childId]),
+    marks: await c("mark_tasks WHERE child_id = ?", [childId]),
+    kv: await c("app_kv WHERE child_id = ?", [childId]),
+  };
+  const markItems = await d.get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM mark_items WHERE task_id IN (SELECT id FROM mark_tasks WHERE child_id = ?)",
+    [childId],
+  );
+
+  await d.tx(async (t) => {
+    await t.run("DELETE FROM daily_progress WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM math_sets WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM wrong_items WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM stories WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM read_titles WHERE child_id = ?", [childId]);
+    await t.run(
+      "DELETE FROM mark_items WHERE task_id IN (SELECT id FROM mark_tasks WHERE child_id = ?)",
+      [childId],
+    );
+    await t.run("DELETE FROM mark_tasks WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM app_kv WHERE child_id = ?", [childId]);
+  });
+
+  return { ...counts, marks: counts.marks + Number(markItems?.n ?? 0) };
+}

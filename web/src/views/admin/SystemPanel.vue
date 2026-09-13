@@ -99,6 +99,71 @@ async function loadVoices(): Promise<void> {
     busy.value = "";
   }
 }
+
+/* ---------------------------------------------------------------- 重置 */
+
+/**
+ * 重置「今天」的学习数据。
+ * 清：今天的 daily 任务打勾、今天的口算题组与计时、今天的 review 目标与已挑战数。
+ * 不动：历史日期、错题本、故事、已读标题、课文/生字/掌握度。
+ */
+async function resetToday(): Promise<void> {
+  if (
+    !window.confirm(
+      "确认要重置【今天】的学习进度吗？\n\n" +
+        "会清掉：今天的任务打勾（口算/听写/阅读/复习）、今天的口算题组与计时、今天的复习目标。\n" +
+        "不会动：错题本、历史日期、故事、课文与生字、掌握度。",
+    )
+  )
+    return;
+  busy.value = "reset-today";
+  try {
+    const r = await adminApi.reset("today");
+    const msg =
+      `今日已重置：任务 ${r.removed.daily} 行、口算 ${r.removed.math} 题组、KV ${r.removed.kv} 条（${r.date}）`;
+    ui.toast(msg);
+    void loadHealth();
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  } finally {
+    busy.value = "";
+  }
+}
+
+/**
+ * 重置【全部】学习数据 —— 比 today 激进得多，会清掉错题本 / 故事 / 已读标题 / 判卷留痕 / 全部 KV。
+ * 保留：课文 / 生字 / 掌握度 / 账号本身。
+ * 双确认（confirm + prompt 输入"重置"），防误点。
+ */
+async function resetAll(): Promise<void> {
+  if (
+    !window.confirm(
+      "⚠️ 高危操作：清空【全部】学习数据？\n\n" +
+        "会清掉：错题本（数学 + 语文）、历史口算题组、童话故事、已读标题、判卷记录、全部 KV。\n" +
+        "保留：课文与生字（用「重新导入内置课文」管）、掌握度（已掌握 / 未掌握标记）、账号。\n\n" +
+        "继续吗？",
+    )
+  )
+    return;
+  const typed = window.prompt('确认要执行，请输入 "重置" 然后点确定：', "");
+  if (typed !== "重置") {
+    ui.toast(typed === null ? "已取消" : "输入不对，已取消");
+    return;
+  }
+  busy.value = "reset-all";
+  try {
+    const r = await adminApi.reset("all");
+    const rm = r.removed;
+    ui.toast(
+      `已清空：日常 ${rm.daily} / 口算 ${rm.math} / 错题 ${rm.wrong ?? 0} / 故事 ${rm.stories ?? 0} / 已读 ${rm.reads ?? 0} / 判卷 ${rm.marks ?? 0} / KV ${rm.kv}`,
+    );
+    void loadHealth();
+  } catch (e) {
+    ui.toast(describeApiError(e));
+  } finally {
+    busy.value = "";
+  }
+}
 </script>
 
 <template>
@@ -174,6 +239,23 @@ async function loadVoices(): Promise<void> {
         <div class="l-u">{{ String(f.at).replace("T", " ").slice(0, 19) }}</div>
       </div>
       <span class="badge-lite">{{ f.kb }} KB</span>
+    </div>
+
+    <div class="reset-row">
+      <div class="rr-text">
+        <b>重置学习数据</b>
+        <span class="rr-sub">
+          「重置今日」只清今天进度（推荐日常测试用）；「清空全部」会抹掉错题本 / 故事 / 历史（高危，确认弹窗要输入"重置"才能继续）。
+        </span>
+      </div>
+      <div class="rr-btns">
+        <button class="btn danger sm" type="button" :disabled="busy !== ''" @click="resetToday()">
+          <Icon name="refresh" :size="16" />{{ busy === "reset-today" ? "重置中…" : "重置今日" }}
+        </button>
+        <button class="btn danger sm" type="button" :disabled="busy !== ''" @click="resetAll()">
+          <Icon name="trash" :size="16" />{{ busy === "reset-all" ? "清空中…" : "清空全部" }}
+        </button>
+      </div>
     </div>
 
     <p class="tip">
