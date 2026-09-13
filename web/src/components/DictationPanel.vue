@@ -3,7 +3,7 @@
  * 屏上听写 · 整轮写完一起提交
  *
  * 相比旧版的「逐字写完立刻提交」，这里按改造计划 §10 改成了：
- *   ① 一轮 N 个字（默认 6，最多 8），逐字写，**不提交**
+ *   ① 一轮最多 6 个字，逐字写，**不提交**
  *   ② 全部写完 → [一起交给 AI 批改] 或 [交给大人审核]
  *   ③ AI 批改：把 N 个字拼成一张带红色序号的网格图，**一次**多模态请求判完
  *      （逐字判要 N 次，成本差 N 倍，延迟也从 N×5s 降到 1×8s）
@@ -37,7 +37,8 @@ type Phase = "idle" | "writing" | "reviewing" | "marking" | "result";
 const board = ref<InstanceType<typeof HandBoard> | null>(null);
 
 const phase = ref<Phase>("idle");
-const roundSize = ref(6);
+/** 每轮固定最多 6 个字（判卷拼图 4×2 最清晰，孩子一轮 6 个也坐得住） */
+const ROUND_SIZE = 6;
 const roundNo = ref(0);
 const index = ref(0);
 /** 本轮字表 */
@@ -106,7 +107,7 @@ function start(): void {
   // 已写对/已掌握的（状态 1）跳过，不再从头重来。全部掌握后回退到全部，允许自由重练。
   const remaining = all.filter((c) => mastery.charState(les.id, c.ch) !== 1);
   const pool = remaining.length > 0 ? remaining : all;
-  const size = Math.max(1, Math.min(roundSize.value, pool.length, 8));
+  const size = Math.max(1, Math.min(ROUND_SIZE, pool.length));
   const win = pool.slice(0, size);
   roundNo.value += 1;
 
@@ -473,13 +474,9 @@ function onImageError(e: Event): void {
         选好课文后点下面的按钮，听到读音就在格子里写下来 —— 一个字写一格，写错了点「清空重写」。
         <b>一轮的字全部写完</b>，再一次性交给 AI 批改（也可以交给大人审核）。写错的字会自动进错字本。
       </p>
-      <div class="row" style="justify-content: center; margin-bottom: 12px">
-        <label style="font-size: 13px; font-weight: 800; color: var(--ink2)">本轮字数</label>
-        <select v-model.number="roundSize" class="sel" style="min-width: 96px">
-          <option v-for="n in [4, 5, 6, 7, 8]" :key="n" :value="n">{{ n }} 个</option>
-        </select>
-        <span style="font-size: 12.5px; color: var(--ink3)">课文共 {{ lessonChars.length }} 个生字</span>
-      </div>
+      <p class="tip" style="text-align: center; margin-bottom: 12px">
+        课文共 {{ lessonChars.length }} 个生字，每轮最多写 6 个。
+      </p>
       <button class="btn purple wide" type="button" :disabled="!canStart" @click="start()">
         <Icon name="pen" :size="18" />开始屏上听写
       </button>
