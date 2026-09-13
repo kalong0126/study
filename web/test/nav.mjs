@@ -226,6 +226,15 @@ await page.waitForTimeout(1600);
       : fail(`系统与数据里缺少 ${JSON.stringify(missing)}`);
     const diag = await page.locator("button", { hasText: "运行诊断" }).count();
     diag > 0 ? pass("后台保留「运行诊断」入口") : fail("后台缺少「运行诊断」入口");
+    // 点开验证抽屉真的能弹出来（此前 DiagDrawer 没在 admin 布局挂载，点了没反应）
+    if (diag > 0) {
+      await page.locator("button", { hasText: "运行诊断" }).click();
+      await page.waitForTimeout(700);
+      const drawerCnt = await page.locator("aside.drawer[aria-label='运行诊断']").count();
+      drawerCnt > 0 ? pass("「打开运行诊断」能弹出抽屉") : fail("点了「打开运行诊断」但抽屉没出现");
+      await page.locator("aside.drawer button", { hasText: "关闭" }).click().catch(() => {});
+      await page.waitForTimeout(400);
+    }
   } else {
     fail("后台找不到「系统与数据」标签页");
   }

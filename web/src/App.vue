@@ -92,6 +92,9 @@ onUnmounted(() => {
     </main>
 
     <FxLayer />
-    <DiagDrawer />
   </template>
+
+  <!-- 诊断抽屉：全局挂载，孩子端（启动失败时的「看看运行日志」）和家长后台
+       （「打开运行诊断」）都要能用。抽屉本身是 fixed 覆盖层，不依赖两侧布局。 -->
+  <DiagDrawer />
 </template>
