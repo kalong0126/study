@@ -131,6 +131,8 @@ a { color: var(--blue-d); }
 .m-in::-webkit-outer-spin-button, .m-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .m-in.ok { border-color: var(--green-d); background: #EDFCF5; color: #2C9C74; }
 .m-in.bad { border-color: var(--red-d); background: #FFF0F0; color: #D94848; }
+.m-in:disabled { cursor: not-allowed; opacity: 1; }
+.m-in:disabled:not(.ok):not(.bad) { background: #F4F7FA; border-color: #E4EBF3; color: #B6C4D3; }
 .m-mark { flex: none; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
 .m-mark svg { width: 24px; height: 24px; }
 .progress-line { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink2); font-weight: 700; }

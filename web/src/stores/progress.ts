@@ -531,6 +531,9 @@ export const useProgressStore = defineStore("progress", () => {
     const ansStr = String(q.ans);
     const prev = resultOf(idx);
 
+    // 已经判定过（对/错）的题锁定，不允许再改（输入框此时已 disabled，这里再挡一道防程序化调用）
+    if (prev === "ok" || prev === "bad") return;
+
     answers.value = { ...answers.value, [idx]: v };
 
     let next = prev;

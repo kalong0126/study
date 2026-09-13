@@ -103,6 +103,7 @@ onUnmounted(() => {
           inputmode="numeric"
           autocomplete="off"
           :value="progress.answers[i] ?? ''"
+          :disabled="resultOf(i) !== ''"
           :aria-label="`第 ${i + 1} 题 ${q.text}`"
           @input="onInput(i, $event)"
           @keydown="onEnter"
