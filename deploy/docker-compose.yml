@@ -1,9 +1,11 @@
 # =============================================================================
-# 二年级快乐学习台 · 一键部署（Ubuntu / 任何装了 Docker 的机器）
+# 二年级快乐学习台 · 一键部署（内网 / 任何装了 Docker 的机器）
 # -----------------------------------------------------------------------------
+# 默认用 SQLite，单文件、零运维，不需要 MySQL。
+#
 # 起服务：
 #   cd deploy
-#   cp .env.example .env      # 填 LLM_API_KEY，按需改 DB_PASSWORD
+#   cp .env.example .env      # 填 LLM_API_KEY（判卷需要能看图的模型，见 .env.example）
 #   docker compose up -d --build
 #
 # 看日志：
@@ -11,36 +13,11 @@
 #
 # 停服务（数据保留在卷里）：
 #   docker compose down
+#
+# 浏览器访问：http://<服务器内网IP>:8788
 # =============================================================================
 
 services:
-  # ---------------------------------------------------------------- MySQL
-  # 不想装 MySQL 就把下面整段删掉，并把 .env 里的 DB_DRIVER 改成 sqlite
-  db:
-    image: mysql:8.4
-    container_name: grade2-mysql
-    restart: unless-stopped
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root-change-me}
-      MYSQL_DATABASE: ${DB_NAME:-grade2}
-      MYSQL_USER: ${DB_USER:-grade2}
-      MYSQL_PASSWORD: ${DB_PASSWORD:?请在 .env 里设置 DB_PASSWORD}
-      TZ: Asia/Shanghai
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 40s
-    # 家里不需要从外网连数据库，只暴露给宿主机调试时可打开
-    # ports:
-    #   - "127.0.0.1:3306:3306"
-
   # ---------------------------------------------------------------- 应用
   app:
     build:
@@ -49,21 +26,21 @@ services:
     image: grade2-app:1.0
     container_name: grade2-app
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      # —— 数据库 ——
-      # DB_DRIVER=sqlite 时下面几项都不用管
-      DB_DRIVER: ${DB_DRIVER:-mysql}
-      DB_HOST: db
-      DB_PORT: "3306"
-      DB_NAME: ${DB_NAME:-grade2}
-      DB_USER: ${DB_USER:-grade2}
-      DB_PASSWORD: ${DB_PASSWORD}
-      # —— 大模型 ——
+      # —— 数据库：固定 sqlite，单文件落在 app-data 卷里，无需任何数据库服务 ——
+      DB_DRIVER: sqlite
+      # —— 大模型（全部透传，.env 里写了哪个就生效哪个）——
       LLM_API_KEY: ${LLM_API_KEY:?请在 .env 里设置 LLM_API_KEY}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_STORY_MODEL: ${LLM_STORY_MODEL:-}
+      LLM_STORY_BASE_URL: ${LLM_STORY_BASE_URL:-}
+      LLM_STORY_API_KEY: ${LLM_STORY_API_KEY:-}
+      LLM_MARK_MODEL: ${LLM_MARK_MODEL:-}
+      LLM_MARK_BASE_URL: ${LLM_MARK_BASE_URL:-}
+      LLM_MARK_API_KEY: ${LLM_MARK_API_KEY:-}
+      LLM_SUGGEST_MODEL: ${LLM_SUGGEST_MODEL:-}
+      LLM_SUGGEST_BASE_URL: ${LLM_SUGGEST_BASE_URL:-}
+      LLM_SUGGEST_API_KEY: ${LLM_SUGGEST_API_KEY:-}
       # —— 其它 ——
       TZ: Asia/Shanghai
     ports:
@@ -73,7 +50,7 @@ services:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
       - app-logs:/app/server/logs
-      # 想改 config.yaml 里的高级项（模型名、音色、超时）又不想重建镜像：
+      # 想改 config.yaml 里的高级项（音色、超时等）又不想重建镜像：
       #   1) cp ../server/config/config.yaml ./config.yaml
       #   2) 去掉下面这行的注释
       #   3) docker compose restart app
@@ -88,7 +65,7 @@ services:
 
   # ---------------------------------------------------------------- 可选：nginx 反向代理
   # 后端自己就能托前端，所以 nginx 只有两个理由才需要：
-  #   1. 想上 HTTPS（家里内网基本用不上）
+  #   1. 想上 HTTPS
   #   2. 想给域名 / 固定端口做统一入口
   # 要用就 docker compose --profile proxy up -d
   nginx:
@@ -104,6 +81,5 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
 volumes:
-  mysql-data:
   app-data:
   app-logs:
