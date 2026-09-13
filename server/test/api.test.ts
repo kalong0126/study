@@ -708,7 +708,7 @@ async function main(): Promise<void> {
     ok("H13 404 响应是 JSON", nf.json.ok === false);
 
     /* ============================ R. 重置 ============================ */
-    group("R. 重置（resetToday 清 mastery · resetAll 不动 mastery）");
+    group("R. 重置（resetToday 清今天 mastery · resetAll 清全部 mastery）");
     const todayR = (await api("GET", "/api/state")).json.date as string;
     const lessonsR = (await api("GET", "/api/lessons")).json.lessons as { id: number }[];
     const lessonR = lessonsR[0]?.id ?? 0;
@@ -784,11 +784,12 @@ async function main(): Promise<void> {
     eq("R6 只删今天：保留昨天动过的「肚」", afterR6[String(lessonR)]?.["肚"], 1);
     eq("R7 删掉今天的「皮」", afterR6[String(lessonR)]?.["皮"], undefined);
 
-    // resetAll 不动 mastery（保住设计意图）
+    // resetAll 清 mastery（回到最初状态：生字页无勾选）
     await api("PATCH", "/api/state/mastery", { lessonId: lessonR, ch: "孩", state: 1 });
     const rAll = await api("POST", "/api/admin/reset", { scope: "all" });
     const afterR8 = (await api("GET", "/api/state")).json.mastery as Record<string, Record<string, number>>;
-    eq("R8 resetAll 不动 mastery（保留长期掌握度）", afterR8[String(lessonR)]?.["孩"], 1);
+    eq("R8 resetAll 清空 mastery（回到最初，生字页无勾选）", afterR8[String(lessonR)]?.["孩"], undefined);
+    eq("R8b resetAll 连历史掌握度「肚」也清掉", afterR8[String(lessonR)]?.["肚"], undefined);
 
     // resetToday 按 created_at 当天清今天的错题（resetAll 之后错题本是干净的，这里先造今天的错题）
     await api("POST", "/api/state/wrong", { type: "math", refKey: "9 × 9 =", payload: { text: "9 × 9 =", ans: 81 } });

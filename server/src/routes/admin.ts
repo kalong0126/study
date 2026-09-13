@@ -297,9 +297,10 @@ adminRouter.post(
 
 /**
  * 重置孩子的学习数据（开发自测 / 重新开始用）
- *   · scope=today（默认）：只清今天 —— 任务打勾、口算题组、今天相关 KV
- *   · scope=all：清掉该孩子的全部 daily / math_sets / wrong / stories / read_titles / mark_* / app_kv
- *     保留：lessons / lesson_chars / mastery / children / 系统级 KV（seeded_at 等）
+ *   · scope=today（默认）：只清今天 —— 任务打勾、口算题组、今天相关 KV、今天的积分与兑换
+ *   · scope=all：清掉该孩子的全部 daily / math_sets / wrong / stories / read_titles / mark_* / app_kv /
+ *     points_ledger / redemptions / mastery（回到最初状态，生字页无勾选）
+ *     保留：lessons / lesson_chars / children / 系统级 KV（seeded_at 等）
  *   · date（可选）：重置日期；scope=today 时用，scope=all 时忽略
  */
 adminRouter.post(

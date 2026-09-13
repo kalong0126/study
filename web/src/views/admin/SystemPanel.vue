@@ -250,16 +250,18 @@ async function resetToday(): Promise<void> {
 }
 
 /**
- * 重置【全部】学习数据 —— 比 today 激进得多，会清掉错题本 / 故事 / 已读标题 / 判卷留痕 / 全部 KV。
- * 保留：课文 / 生字 / 掌握度 / 账号本身。
+ * 重置【全部】学习数据 —— 比 today 激进得多，会清掉错题本 / 故事 / 已读标题 / 判卷留痕 / 全部 KV /
+ * 掌握度（生字勾选）/ 积分与兑换记录，回到最初状态。
+ * 保留：课文 / 生字 / 账号本身。
  * 双确认（confirm + prompt 输入"重置"），防误点。
  */
 async function resetAll(): Promise<void> {
   if (
     !window.confirm(
       "⚠️ 高危操作：清空【全部】学习数据？\n\n" +
-        "会清掉：错题本（数学 + 语文）、历史口算题组、童话故事、已读标题、判卷记录、全部 KV。\n" +
-        "保留：课文与生字（用「重新导入内置课文」管）、掌握度（已掌握 / 未掌握标记）、账号。\n\n" +
+        "会清掉：错题本（数学 + 语文）、历史口算题组、童话故事、已读标题、判卷记录、全部 KV、" +
+        "已掌握生字（生字页不再有勾选）、积分与兑换记录。\n" +
+        "保留：课文与生字（用「重新导入内置课文」管）、账号。\n\n" +
         "继续吗？",
     )
   )
@@ -274,9 +276,10 @@ async function resetAll(): Promise<void> {
     const r = await adminApi.reset("all");
     const rm = r.removed;
     ui.toast(
-      `已清空：日常 ${rm.daily} / 口算 ${rm.math} / 错题 ${rm.wrong ?? 0} / 故事 ${rm.stories ?? 0} / 已读 ${rm.reads ?? 0} / 判卷 ${rm.marks ?? 0} / KV ${rm.kv}`,
+      `已清空：日常 ${rm.daily} / 口算 ${rm.math} / 错题 ${rm.wrong ?? 0} / 故事 ${rm.stories ?? 0} / 已读 ${rm.reads ?? 0} / 判卷 ${rm.marks ?? 0} / 掌握度 ${rm.mastery ?? 0} / KV ${rm.kv}`,
     );
     void loadHealth();
+    void loadPoints();
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {

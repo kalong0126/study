@@ -379,10 +379,10 @@ export async function kvSet(childId: number, k: string, v: unknown): Promise<voi
 
 设计原则：
   · 保留 lessons / lesson_chars（内容数据，由「重新导入内置课文」管）
-  · 保留 mastery（孩子的「已掌握 / 未掌握」标记，与内容耦合）
   · 保留 children 表（账号本身）
   · 保留 seeded_at 这类系统级 KV（child_id=0，不属于任何孩子）
-  · 清掉其它所有「按孩子累积的学习数据」
+  · 掌握度（mastery）：resetToday 只删今天动过的；resetAll 全删（回到最初，生字页无勾选）
+  · 清掉其它所有「按孩子累积的学习数据」（积分 / 兑换 / 错题 / 故事 / 已读 / 判卷等）
 */
 export interface ResetStats {
   daily: number;
@@ -475,7 +475,7 @@ export async function resetToday(
   });
 }
 
-/** 清空该孩子的全部学习数据。保留：lessons / lesson_chars / mastery / children 表 */
+/** 清空该孩子的全部学习数据，回到最初状态。保留：lessons / lesson_chars / children 表 */
 export async function resetAll(childId: number): Promise<ResetStats> {
   const d = db();
   const c = async (sql: string, params: unknown[]): Promise<number> => {
@@ -493,8 +493,8 @@ export async function resetAll(childId: number): Promise<ResetStats> {
     kv: await c("app_kv WHERE child_id = ?", [childId]),
     points: await c("points_ledger WHERE child_id = ?", [childId]),
     redemptions: await c("redemptions WHERE child_id = ?", [childId]),
-    // mastery 不在清空范围：保留长期掌握度（设计意图）。这里给个 0 让字段类型完整。
-    mastery: 0,
+    // 掌握度也一并清掉：清空全部 = 回到最初状态，生字页不再有 ✓/✗ 勾选。
+    mastery: await c("mastery WHERE child_id = ?", [childId]),
   };
   const markItems = await d.get<{ n: number }>(
     "SELECT COUNT(*) AS n FROM mark_items WHERE task_id IN (SELECT id FROM mark_tasks WHERE child_id = ?)",
@@ -515,6 +515,7 @@ export async function resetAll(childId: number): Promise<ResetStats> {
     await t.run("DELETE FROM app_kv WHERE child_id = ?", [childId]);
     await t.run("DELETE FROM points_ledger WHERE child_id = ?", [childId]);
     await t.run("DELETE FROM redemptions WHERE child_id = ?", [childId]);
+    await t.run("DELETE FROM mastery WHERE child_id = ?", [childId]);
   });
 
   return { ...counts, marks: counts.marks + Number(markItems?.n ?? 0) };
