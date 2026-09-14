@@ -1,0 +1,31 @@
+# ---- 依赖与构建产物（容器内会重新 npm ci + build，本地副本无需进 context）----
+node_modules
+dist
+.vite
+*.tsbuildinfo
+
+# ---- 运行期数据（数据库 / 语音缓存 / 日志 / 备份）—— 绝不进镜像 ----
+server/data
+server/logs
+logs
+data
+*.db
+
+# ---- 密钥与部署环境 —— 绝不进镜像 ----
+.env
+.env.local
+deploy/offsite
+
+# ---- 版本控制 / 本地工具工作区 ----
+.git
+.gitignore
+.dockerignore
+.workbuddy
+
+# ---- 测试残留 / 编辑器杂项 ----
+web/test/shots
+*.log
+.DS_Store
+Thumbs.db
+.idea
+.vscode
