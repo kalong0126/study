@@ -103,12 +103,18 @@ a { color: var(--blue-d); }
 .task.done { opacity: .72; background: #F6FDF9; border-left: 5px solid var(--green-d); }
 .task .t-ico { width: 38px; height: 38px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid var(--line); }
 .task .t-ico svg { width: 20px; height: 20px; }
-.task .t-main { flex: 1; min-width: 0; }
-.task .t-name { font-weight: 700; font-size: 15px; }
-.task .t-desc { font-size: 12.5px; color: var(--ink3); }
-.task .t-chip { flex: none; font-size: 12px; font-weight: 800; padding: 4px 11px; border-radius: 999px; background: #FFF1D9; color: #C97F00; }
+/* 标题行（名称 + 状态胶囊 + 已完成绿勾）/ 说明行，各占一行。
+   两个都是 <span>，不给 display:block 就会挤成一行（"语文听写选一篇课文…"）。
+   状态胶囊放在标题行右侧而不是卡片最右：手机上（390px）胶囊会吃掉 60 多 px，
+   说明文字只剩十几个字的宽度，「计时满 15 分钟」会被切成「…15 分 / 钟」。
+   挪上去之后说明独占整行，孤字换行就没了；桌面端视觉几乎不变。 */
+.task .t-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.task .t-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.task .t-name { display: block; font-weight: 700; font-size: 15.5px; line-height: 1.25; letter-spacing: .2px; }
+.task .t-desc { display: block; font-size: 12.5px; color: var(--ink3); line-height: 1.4; overflow-wrap: break-word; text-wrap: pretty; }
+.task .t-chip { flex: none; margin-left: auto; font-size: 12px; font-weight: 800; padding: 4px 11px; border-radius: 999px; background: #FFF1D9; color: #C97F00; }
 .task.done .t-chip { background: #E4F9EE; color: #2E9C72; }
-.task .t-check { width: 24px; height: 24px; flex: none; }
+.task .t-check { width: 20px; height: 20px; flex: none; }
 
 /* ---------- 按钮 ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 18px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); font-size: 15px; font-weight: 700; cursor: pointer; transition: .2s; text-decoration: none; }

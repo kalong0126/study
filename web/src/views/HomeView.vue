@@ -97,14 +97,16 @@ const stats = computed(() => [
         </span>
       </span>
       <span class="t-main">
-        <span class="t-name">{{ d.name }}</span>
+        <span class="t-head">
+          <span class="t-name">{{ d.name }}</span>
+          <span class="t-chip">{{ progress.isDone(d.key) ? "已完成" : "待完成" }}</span>
+          <svg v-if="progress.isDone(d.key)" class="t-check" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" fill="#7FDCB8" />
+            <path d="M7.5 12.4 10.6 15.5 16.5 9" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
         <span class="t-desc">{{ taskDesc(d.key, d.desc) }}</span>
       </span>
-      <span class="t-chip">{{ progress.isDone(d.key) ? "已完成" : "待完成" }}</span>
-      <svg v-if="progress.isDone(d.key)" class="t-check" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="10" fill="#7FDCB8" />
-        <path d="M7.5 12.4 10.6 15.5 16.5 9" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
     </button>
 
     <div class="progress-line" style="margin-top: 6px">
