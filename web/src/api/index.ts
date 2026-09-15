@@ -169,10 +169,13 @@ export const api = {
 
   /** 生成当天 9 道题；已有题目时幂等返回（force=true 才会换一套） */
   generateLanguage: (body: { date?: string; theme?: string; difficulty?: number; force?: boolean } = {}) =>
-    request<{ set: LanguageSet; cached: boolean; ms: number; model: string }>("/language/generate", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    request<{ set: LanguageSet; cached: boolean; ms: number; model: string; daily: DailyState; balance: number }>(
+      "/language/generate",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
 
   /** 保存一题的作答（自动判卷 / 家长判定） */
   saveLanguageProgress: (body: {
@@ -182,14 +185,20 @@ export const api = {
     judgedBy?: "auto" | "parent";
     answer?: string;
   }) =>
-    request<{ progress: LanguageProgress }>("/language/progress", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
+    request<{ progress: LanguageProgress; daily: DailyState; balance: number; counts: { total: number; done: number } }>(
+      "/language/progress",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
 
   /** 清掉当天的语言强化题目与作答 */
   resetLanguage: (date?: string) =>
-    request<{ date: string }>("/language/reset", { method: "POST", body: JSON.stringify({ date }) }),
+    request<{ date: string; daily: DailyState }>("/language/reset", {
+      method: "POST",
+      body: JSON.stringify({ date }),
+    }),
 
   /**
    * 给当天的看图题画一张真实的图。

@@ -3,13 +3,19 @@
  *
  * 规则（与前端 progress store 的完成链路一一对应）：
  *   · 口算完成 +10、语文听写完成 +10、阅读完成 +20（这 3 项在 setTaskDone 时由后端自动发）
+ *   · 语言强化 9 道题**全部**完成 +20（**没做完一分不给**；判定归 `routes/language.ts`，
+ *     它每次作答后重算进度再回写打卡标记，标记落库时走的就是本表）
  *   · 口算全对 +10、听写全对 +10（前端判定「全对」后显式调 /points/award）
- *   · 四项任务全部完成再 +10（后端在 setTaskDone 后检查自动发）
+ *   · 五项任务全部完成再 +10（后端在 setTaskDone 后检查自动发）
  *   · 兑换：50 分 = 半小时平板娱乐时间 / 1 块钱（扣除对应积分，生成兑换记录）
  *
  * 幂等设计：所有「奖励」类入账都带 ref_key（如 "math_done:2026-09-13"），
  * 靠 (child_id, ref_key) 唯一约束保证重复调用不会重复加分。兑换的 ref_key 用毫秒时间戳，
  * 天然唯一（家庭单用户场景不会同毫秒兑两次）。
+ *
+ * 注意：积分**只发不追回**。语言强化做完拿到 20 分后，家长若把某题打回「再练一练」，
+ * 打卡标记会取消（首页重新变「待完成」），但那 20 分留在账上不动 ——
+ * 孩子确实做过了，扣分只会让他觉得莫名其妙。
  */
 import { db, nowIso } from "../index.js";
 
@@ -20,6 +26,7 @@ export const POINT_VALUES: Record<string, number> = {
   dictation_done: 10,
   dictation_perfect: 10,
   reading_done: 20,
+  language_done: 20,
   all_done: 10,
 };
 
@@ -28,6 +35,7 @@ export const POINT_REASONS: Record<string, string> = {
   math: "math_done",
   dictation: "dictation_done",
   reading: "reading_done",
+  language: "language_done",
 };
 
 export interface Reward {

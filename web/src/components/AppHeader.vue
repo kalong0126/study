@@ -4,10 +4,11 @@
  * 注意这里**没有**家长入口 —— 家长后台是独立路由 /admin，与孩子的界面完全分开。
  */
 import { computed } from "vue";
-import { useProgressStore } from "@/stores/progress";
+import { TASK_DEFS, useProgressStore } from "@/stores/progress";
 
 const progress = useProgressStore();
-const total = 4;
+// 任务条数只认 TASK_DEFS，别再写死 4 —— 加一项任务（如语言强化）这里会自动跟上
+const total = TASK_DEFS.length;
 const pct = computed(() => Math.round((progress.completedCount / total) * 100));
 const full = computed(() => progress.completedCount >= total);
 </script>

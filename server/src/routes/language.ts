@@ -16,7 +16,8 @@ import path from "node:path";
 import { Router } from "express";
 import { loadConfig, resolveImagegen, resolveLlm } from "../config.js";
 import { todayStr } from "../db/index.js";
-import { kvGet, kvSet } from "../db/repo/state.js";
+import { getDaily, kvGet, kvSet, setTaskDone, TASK_KEYS, type DailyState } from "../db/repo/state.js";
+import { awardPoints, getBalance } from "../db/repo/points.js";
 import { currentChildId } from "../services/child.js";
 import { generateImage, imageExists, imageFileName } from "../services/imagegen.js";
 import { chat, LlmError } from "../services/llm.js";
@@ -80,6 +81,59 @@ export interface LanguageImageMeta {
   /** 实际发给文生图模型的提示词（画得不对时便于排查） */
   prompt: string;
   createdAt: string;
+}
+
+/* ------------------------------------------------- 打卡任务（第 5 项：语言强化） */
+
+/** 当天语言强化的「题量 / 已完成数」——只数题目数组里真实存在的题 */
+function languageCounts(
+  set: LanguageSet | null,
+  progress: LanguageProgress,
+): { total: number; done: number } {
+  const questions = set?.questions ?? [];
+  const done = questions.filter((q) => progress[String(q.id)]?.status === "done").length;
+  return { total: questions.length, done };
+}
+
+/**
+ * 把「9 道题全部做完」同步成当天的打卡任务 `language`，并发放 20 分。
+ *
+ * 为什么由后端算而不是让前端打勾：
+ *   语言强化有 9 道小题，孩子可能分几次做完、家长可能中途把某题打回「再练一练」，
+ *   前端本地那份 daily 很容易和真实进度脱节。真相在 `languageProgress:<date>`，
+ *   所以每次作答 / 每次打开页面都重算一遍再回写打卡标记 —— 换设备、刷新、
+ *   甚至前端是旧缓存版本，都不会漏掉这 20 分。
+ *
+ * 规则：**9 道全做完才算完成，一分不给提前量**（用户明确要求「未完成不加分」）；
+ * 做完拿到 20 分后若被家长打回一题，打卡标记会取消，但积分**不追回**（见 points.ts 注释）。
+ *
+ * 幂等：加分靠 ref_key（`language_done:<date>`）去重，重复调用不会重复入账。
+ */
+async function syncLanguageTask(
+  childId: number,
+  date: string,
+  opt?: { set?: LanguageSet | null; progress?: LanguageProgress },
+): Promise<{ daily: DailyState; balance: number; total: number; done: number }> {
+  const set = opt?.set !== undefined ? opt.set : ((await kvGet<LanguageSet>(childId, setKey(date))) ?? null);
+  const progress =
+    opt?.progress !== undefined
+      ? opt.progress
+      : ((await kvGet<LanguageProgress>(childId, progKey(date))) ?? ({} as LanguageProgress));
+
+  const { total, done } = languageCounts(set, progress);
+  const all = total === 9 && done === total;
+
+  const daily = await getDaily(childId, date);
+  if (all !== !!daily.tasks.language) await setTaskDone(childId, date, "language", all);
+
+  if (all) {
+    await awardPoints(childId, "language_done", `language_done:${date}`);
+    // 这一项可能是「最后一块拼图」→ 顺手检查全勤奖（幂等，重复调用不会重复发）
+    const after = await getDaily(childId, date);
+    if (TASK_KEYS.every((k) => after.tasks[k])) await awardPoints(childId, "all_done", `all_done:${date}`);
+  }
+
+  return { daily: await getDaily(childId, date), balance: await getBalance(childId), total, done };
 }
 
 async function readRecent(childId: number): Promise<LanguageRecent> {
@@ -215,7 +269,18 @@ languageRouter.get(
     if (set && fixStaleHowTo(set)) await kvSet(childId, setKey(date), set);
     const progress = (await kvGet<LanguageProgress>(childId, progKey(date))) ?? {};
     const recent = await readRecent(childId);
-    ok(res, { date, set, progress, themes: recent.themes, image: await imageState(childId, date) });
+    // 打开页面时顺手对一遍打卡标记：家长在别的设备上判定过 / 上次刷新过快没写进去，这里都能自愈
+    const sync = await syncLanguageTask(childId, date, { set, progress });
+    ok(res, {
+      date,
+      set,
+      progress,
+      themes: recent.themes,
+      image: await imageState(childId, date),
+      daily: sync.daily,
+      balance: sync.balance,
+      counts: { total: sync.total, done: sync.done },
+    });
   }),
 );
 
@@ -347,12 +412,14 @@ languageRouter.post(
     await kvSet(childId, setKey(date), null);
     await kvSet(childId, progKey(date), {});
     await kvSet(childId, imgKey(date), null);
+    // 题目没了 → 打卡标记退回「待完成」（已发的积分不追回）
+    const sync = await syncLanguageTask(childId, date, { set: null, progress: {} });
     // 图片文件一并删掉：今天画的图今天作废，留着只会占磁盘
     if (meta?.file) {
       const ig = resolveImagegen(loadConfig());
       await cleanupOne(ig.dir, meta.file);
     }
-    ok(res, { date });
+    ok(res, { date, daily: sync.daily });
   }),
 );
 
@@ -383,11 +450,14 @@ languageRouter.post(
       const existing = await kvGet<LanguageSet>(childId, setKey(date));
       if (existing?.questions?.length === 9) {
         if (fixStaleHowTo(existing)) await kvSet(childId, setKey(date), existing);
+        const sync = await syncLanguageTask(childId, date, { set: existing });
         ok(res, {
           set: existing,
           cached: true,
           ms: existing.ms,
           model: existing.model,
+          daily: sync.daily,
+          balance: sync.balance,
         });
         return;
       }
@@ -406,15 +476,23 @@ languageRouter.post(
     }
 
     await kvSet(childId, setKey(date), out.set);
-    // 换一套题 = 之前的作答作废
+    // 换一套题 = 之前的作答作废 → 打卡标记也要跟着退回「待完成」（已发的 20 分不追回）
     await kvSet(childId, progKey(date), {});
     await pushRecent(childId, out.set);
+    const sync = await syncLanguageTask(childId, date, { set: out.set, progress: {} });
 
     logLlm.info(
       { date, theme: out.set.theme, questions: out.set.questions.length, ms: out.ms, model: out.model },
       "语言强化出题完成",
     );
-    ok(res, { set: out.set, cached: false, ms: out.ms, model: out.model });
+    ok(res, {
+      set: out.set,
+      cached: false,
+      ms: out.ms,
+      model: out.model,
+      daily: sync.daily,
+      balance: sync.balance,
+    });
   }),
 );
 
@@ -458,7 +536,9 @@ languageRouter.post(
       at: new Date().toISOString(),
     };
     await kvSet(childId, progKey(date), progress);
-    ok(res, { progress });
+    // 9 道全做完 → 打勾首页那一项 + 发 20 分；少一道都不给（顺便处理「被家长打回一题」的情况）
+    const sync = await syncLanguageTask(childId, date, { set, progress });
+    ok(res, { progress, daily: sync.daily, balance: sync.balance, counts: { total: sync.total, done: sync.done } });
   }),
 );
 

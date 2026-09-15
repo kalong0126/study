@@ -29,6 +29,7 @@ const toneColor: Record<string, string> = {
   orange: "#D9714E",
   purple: "#8E7BEF",
   green: "#3FBF8F",
+  pink: "#FF7FA0",
 };
 
 const toneIcon: Record<string, string> = {
@@ -36,6 +37,7 @@ const toneIcon: Record<string, string> = {
   orange: "chinese",
   purple: "story",
   green: "none",
+  pink: "wand",
 };
 
 const remaining = computed(() => TASK_DEFS.length - progress.completedCount);
@@ -50,6 +52,13 @@ function taskDesc(key: string, fallback: string): string {
     return progress.mathDone ? `${head} · 用时 ${progress.mathElapsedText}` : `${head} · 已用时 ${progress.mathClock}`;
   }
   if (key === "review") return progress.reviewText;
+  if (key === "language") {
+    // 后端算的 9 道题进度。没题集（total 为 0）时别写「已完成 0 / 0 题」，退回默认说明。
+    if (progress.languageTotal <= 0) return fallback;
+    const done = progress.languageDone;
+    if (done >= progress.languageTotal) return `已完成 ${done} / ${progress.languageTotal} 题 · 得到 20 分`;
+    return `已完成 ${done} / ${progress.languageTotal} 题${done > 0 ? " · 全做完得 20 分" : ""}`;
+  }
   return fallback;
 }
 

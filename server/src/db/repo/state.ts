@@ -8,7 +8,17 @@ const DRIVER: () => Driver = () => db().driver;
 const up = (table: string, cols: string[], keys: string[]) => upsertSql(DRIVER(), table, cols, keys);
 
 /* ------------------------------------------------------------------ 打卡进度 */
-export const TASK_KEYS = ["math", "dictation", "reading", "review"] as const;
+
+/**
+ * 每日打卡任务清单。
+ *
+ * `language`（语言强化）与其它四项不同：它的完成标准不在本表里判，
+ * 「9 道题全做完」这个真相存在 `languageProgress:<date>` 里，
+ * 由 `routes/language.ts` 的 `syncLanguageTask()` 每次作答后重算并回写这里。
+ * 这样做的原因：语言强化有 9 道小题，孩子可能分几次做完、家长可能中途打回一题，
+ * 靠前端打勾容易和真实进度脱节；后端算准了再回写，换设备 / 刷新都不会漏。
+ */
+export const TASK_KEYS = ["math", "dictation", "reading", "language", "review"] as const;
 export type TaskKey = (typeof TASK_KEYS)[number];
 
 export interface DailyState {
@@ -82,6 +92,27 @@ export async function countPendingWrong(childId: number): Promise<number> {
     [childId],
   );
   return Math.max(0, Math.trunc(Number(row?.n ?? 0) || 0));
+}
+
+/**
+ * 当天语言强化的「题量 / 已完成数」。
+ *
+ * 键名与 `routes/language.ts` 里的 `setKey` / `progKey` 一致（`language:<date>` /
+ * `languageProgress:<date>`），这里只读不写 —— 写入在语言强化路由里。
+ *
+ * 只统计**题目数组里真实存在的那些题**（而不是进度表里的条目数）：
+ * 换过题、重置过之后残留的旧条目不该被算成「已完成」，
+ * 否则首页会写出「已完成 9 / 9」但任务卡没有打勾这种自相矛盾的样子。
+ */
+export async function getLanguageProgress(
+  childId: number,
+  date: string,
+): Promise<{ total: number; done: number }> {
+  const set = await kvGet<{ questions?: { id: number }[] }>(childId, `language:${date}`);
+  const questions = Array.isArray(set?.questions) ? set!.questions : [];
+  const progress = (await kvGet<Record<string, { status?: string }>>(childId, `languageProgress:${date}`)) ?? {};
+  const done = questions.filter((q) => progress[String(q?.id)]?.status === "done").length;
+  return { total: questions.length, done };
 }
 
 /* ---------------------------------------------------------------------- 口算 */

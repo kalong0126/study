@@ -12,6 +12,10 @@
  *     孩子口述完成，页面上给「通过 / 再练一练」两个按钮
  *
  * 状态存在后端（按天），所以换设备、刷新页面都不丢进度。
+ *
+ * 与首页联动：9 道题**全做完**才算完成首页那项打卡任务（+20 分，少一道都不给），
+ * 判定归后端（`routes/language.ts` 的 syncLanguageTask）——每次拿到新进度都用
+ * `progress.syncLanguage()` 把它同步进 store，首页立刻就能看到变化。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, describeApiError } from "@/api";
@@ -19,9 +23,11 @@ import type { LanguageImageInfo, LanguageProgress, LanguageQuestion, LanguageSet
 import Icon from "@/components/Icon.vue";
 import LanguagePicture from "@/components/LanguagePicture.vue";
 import { playText, stopAudio, useAudioState } from "@/composables/useAudio";
+import { TASK_DEFS, useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
+const progressStore = useProgressStore();
 const { playing } = useAudioState();
 
 const loading = ref(true);
@@ -40,6 +46,15 @@ const imgBusy = ref(false);
 /** 画图失败的提示（失败时退回文字描述，题目照样能做） */
 const imgError = ref("");
 
+/**
+ * 「载入时就已经 9/9」→ 不庆祝。
+ *
+ * 打开页面时 progress 从空变成 9 道全 done，allDone 会走一次 false→true，
+ * 如果不管它，孩子每次进这一页都会被彩带和音效糊一脸（还会白建一个 AudioContext）。
+ * 载入 / 换题时同步取一次快照，只吃掉「第一次」那次跳变。
+ */
+let quietFirstAllDone = false;
+
 /** grid = 九宫格目录；q = 单题作答 */
 const view = ref<"grid" | "q">("grid");
 const idx = ref(0);
@@ -47,8 +62,16 @@ const idx = ref(0);
 const questions = computed<LanguageQuestion[]>(() => set.value?.questions ?? []);
 const q = computed<LanguageQuestion | null>(() => questions.value[idx.value] ?? null);
 
-const doneCount = computed(() => Object.values(progress.value).filter((p) => p.status === "done").length);
-const wrongCount = computed(() => Object.values(progress.value).filter((p) => p.status === "wrong").length);
+/**
+ * 已完成几道。只数**题目数组里真实存在的题** —— 换题后残留的旧进度条目不算，
+ * 否则九宫格会写出「完成 10/9」这种怪数字。
+ */
+const doneCount = computed(
+  () => questions.value.filter((item) => progress.value[String(item.id)]?.status === "done").length,
+);
+const wrongCount = computed(
+  () => questions.value.filter((item) => progress.value[String(item.id)]?.status === "wrong").length,
+);
 const allDone = computed(() => questions.value.length === 9 && doneCount.value === 9);
 
 /* ------------------------------------------------------------ 单题草稿 */
@@ -106,9 +129,15 @@ async function load(): Promise<void> {
     const r = await api.languageToday();
     set.value = r.set;
     progress.value = r.progress ?? {};
+    // 必须**同步**跟在上面两行后面取快照：allDone 的 watcher 是 pre-flush 的，
+    // 一旦 await 让出线程它就跑了，那时再置标记已经晚了一步（照样会庆祝）。
+    quietFirstAllDone = allDone.value;
     themes.value = r.themes ?? [];
     image.value = r.image ?? null;
     imgError.value = "";
+    // 打卡状态由后端算并回写，这里把它覆盖进 store —— 首页那项任务才不会和这页对不上
+    progressStore.applyDaily(r.daily, r.balance);
+    await progressStore.syncLanguage(r.counts?.done ?? 0, r.counts?.total ?? 0);
   } catch (e) {
     loadError.value = describeApiError(e);
   } finally {
@@ -124,6 +153,7 @@ async function generate(force: boolean): Promise<void> {
     const r = await api.generateLanguage({ force });
     set.value = r.set;
     progress.value = {};
+    quietFirstAllDone = false; // 换了一套新题：从头来过，全部做完时该庆祝就庆祝
     // 清掉所有单题草稿（题换了，旧草稿没意义）
     drafts.value = {};
     view.value = "grid";
@@ -131,6 +161,9 @@ async function generate(force: boolean): Promise<void> {
     // 换题后场景变了，旧配图作废 —— 等孩子打开看图题时再按新场景画一张
     image.value = null;
     imgError.value = "";
+    // 换一套 = 之前的作答作废 → 首页那项任务也跟着退回「待完成」（已发的分不追回）
+    progressStore.applyDaily(r.daily, r.balance);
+    await progressStore.syncLanguage(0, r.set.questions.length);
     ui.toast(r.cached ? `今天已经有题目了（主题：${r.set.theme}）` : `出好了！今日主题：${r.set.theme}`);
   } catch (e) {
     ui.toast(describeApiError(e));
@@ -195,6 +228,9 @@ async function persist(qid: number, status: "done" | "wrong", judgedBy: "auto" |
   try {
     const r = await api.saveLanguageProgress({ questionId: qid, status, judgedBy, answer });
     progress.value = r.progress;
+    // 后端刚按最新进度重算了打卡标记（9/9 → 打勾 + 20 分），同步进 store 让首页跟着变
+    progressStore.applyDaily(r.daily, r.balance);
+    await progressStore.syncLanguage(r.counts?.done ?? 0, r.counts?.total ?? 0);
   } catch (e) {
     ui.toast(describeApiError(e));
   } finally {
@@ -340,8 +376,15 @@ function stepQ(delta: number): void {
 
 watch(idx, () => stopAudio());
 
+// 9 道全做完 → 通知孩子「这一项打卡完成、拿到 20 分」。
+// 如果这刚好是今天最后一项任务，横幅留给 store 弹（「今日 5 项任务全部完成」），别抢。
 watch(allDone, (v, old) => {
-  if (v && !old) ui.celebrate({ title: "9 道题全部完成！🎉", sub: "语言小达人就是你" });
+  if (!v || old) return;
+  const quiet = quietFirstAllDone;
+  quietFirstAllDone = false;
+  if (quiet) return;
+  if (progressStore.completedCount >= TASK_DEFS.length) return;
+  ui.celebrate({ title: "9 道题全部完成！🎉", sub: "语言小达人就是你 · 这一项 +20 分" });
 });
 
 onMounted(load);

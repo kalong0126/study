@@ -5,7 +5,13 @@
  *   · 口算：20 题**全部作答**即算完成，答错也算；全对额外给满分庆祝
  *   · 听写：一轮至少写完 3 个字
  *   · 阅读：计时满 15 分钟（或手动结束且已读超过 20 秒）
+ *   · 语言强化：9 道题**全部**做完才算完成，加 20 分（少一道一分不给）
  *   · 错题：重做 `reviewTarget` 道（**不是写死的 3 道**，见下）
+ *
+ * 语言强化这一项和别处不一样：它的完成标准不在这里判 ——
+ * `languageProgress:<date>` 里那 9 道小题的作答状态才是真相，后端每次作答后重算并回写打卡标记。
+ * 本 store 只负责「把做题页新拿到的进度同步进来」（`syncLanguage`）与展示，
+ * 这样孩子在别处（换设备 / 家长判定）做完，首页也不会漏。
  *
  * 错题复习这块有两个和别处不一样的规矩：
  *   1. **必须等口算和听写都做完**才能开始。因为这两项会往错题本里加题，
@@ -26,13 +32,20 @@ export interface TaskDef {
   name: string;
   desc: string;
   route: string;
-  tone: "blue" | "orange" | "purple" | "green";
+  tone: "blue" | "orange" | "purple" | "green" | "pink";
 }
 
 export const TASK_DEFS: TaskDef[] = [
   { key: "math", name: "每日口算", desc: "20 道题全部作答", route: "/math", tone: "blue" },
   { key: "dictation", name: "语文听写", desc: "选一篇课文，完成一轮听写", route: "/chinese", tone: "orange" },
   { key: "reading", name: "童话故事", desc: "读一篇注音童话，计时满 15 分钟", route: "/story", tone: "purple" },
+  {
+    key: "language",
+    name: "语言强化",
+    desc: "9 道题全部做完可得 20 分",
+    route: "/language",
+    tone: "pink",
+  },
   { key: "review", name: "错题复习", desc: "把错题本里的错题重做一遍", route: "/wrong", tone: "green" },
 ];
 
@@ -41,7 +54,7 @@ export const REVIEW_MAX = 3;
 
 /**
  * 积分规则（与服务端 db/repo/points.ts 保持一致）：
- *   · 口算完成 +10、听写完成 +10、阅读完成 +20、全部完成 +10（后端自动发）
+ *   · 口算完成 +10、听写完成 +10、阅读完成 +20、语言强化 9/9 完成 +20、全部完成 +10（后端自动发）
  *   · 口算全对 +10、听写全对 +10（前端判定全对后调 awardPoints）
  */
 export const REWARDS = [
@@ -52,6 +65,9 @@ export const REWARDS = [
 export function rewardLabel(id: string): string {
   return REWARDS.find((r) => r.id === id)?.label ?? id;
 }
+
+/** 语言强化每天固定 9 道题（没有题集时也要有个像样的分母） */
+export const LANGUAGE_TOTAL = 9;
 
 /** 开始复习前必须先完成的任务：它们会往错题本里加题 */
 const REVIEW_GATE: TaskKey[] = ["math", "dictation"];
@@ -70,7 +86,7 @@ interface MathLocal {
 function blankDaily(date: string): DailyState {
   return {
     date,
-    tasks: { math: false, dictation: false, reading: false, review: false },
+    tasks: { math: false, dictation: false, reading: false, language: false, review: false },
     reviewCount: 0,
     reviewTarget: null,
   };
@@ -140,6 +156,10 @@ export const useProgressStore = defineStore("progress", () => {
   const balance = ref(0);
   const redemptions = ref<Redemption[]>([]);
 
+  /** 语言强化当天的进度：首页任务卡上写「已完成 N / 9 题」用 */
+  const languageDone = ref(0);
+  const languageTotal = ref(LANGUAGE_TOTAL);
+
   // 只在本地保留的辅助信息：孩子输入的原始答案、已入错题本的题号、满分是否已庆祝
   const answers = ref<Record<string, string>>({});
   const wrongAdded = ref<Record<string, boolean>>({});
@@ -180,6 +200,8 @@ export const useProgressStore = defineStore("progress", () => {
     mathElapsedMs.value = Math.max(0, Number(s.mathElapsedMs) || 0);
     balance.value = Math.max(0, Number(s.balance) || 0);
     redemptions.value = s.redemptions ?? [];
+    languageDone.value = Math.max(0, Number(s.language?.done) || 0);
+    languageTotal.value = Math.max(0, Number(s.language?.total) || 0) || LANGUAGE_TOTAL;
     if (!mathSet.value) {
       answers.value = {};
       wrongAdded.value = {};
@@ -227,7 +249,7 @@ export const useProgressStore = defineStore("progress", () => {
 
     const c = completedCount.value;
     if (c >= TASK_DEFS.length) {
-      ui.showBanner("你太棒了！🎉", "今日 4 项任务全部完成");
+      ui.showBanner("你太棒了！🎉", `今日 ${TASK_DEFS.length} 项任务全部完成`);
       return true;
     }
     if (!opts.silent) {
@@ -236,6 +258,48 @@ export const useProgressStore = defineStore("progress", () => {
       ui.celebrate();
     }
     return false;
+  }
+
+  /**
+   * 用服务端返回的打卡状态覆盖本地那份（可选带上余额）。
+   *
+   * 语言强化的打勾判定在后端做，所以做题页拿到 daily 后要用这个把本地刷新一下 ——
+   * 否则首页会拿着上一份旧状态，出现「页面里写着 9/9 完成、首页还显示待完成」。
+   */
+  function applyDaily(d: DailyState | null | undefined, newBalance?: number): void {
+    if (d) daily.value = d;
+    if (typeof newBalance === "number") balance.value = Math.max(0, newBalance);
+  }
+
+  /**
+   * 同步语言强化的当日进度（做题页每次载入 / 每次作答后调用）。
+   *
+   * 完成与取消完成都要处理：
+   *   · 9 道全做完 → 打勾（后端发 20 分）
+   *   · 有一道被打回「再练一练」→ 标记退回「待完成」，首页重新变成待办
+   *     （已发出去的 20 分不追回 —— 孩子确实做过了，扣分只会让他莫名其妙）
+   *
+   * 打勾走 `silent`：庆祝与提示由做题页自己给（它更清楚该说「+20 分」），
+   * 唯一例外是这一项刚好凑满全部任务 —— 那时 store 会弹「全部完成」的横幅。
+   * 用本地 `isDone` 先判一道，是为了避免每次作答都白跑一次 PATCH。
+   */
+  async function syncLanguage(done: number, total: number): Promise<void> {
+    languageDone.value = Math.max(0, done);
+    languageTotal.value = Math.max(0, total) || LANGUAGE_TOTAL;
+
+    const all = total > 0 && done >= total;
+    if (all) {
+      if (!isDone("language")) await completeTask("language", { silent: true });
+      return;
+    }
+    if (!isDone("language")) return;
+    daily.value = { ...daily.value, tasks: { ...daily.value.tasks, language: false } };
+    try {
+      const r = await api.patchDaily({ date: date.value, tasks: { language: false } });
+      if (r && typeof r.balance === "number") balance.value = r.balance;
+    } catch {
+      /* 退回「待完成」失败不打扰孩子，下次作答/刷新会再对一遍 */
+    }
   }
 
   /* ---------------------------------------------------------------- 积分 */
@@ -622,6 +686,10 @@ export const useProgressStore = defineStore("progress", () => {
     allDone,
     isDone,
     completeTask,
+    applyDaily,
+    syncLanguage,
+    languageDone,
+    languageTotal,
     balance,
     redemptions,
     awardPoints,

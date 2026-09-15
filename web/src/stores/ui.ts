@@ -27,7 +27,7 @@ export const useUiStore = defineStore("ui", () => {
   const bannerOn = ref(false);
   const bannerGold = ref(false);
   const bannerTitle = ref("你太棒了！🎉");
-  const bannerSub = ref("今日 4 项任务全部完成");
+  const bannerSub = ref("今天的任务全部完成");
   let bannerTimer: number | null = null;
 
   function showBanner(title: string, sub: string, gold = false, ms = 2600): void {

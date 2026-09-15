@@ -14,6 +14,7 @@ import {
   countPendingWrong,
   deleteStoryByTitle,
   getDaily,
+  getLanguageProgress,
   getMastery,
   getMathElapsed,
   getMathSet,
@@ -57,7 +58,7 @@ stateRouter.get(
     const childId = await currentChildId();
     const date = normDate(req.query.date);
 
-    const [daily, mathSet, mastery, wrongMath, wrongChinese, stories, readTitles, timer, mathElapsedMs, balance, redemptions] =
+    const [daily, mathSet, mastery, wrongMath, wrongChinese, stories, readTitles, timer, mathElapsedMs, balance, redemptions, language] =
       await Promise.all([
         getDaily(childId, date),
         getMathSet(childId, date),
@@ -70,6 +71,7 @@ stateRouter.get(
         getMathElapsed(childId, date),
         getBalance(childId),
         listRedemptions(childId, 10),
+        getLanguageProgress(childId, date),
       ]);
 
     ok(res, {
@@ -84,6 +86,8 @@ stateRouter.get(
       timer: timer ?? { running: false, endAt: 0 },
       balance,
       redemptions,
+      // 语言强化当天的进度（首页任务卡上写「已完成 N / 9 题」用）
+      language,
     });
   }),
 );
@@ -100,14 +104,16 @@ stateRouter.patch(
     if (tasks && typeof tasks === "object") {
       for (const [k, v] of Object.entries(tasks as Record<string, unknown>)) {
         await setTaskDone(childId, date, k, v === true);
-        // 完成任务自动发积分（幂等）：口算 +10 / 听写 +10 / 阅读 +20；错题复习不加分
+        // 完成任务自动发积分（幂等）：口算 +10 / 听写 +10 / 阅读 +20 / 语言强化 +20；
+        // 错题复习不加分。语言强化这一项虽然也走这里，但**是否算完成由后端重算**
+        // （见 routes/language.ts 的 syncLanguageTask），前端打勾只是即时反馈。
         if (v === true) {
           const reason = POINT_REASONS[k];
           if (reason) await awardPoints(childId, reason, `${reason}:${date}`);
         }
       }
     }
-    // 四项任务全部完成 → 额外 +10（幂等）
+    // 五项任务全部完成 → 额外 +10（幂等）
     const afterTasks = await getDaily(childId, date);
     if (TASK_KEYS.every((k) => afterTasks.tasks[k])) {
       await awardPoints(childId, "all_done", `all_done:${date}`);

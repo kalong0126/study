@@ -131,10 +131,27 @@ for (const r of ROUTES.slice(1)) {
 
 // ————————————————————————————— 4. 首页任务卡片（孩子端唯一的入口）
 step("首页任务卡片 → 各功能页（应用内点击）");
+await page.locator("nav.nav a", { hasText: "今日" }).first().click();
+await page.waitForTimeout(1100);
+{
+  // 任务清单共 5 项：口算 / 听写 / 童话 / 语言强化 / 错题复习。
+  // 语言强化以前只在底部导航里有，现在也是首页的一项待办（9 道全做完 +20 分）。
+  const cards = await page.locator("button.task").allInnerTexts();
+  const names = ["每日口算", "语文听写", "童话故事", "语言强化", "错题复习"];
+  const missing = names.filter((n) => !cards.some((c) => c.includes(n)));
+  cards.length === 5 && missing.length === 0
+    ? pass(`首页任务清单 5 项：${names.join(" / ")}`)
+    : fail(`首页任务卡 ${cards.length} 项，缺 ${JSON.stringify(missing)}`);
+  const header = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
+  /\/ 5 项任务/.test(header)
+    ? pass("顶栏分母跟着变成 5 项")
+    : fail(`顶栏任务分母不对：${header}`);
+}
 const shortcuts = [
   { card: "每日口算", path: "/math", sel: ".m-row", min: 20 },
   { card: "语文听写", path: "/chinese", sel: ".story-text", min: 1 },
   { card: "童话故事", path: "/story", sel: ".card", min: 1 },
+  { card: "语言强化", path: "/language", sel: ".lg-empty, .lg-grid", min: 1 },
   { card: "错题复习", path: "/wrong", sel: ".wb-tabs", min: 1 },
 ];
 for (const s of shortcuts) {
@@ -192,7 +209,7 @@ step("孩子端不出现家长可点入口（防误点）");
 // 尤其「导入恢复」会覆盖数据。现已整体移到 /admin。
 // 这条断言只盯「可点元素」（a / button）与指向 /admin 的链接；
 // 正文里顺口提一句「家长可以在内容后台录课文」是可以的，不算入口。
-const KID_PAGES = ["/", "/math", "/chinese", "/story", "/wrong"];
+const KID_PAGES = ["/", "/math", "/chinese", "/story", "/language", "/wrong"];
 const FORBIDDEN_BTN = ["快速开始", "数据安全", "备份", "导出", "导入恢复", "导入", "运行诊断", "后台", "恢复"];
 for (const p of KID_PAGES) {
   await page.goto(`${BASE}${p}`, { waitUntil: "domcontentloaded" });

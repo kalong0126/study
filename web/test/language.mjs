@@ -10,7 +10,9 @@
  *   6. 进度汇总（完成 3/9）在刷新后依然存在（说明真的存在服务端）
  *   7. 看图观察真的展示了 AI 画出来的图片（<img> 且 naturalWidth > 0），
  *      看图说话复用同一张图；画面文字描述默认折叠（不然等于直接给答案）
- *   8. 全程零 console error
+ *   8. 9 道题全做完 → 语言强化作为首页的一项待办自动打勾 + 加 20 分
+ *      （顶栏任务分母同时是 5 项；少做一道都不加分，这条在 api.test 里断言）
+ *   9. 全程零 console error
  *
  * 为什么要用隔离实例（端口 8796 + 独立 DB + mock 大模型）：
  *   这个测试会真的出题（写 app_kv）并写作答进度，跑在孩子的真实库上会污染数据；
@@ -281,6 +283,39 @@ try {
   ok("刷新后进度仍在（确实存在服务端）", badge2.replace(/\s/g, "") === "完成3/9", badge2);
   const doneCells = await page.locator(".lg-cell.done").count();
   ok("刷新后 3 个格子仍是已完成", doneCells === 3, `${doneCells} 格`);
+
+  /* ————————————————————————————— 6b. 9 道全做完 → 首页那项待办打勾 + 加 20 分 */
+  step("6b. 做完剩下 6 道 → 语言强化打卡 + 20 分");
+  // 剩下的 6 道都是口述题（大人判定），一题一题点「说得好，通过」
+  const REMAINING = ["扩句训练", "病句修改", "把话写具体", "看图观察", "看图说话", "简短写作"];
+  for (const name of REMAINING) {
+    await page.locator(".lg-cell", { hasText: name }).first().click();
+    await page.waitForSelector("button:has-text('说得好，通过')", { timeout: 15000 });
+    await page.locator("button", { hasText: "说得好，通过" }).first().click();
+    await page.waitForTimeout(800);
+    await page.locator("button", { hasText: "九宫格" }).first().click();
+    await page.waitForSelector(".lg-grid", { timeout: 10000 });
+  }
+  const badge3 = await page.locator(".lg-theme .badge-lite", { hasText: "完成" }).first().innerText();
+  ok("九宫格计数变成 9/9", badge3.replace(/\s/g, "") === "完成9/9", badge3);
+  await shot("lg-06-all-done.png");
+
+  // 积分：9 道全做完才给 20 分（少一道都不给，这里是刚好做完的那一刻）
+  const pts = await (await fetch(`${BASE}/api/points`)).json();
+  ok("9 道全做完 → 加 20 分", pts.balance === 20, `balance=${pts.balance}`);
+
+  // 首页：语言强化现在是清单里的一项待办，做完要自动打勾
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1200);
+  const langCard = (await page.locator("button.task", { hasText: "语言强化" }).first().innerText()).replace(/\s+/g, " ");
+  ok("首页清单里有「语言强化」这一项", langCard.includes("语言强化"), langCard);
+  ok("做完 9 道后任务卡显示已完成", langCard.includes("已完成") && !langCard.includes("待完成"), langCard);
+  ok("任务卡上报出 9 / 9 进度", langCard.includes("已完成 9 / 9 题"), langCard);
+  const cardCount = await page.locator("button.task").count();
+  ok("首页任务清单共 5 项", cardCount === 5, `${cardCount} 项`);
+  const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
+  ok("顶栏任务分母也变成 5", /\/ 5 项任务/.test(headPill), headPill);
+  await shot("lg-07-home.png");
 
   /* ————————————————————————————— 7. 控制台 */
   step("7. 控制台");

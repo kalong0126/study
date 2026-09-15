@@ -2,7 +2,7 @@
  * 后端接口的数据类型（与 server/src 的返回结构一一对应）
  */
 
-export type TaskKey = "math" | "dictation" | "reading" | "review";
+export type TaskKey = "math" | "dictation" | "reading" | "language" | "review";
 export type WrongType = "math" | "chinese";
 export type MasteryState = 0 | 1;
 
@@ -161,6 +161,15 @@ export interface LanguageToday {
   themes: string[];
   /** 当天看图题的配图；从没画过时为 null */
   image: LanguageImageInfo | null;
+  /**
+   * 打卡状态与余额。
+   * 「9 道题全做完」这件事由**后端**判定并回写打卡标记（前端只做即时反馈），
+   * 所以打开页面时要用这里返回的 daily 覆盖本地那份，免得两边对不上。
+   */
+  daily: DailyState;
+  balance: number;
+  /** 后端算出来的当天进度（total 恒为 9，没有题集时为 0） */
+  counts: { total: number; done: number };
 }
 
 export interface TimerState {
@@ -218,6 +227,8 @@ export interface StateSnapshot {
   balance: number;
   /** 最近的兑换记录 */
   redemptions: Redemption[];
+  /** 语言强化当天的进度（首页任务卡「已完成 N / 9 题」用） */
+  language: { total: number; done: number };
 }
 
 export type MarkStatus = "pending" | "running" | "done" | "failed";
