@@ -11,6 +11,7 @@
     "typecheck": "vue-tsc --noEmit",
     "smoke": "node test/smoke.mjs",
     "nav": "node test/nav.mjs",
+    "test:layout": "node test/layout.mjs",
     "test:stop": "node test/stop.mjs",
     "test:mathtimer": "node test/math-timer.mjs",
     "test:wrong": "node test/wrong-answer.mjs",

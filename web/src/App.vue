@@ -3,8 +3,10 @@
  * 应用外壳
  *
  * 两条完全分开的壳：
- *   · 孩子端（/ /math /chinese /story /wrong）：顶栏 + 底部导航 + 特效层
- *   · 家长后台（/admin/**）：独立版式，不出现任何孩子端的导航
+ *   · 孩子端（/ /math /chinese /story /wrong）：固定视口外壳（顶栏 / 内容区 / 底栏 三段式）。
+ *     整页高度锁死为视口高度，只有中间内容区内部滚动 —— 整页没有滚动条，顶栏底栏始终不动。
+ *   · 家长后台（/admin/**）：独立版式，不出现任何孩子端的导航，且**不走固定视口** ——
+ *     后台表单长，要能整页滚动。
  * 这样「孩子看不到后台入口」是靠结构保证的，不是靠藏按钮。
  */
 import { computed, onMounted, onUnmounted } from "vue";
@@ -43,53 +45,56 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- 家长内容后台：独立版式 -->
+  <!-- 家长内容后台：独立版式（普通文档流，允许整页滚动） -->
   <RouterView v-if="isAdmin" />
 
-  <!-- 孩子端 -->
+  <!-- 孩子端：固定视口外壳（顶栏 / 内容区 / 底栏，仅内容区滚动） -->
   <template v-else>
-    <AppHeader />
-    <AppNav />
+    <div class="kid-shell">
+      <AppHeader />
 
-    <main class="wrap">
-      <div v-if="bootState === 'loading'" class="card">
-        <div class="loading-card">
-          正在打开学习台…
-          <div class="skeleton" style="height: 14px; margin: 14px auto 0; max-width: 320px"></div>
+      <main class="wrap">
+        <div v-if="bootState === 'loading'" class="card">
+          <div class="loading-card">
+            正在打开学习台…
+            <div class="skeleton" style="height: 14px; margin: 14px auto 0; max-width: 320px"></div>
+          </div>
         </div>
-      </div>
 
-      <div v-else-if="bootState === 'error'" class="fatal-box">
-        <b>学习台暂时打不开</b>
-        <p style="margin: 10px 0 0">{{ bootError }}</p>
-        <p style="margin: 10px 0 0">
-          常见原因：后端服务没启动、这台设备与服务器不在同一个 Wi-Fi、或者后端启动时报了配置错误。
-        </p>
-        <div class="row" style="margin-top: 14px">
-          <button class="btn primary" type="button" @click="bootstrap()">重试</button>
-          <button class="btn ghost" type="button" @click="ui.openDiag()">看看运行日志</button>
+        <div v-else-if="bootState === 'error'" class="fatal-box">
+          <b>学习台暂时打不开</b>
+          <p style="margin: 10px 0 0">{{ bootError }}</p>
+          <p style="margin: 10px 0 0">
+            常见原因：后端服务没启动、这台设备与服务器不在同一个 Wi-Fi、或者后端启动时报了配置错误。
+          </p>
+          <div class="row" style="margin-top: 14px">
+            <button class="btn primary" type="button" @click="bootstrap()">重试</button>
+            <button class="btn ghost" type="button" @click="ui.openDiag()">看看运行日志</button>
+          </div>
         </div>
-      </div>
 
-      <template v-else>
-        <!--
-          注意：这里必须包一层单根 div，不能让 Transition 直接挂 component。
-          原因：部分视图（如 HomeView）模板有多个根节点，渲染出来是 Fragment。
-          而 Transition 只认「恰好一个根节点」——遇到多根节点时，
-          mode="out-in" 的离开钩子 done 回调不会被触发，isLeaving 永远为 true，
-          结果 RouterView 只渲染一个空占位注释节点：URL 变了但页面全白，
-          必须手动刷新（刷新走的是首次渲染，不经过 Transition）才能显示。
-          包一层带 key 的 div 后，Transition 永远只看到一个根节点，问题根除。
-        -->
-        <RouterView v-slot="{ Component }">
-          <Transition name="fade" mode="out-in">
-            <div :key="route.path" class="view">
-              <component :is="Component" />
-            </div>
-          </Transition>
-        </RouterView>
-      </template>
-    </main>
+        <template v-else>
+          <!--
+            注意：这里必须包一层单根 div，不能让 Transition 直接挂 component。
+            原因：部分视图（如 HomeView）模板有多个根节点，渲染出来是 Fragment。
+            而 Transition 只认「恰好一个根节点」——遇到多根节点时，
+            mode="out-in" 的离开钩子 done 回调不会被触发，isLeaving 永远为 true，
+            结果 RouterView 只渲染一个空占位注释节点：URL 变了但页面全白，
+            必须手动刷新（刷新走的是首次渲染，不经过 Transition）才能显示。
+            包一层带 key 的 div 后，Transition 永远只看到一个根节点，问题根除。
+          -->
+          <RouterView v-slot="{ Component }">
+            <Transition name="fade" mode="out-in">
+              <div :key="route.path" class="view">
+                <component :is="Component" />
+              </div>
+            </Transition>
+          </RouterView>
+        </template>
+      </main>
+
+      <AppNav />
+    </div>
 
     <FxLayer />
   </template>
