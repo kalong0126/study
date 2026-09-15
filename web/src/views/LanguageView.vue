@@ -15,8 +15,9 @@
  */
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { api, describeApiError } from "@/api";
-import type { LanguageProgress, LanguageQuestion, LanguageSet } from "@/api/types";
+import type { LanguageImageInfo, LanguageProgress, LanguageQuestion, LanguageSet } from "@/api/types";
 import Icon from "@/components/Icon.vue";
+import LanguagePicture from "@/components/LanguagePicture.vue";
 import { playText, stopAudio, useAudioState } from "@/composables/useAudio";
 import { useUiStore } from "@/stores/ui";
 
@@ -32,14 +33,19 @@ const set = ref<LanguageSet | null>(null);
 const progress = ref<LanguageProgress>({});
 const themes = ref<string[]>([]);
 
+/** 看图题的配图（文生图模型画的真图，落在后端磁盘上） */
+const image = ref<LanguageImageInfo | null>(null);
+/** 正在画图中 */
+const imgBusy = ref(false);
+/** 画图失败的提示（失败时退回文字描述，题目照样能做） */
+const imgError = ref("");
+
 /** grid = 九宫格目录；q = 单题作答 */
 const view = ref<"grid" | "q">("grid");
 const idx = ref(0);
 
 const questions = computed<LanguageQuestion[]>(() => set.value?.questions ?? []);
 const q = computed<LanguageQuestion | null>(() => questions.value[idx.value] ?? null);
-/** 第 7 题的画面（第 8 题「看图说话」要复用同一场景） */
-const sceneQ = computed<LanguageQuestion | null>(() => questions.value[6] ?? null);
 
 const doneCount = computed(() => Object.values(progress.value).filter((p) => p.status === "done").length);
 const wrongCount = computed(() => Object.values(progress.value).filter((p) => p.status === "wrong").length);
@@ -101,6 +107,8 @@ async function load(): Promise<void> {
     set.value = r.set;
     progress.value = r.progress ?? {};
     themes.value = r.themes ?? [];
+    image.value = r.image ?? null;
+    imgError.value = "";
   } catch (e) {
     loadError.value = describeApiError(e);
   } finally {
@@ -120,6 +128,9 @@ async function generate(force: boolean): Promise<void> {
     drafts.value = {};
     view.value = "grid";
     idx.value = 0;
+    // 换题后场景变了，旧配图作废 —— 等孩子打开看图题时再按新场景画一张
+    image.value = null;
+    imgError.value = "";
     ui.toast(r.cached ? `今天已经有题目了（主题：${r.set.theme}）` : `出好了！今日主题：${r.set.theme}`);
   } catch (e) {
     ui.toast(describeApiError(e));
@@ -127,6 +138,47 @@ async function generate(force: boolean): Promise<void> {
     generating.value = false;
   }
 }
+
+/* ------------------------------------------------------------ 看图题的配图 */
+
+/** 当前这题要不要配图（看图观察 + 复用同一场景的看图说话） */
+const needImage = computed(
+  () => q.value?.type === "image_observation" || q.value?.type === "image_speaking",
+);
+
+/**
+ * 确保今天的图已经画好。
+ *
+ * 只在孩子真的打开看图题时才画（省 token / 省钱），画好之后按天缓存，
+ * 刷新页面、换设备都不用重画。失败的画退回文字画面描述，题目照样能做。
+ */
+async function ensureImage(force = false): Promise<void> {
+  if (!set.value || !needImage.value) return;
+  if (!force && image.value?.ready) return;
+  if (imgBusy.value) return;
+  imgBusy.value = true;
+  imgError.value = "";
+  try {
+    const r = await api.generateLanguageImage({ force });
+    image.value = r.image;
+    if (!r.image?.ready) imgError.value = "图片没能画出来，先用文字描述给你看～";
+  } catch (e) {
+    imgError.value = describeApiError(e);
+  } finally {
+    imgBusy.value = false;
+  }
+}
+
+/** 图片加载失败（文件被删 / 网络抖动）时也不要留一个裂图 */
+function onImgError(): void {
+  image.value = null;
+  imgError.value = "图片没加载出来，点下面按钮重新画一张。";
+}
+
+// 打开某一题时（含上一题/下一题切换）顺手把图准备好
+watch([view, idx], () => {
+  if (view.value === "q") void ensureImage();
+});
 
 /* ------------------------------------------------------------ 作答与判卷 */
 
@@ -241,7 +293,11 @@ const readText = computed(() => {
   if (cur.type === "word") return [cur.word, cur.collocation, cur.example].filter(Boolean).join("，");
   if (cur.type === "sentence_order") return `请把下面的句子排好顺序。${cur.sentences.join(" ")}`;
   if (cur.type === "sentence_correction") return cur.wrongSentence || cur.question;
-  if (cur.type === "image_observation") return cur.imagePrompt;
+  // 看图题**不念画面描述** —— 那等于把答案读出来，念问题就够了
+  if (cur.type === "image_observation")
+    return ["仔细看图，回答问题。", ...cur.observationQuestions].filter(Boolean).join("。");
+  if (cur.type === "image_speaking")
+    return [cur.question, ...cur.guideQuestions].filter(Boolean).join("。");
   if (cur.type === "word_collocation") {
     return [cur.question, cur.options.length ? `选项：${cur.options.join("，")}` : ""].filter(Boolean).join("。");
   }
@@ -499,10 +555,17 @@ onUnmounted(() => stopAudio());
 
     <!-- 7. 看图观察 -->
     <template v-else-if="q.type === 'image_observation'">
-      <div class="lg-pic">
-        <span class="lg-pic-tag"><Icon name="eye" :size="15" />画面描述</span>
-        {{ q.imagePrompt }}
-      </div>
+      <LanguagePicture
+        :image="image"
+        :busy="imgBusy"
+        :error="imgError"
+        @redraw="ensureImage(true)"
+        @broken="onImgError"
+      />
+      <details v-if="q.imagePrompt" class="lg-pic-fold">
+        <summary>看不清图？点这里看画面文字提示</summary>
+        <p>{{ q.imagePrompt }}</p>
+      </details>
       <ol class="lg-qs">
         <li v-for="(oq, i) in q.observationQuestions" :key="i">
           <span class="qn">{{ i + 1 }}</span><span>{{ oq }}</span>
@@ -512,10 +575,14 @@ onUnmounted(() => stopAudio());
 
     <!-- 8. 看图说话 -->
     <template v-else-if="q.type === 'image_speaking'">
-      <div v-if="sceneQ?.imagePrompt" class="lg-pic">
-        <span class="lg-pic-tag"><Icon name="eye" :size="15" />还是这幅画面</span>
-        {{ sceneQ.imagePrompt }}
-      </div>
+      <LanguagePicture
+        :image="image"
+        :busy="imgBusy"
+        :error="imgError"
+        caption="还是这幅图"
+        @redraw="ensureImage(true)"
+        @broken="onImgError"
+      />
       <div class="lg-big" style="margin-top: 12px">{{ q.question }}</div>
       <ol class="lg-qs">
         <li v-for="(g, i) in q.guideQuestions" :key="i"><span class="qn">{{ i + 1 }}</span><span>{{ g }}</span></li>

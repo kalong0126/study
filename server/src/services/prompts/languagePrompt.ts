@@ -1336,20 +1336,20 @@ function normalizeQuestion(raw: Record<string, unknown>, index: number): Languag
       break;
     }
 
-    /* 7. 看图观察 —— 场景文字 + 观察问题，答案逐条列出 */
+    /* 7. 看图观察 —— 真实配图（文生图）+ 观察问题，答案逐条列出 */
     case 6: {
-      base.question = base.question || "仔细读一读上面的画面，再回答下面的问题。";
+      base.question = base.question || "仔细看一看上面的图，再回答下面的问题。";
       base.referenceList = pickArr(raw, "answer");
       base.reference = base.referenceList.join("\n");
-      base.howTo = "先读两三遍画面描述，再一个问题一个问题地说给大人听。";
+      base.howTo = "先仔细看图，再一个问题一个问题地说给大人听。";
       break;
     }
 
-    /* 8. 看图说话 —— 复用第 7 题场景，口述一段话 */
+    /* 8. 看图说话 —— 复用第 7 题同一张图，口述一段话 */
     case 7: {
-      base.question = base.question || "看着第 7 题的图画，用 3～5 句话把它说完整。";
+      base.question = base.question || "看着上面的图，用 3～5 句话把它说完整。";
       base.reference = pickStr(raw, "answer");
-      base.howTo = "按提示的问题，一段一段地说，最后连起来说一遍。";
+      base.howTo = "看着图，按提示的问题一段一段地说，最后连起来说一遍。";
       break;
     }
 

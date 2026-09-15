@@ -428,6 +428,7 @@ export async function resetToday(
       `mathElapsed:${date}`,
       `language:${date}`,
       `languageProgress:${date}`,
+      `languageImage:${date}`,
     ];
     let kv = 0;
     for (const k of dailyKeys) {

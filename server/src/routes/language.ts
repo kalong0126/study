@@ -11,11 +11,14 @@
  *
  * 出题走 `story` 用途的大模型配置（该用途的接口地址被固定在 DeepSeek）。
  */
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "express";
-import { loadConfig, resolveLlm } from "../config.js";
+import { loadConfig, resolveImagegen, resolveLlm } from "../config.js";
 import { todayStr } from "../db/index.js";
 import { kvGet, kvSet } from "../db/repo/state.js";
 import { currentChildId } from "../services/child.js";
+import { generateImage, imageExists, imageFileName } from "../services/imagegen.js";
 import { chat, LlmError } from "../services/llm.js";
 import { logLlm } from "../logger.js";
 import {
@@ -63,6 +66,21 @@ function normDate(v: unknown): string {
 
 const setKey = (date: string): string => `language:${date}`;
 const progKey = (date: string): string => `languageProgress:${date}`;
+const imgKey = (date: string): string => `languageImage:${date}`;
+
+/**
+ * 当天看图题的配图元信息（图片文件落在 imagegen.dir 下）。
+ * `file` 同时当前端拿图的缓存版本号用 —— 换过主题、重画过，文件名就变了，
+ * 浏览器不会拿到上一张旧图。
+ */
+export interface LanguageImageMeta {
+  file: string;
+  model: string;
+  ms: number;
+  /** 实际发给文生图模型的提示词（画得不对时便于排查） */
+  prompt: string;
+  createdAt: string;
+}
 
 async function readRecent(childId: number): Promise<LanguageRecent> {
   const r = await kvGet<Partial<LanguageRecent>>(childId, "languageRecent");
@@ -160,6 +178,33 @@ async function generateSet(
 
 /* ------------------------------------------------------------------ 读取 */
 
+/** 看图题的旧引导文案 → 新文案（只在「还是没有真图」的版本里生成过这几句） */
+const STALE_IMAGE_HOWTO: Record<string, string> = {
+  "先读两三遍画面描述，再一个问题一个问题地说给大人听。": "先仔细看图，再一个问题一个问题地说给大人听。",
+  "按提示的问题，一段一段地说，最后连起来说一遍。": "看着图，按提示的问题一段一段地说，最后连起来说一遍。",
+};
+
+/**
+ * 修正老题集里看图题的引导文案。
+ *
+ * 在本版本之前，「看图观察 / 看图说话」只有一段文字描述、没有真图，所以引导文案
+ * 写的是「先读两三遍画面描述」；现在真的配了图，那句话就自相矛盾了。
+ * 用**精确匹配**只换掉我们自己生成过的旧句子（howTo 从不来自模型，不会误伤），
+ * 改完就地回写，省得家长为了看到正确文案还得把整套题换掉。
+ */
+function fixStaleHowTo(set: LanguageSet): boolean {
+  let changed = false;
+  for (const q of set.questions) {
+    if (q.type !== "image_observation" && q.type !== "image_speaking") continue;
+    const next = STALE_IMAGE_HOWTO[q.howTo];
+    if (next) {
+      q.howTo = next;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 /** 当天的题集与作答进度（家长后台重置后前端刷新即用） */
 languageRouter.get(
   "/language/today",
@@ -167,11 +212,157 @@ languageRouter.get(
     const childId = await currentChildId();
     const date = normDate(req.query.date);
     const set = (await kvGet<LanguageSet>(childId, setKey(date))) ?? null;
+    if (set && fixStaleHowTo(set)) await kvSet(childId, setKey(date), set);
     const progress = (await kvGet<LanguageProgress>(childId, progKey(date))) ?? {};
     const recent = await readRecent(childId);
-    ok(res, { date, set, progress, themes: recent.themes });
+    ok(res, { date, set, progress, themes: recent.themes, image: await imageState(childId, date) });
   }),
 );
+
+/* ------------------------------------------------------------------ 配图 */
+
+/**
+ * 当前配图状态。
+ *
+ * 三种情况都要让前端能区分开：
+ *   · file 有、磁盘上也有  → 可以直接 <img src>
+ *   · 题集里的场景变了      → 之前那张图作废（应重新画）
+ *   · 从没画过 / 文件丢了   → 前端显示「正在画画」并触发生成
+ */
+async function imageState(
+  childId: number,
+  date: string,
+): Promise<{ ready: boolean; url: string; version: string; model: string; createdAt: string } | null> {
+  const meta = await kvGet<LanguageImageMeta>(childId, imgKey(date));
+  if (!meta?.file) return null;
+  const dir = resolveImagegen(loadConfig()).dir;
+  const ready = imageExists(dir, meta.file);
+  return {
+    ready,
+    // 用 file 当版本号：重画之后 url 变化，浏览器缓存自然失效
+    url: `/api/language/image/${date}?v=${encodeURIComponent(meta.file)}`,
+    version: meta.file,
+    model: meta.model,
+    createdAt: meta.createdAt,
+  };
+}
+
+/**
+ * 给当天的「看图观察 / 看图说话」画一张真实的图。
+ *
+ * 幂等：已经画过、且场景没变（文件名一致）就直接返回，不重复花钱。
+ * 画完把图片下载到本地（厂商给的地址只有 24 小时有效），只把元信息存 KV。
+ */
+languageRouter.post(
+  "/language/image",
+  ah(async (req, res) => {
+    const childId = await currentChildId();
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const date = normDate(body.date);
+    const force = body.force === true;
+
+    const set = await kvGet<LanguageSet>(childId, setKey(date));
+    if (!set) {
+      fail(res, 404, `还没有 ${date} 的语言强化题目，请先生成`);
+      return;
+    }
+    const scene = String(set.questions[6]?.imagePrompt ?? "").trim();
+    if (!scene) {
+      fail(res, 400, "今天的第 7 题（看图观察）没有画面描述，无法配图");
+      return;
+    }
+
+    const cfg = loadConfig();
+    const ig = resolveImagegen(cfg);
+    const file = imageFileName(date, scene);
+    const prev = await kvGet<LanguageImageMeta>(childId, imgKey(date));
+
+    if (!force && prev?.file === file && imageExists(ig.dir, file)) {
+      ok(res, { image: await imageState(childId, date), cached: true });
+      return;
+    }
+
+    let out;
+    try {
+      out = await generateImage(date, scene, cfg);
+    } catch (e) {
+      if (!handleImageError(res, e)) throw e;
+      return;
+    }
+
+    const meta: LanguageImageMeta = {
+      file: out.file,
+      model: out.model,
+      ms: out.ms,
+      prompt: out.prompt,
+      createdAt: new Date().toISOString(),
+    };
+    await kvSet(childId, imgKey(date), meta);
+
+    ok(res, {
+      image: await imageState(childId, date),
+      cached: false,
+      ms: out.ms,
+      model: out.model,
+      bytes: out.bytes,
+    });
+  }),
+);
+
+/**
+ * 取当天的配图。
+ *
+ * 只认 KV 里记着的那个文件名 —— 不拿 URL 参数去拼磁盘路径（避免路径穿越），
+ * 文件本身是按「日期 + 场景哈希」生成的，天然不会重名。
+ */
+languageRouter.get(
+  "/language/image/:date",
+  ah(async (req, res) => {
+    const childId = await currentChildId();
+    const date = normDate(req.params.date);
+    const meta = await kvGet<LanguageImageMeta>(childId, imgKey(date));
+    if (!meta?.file) {
+      fail(res, 404, `还没有 ${date} 的配图`);
+      return;
+    }
+    const ig = resolveImagegen(loadConfig());
+    const abs = path.join(ig.dir, path.basename(meta.file));
+    if (!imageExists(ig.dir, path.basename(meta.file))) {
+      fail(res, 404, "配图文件已丢失，请重新生成");
+      return;
+    }
+    // 文件名带场景哈希（即版本号），换了图 url 就变 → 可以放心长缓存
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(abs);
+  }),
+);
+
+/** 清掉当天的题目、作答与配图（家长后台「重置今日」也会清这几个键） */
+languageRouter.post(
+  "/language/reset",
+  ah(async (req, res) => {
+    const childId = await currentChildId();
+    const date = normDate((req.body ?? {}).date);
+    const meta = await kvGet<LanguageImageMeta>(childId, imgKey(date));
+    await kvSet(childId, setKey(date), null);
+    await kvSet(childId, progKey(date), {});
+    await kvSet(childId, imgKey(date), null);
+    // 图片文件一并删掉：今天画的图今天作废，留着只会占磁盘
+    if (meta?.file) {
+      const ig = resolveImagegen(loadConfig());
+      await cleanupOne(ig.dir, meta.file);
+    }
+    ok(res, { date });
+  }),
+);
+
+async function cleanupOne(dir: string, file: string): Promise<void> {
+  try {
+    await fs.promises.unlink(path.join(dir, path.basename(file)));
+  } catch {
+    /* 文件不在了也无所谓 */
+  }
+}
 
 /* ------------------------------------------------------------------ 出题 */
 
@@ -191,6 +382,7 @@ languageRouter.post(
     if (!force) {
       const existing = await kvGet<LanguageSet>(childId, setKey(date));
       if (existing?.questions?.length === 9) {
+        if (fixStaleHowTo(existing)) await kvSet(childId, setKey(date), existing);
         ok(res, {
           set: existing,
           cached: true,
@@ -270,18 +462,6 @@ languageRouter.post(
   }),
 );
 
-/** 清掉当天的题目与作答（家长后台「重置今日」也会清这两个键） */
-languageRouter.post(
-  "/language/reset",
-  ah(async (req, res) => {
-    const childId = await currentChildId();
-    const date = normDate((req.body ?? {}).date);
-    await kvSet(childId, setKey(date), null);
-    await kvSet(childId, progKey(date), {});
-    ok(res, { date });
-  }),
-);
-
 /* ------------------------------------------------------------ 错误翻译 */
 
 /** 语言强化的失败提示：比通用文案更具体（家长一看就知道该改哪儿） */
@@ -300,6 +480,32 @@ function handleLanguageError(res: import("express").Response, e: unknown): boole
   res.status(status).json({
     ok: false,
     error: `${e.message}${hint}`,
+    kind,
+    detail: e.detail,
+  });
+  return true;
+}
+
+/**
+ * 配图失败的提示。
+ * 配图是「锦上添花」的一步：失败时前端会退回纯文字画面描述，题目照样能做，
+ * 所以文案要说明「不影响做题」，别让家长以为整套练习都坏了。
+ */
+function handleImageError(res: import("express").Response, e: unknown): boolean {
+  if (!(e instanceof LlmError)) return false;
+  const kind = e.kind;
+  const status = kind === "config" ? 400 : kind === "timeout" ? 504 : 502;
+  const hint =
+    kind === "config"
+      ? "（家长请在后台「系统与数据」里确认判卷模型的 API Key 已填写 —— 画图默认复用它那把阿里云百炼 Key；也可以单独配 IMAGEGEN_API_KEY）"
+      : kind === "timeout"
+        ? "（画图比较慢，可以再点一次试试）"
+        : kind === "http" && Number((e.detail as { status?: number })?.status) === 401
+          ? "（API Key 无效或不属于阿里云百炼北京地域，画图接口拒绝了这个 Key）"
+          : "（不影响做题，这题会退回用文字描述画面）";
+  res.status(status).json({
+    ok: false,
+    error: `画图失败：${e.message}${hint}`,
     kind,
     detail: e.detail,
   });

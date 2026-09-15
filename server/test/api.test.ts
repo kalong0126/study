@@ -24,6 +24,7 @@ const MOCK = `http://127.0.0.1:${MOCK_PORT}`;
 
 const TEST_DB = path.join(SERVER_ROOT, "data", "_test.db");
 const TEST_TTS = path.join(SERVER_ROOT, "data", "_test_tts");
+const TEST_IMAGES = path.join(SERVER_ROOT, "data", "_test_images");
 const TEST_BACKUP = path.join(SERVER_ROOT, "data", "_test_backup");
 const TEST_CONFIG = path.join(SERVER_ROOT, "config", "config.test.yaml");
 const SERVER_LOG = path.join(SERVER_ROOT, "logs", "_test-server.log");
@@ -82,7 +83,10 @@ async function api(method: string, p: string, body?: unknown, raw = false): Prom
 async function setMockMode(mode: string): Promise<void> {
   await fetch(`${MOCK}/__mode`, { method: "POST", body: JSON.stringify({ mode }) });
 }
-async function mockCalls(): Promise<{ count: number; calls: { model: string; prompt: string; hasImage: boolean }[] }> {
+async function mockCalls(): Promise<{
+  count: number;
+  calls: { url: string; model: string; prompt: string; hasImage: boolean }[];
+}> {
   const r = await fetch(`${MOCK}/__calls`);
   return (await r.json()) as never;
 }
@@ -103,7 +107,7 @@ function prepare(): void {
       /* ignore */
     }
   }
-  for (const d of [TEST_TTS, TEST_BACKUP]) {
+  for (const d of [TEST_TTS, TEST_IMAGES, TEST_BACKUP]) {
     try {
       fs.rmSync(d, { recursive: true, force: true });
     } catch {
@@ -132,6 +136,16 @@ llm:
   timeoutMs: { story: 4000, mark: 4000, suggest: 4000 }
   retries: 1
   temperature: { story: 0.9, mark: 0, suggest: 0.5 }
+imagegen:
+  enabled: true
+  model: mock-image
+  # mock 的「千问文生图同步接口」：返回一个指向 mock 自己的图片地址，
+  # 这样「拿地址 → 下载 → 落盘」整条链路都真的跑一遍
+  baseUrl: http://127.0.0.1:${MOCK_PORT}/__image
+  apiKey: sk-test-image-key
+  size: 1328*1328
+  dir: ./data/_test_images
+  timeoutMs: 8000
 tts:
   provider: edge
   voice: zh-CN-XiaoyiNeural
@@ -545,6 +559,57 @@ async function main(): Promise<void> {
     const lAfter = await api("GET", "/api/language/today");
     eq("L34 reset 后当天题目被清掉", lAfter.json.set, null);
     ok("L35 reset 不影响「最近主题」历史", (lAfter.json.themes as string[]).length >= 1);
+
+    /* ---- 配图：文生图（千问 qwen-image 同步接口） ---- */
+    // 覆盖「出题 → 画图 → 前端能取到真图」这条链路，
+    // 以及幂等（同一张图不重复花钱）、失败降级（画不出来也不影响做题）两条边界。
+    await resetMock();
+    await setMockMode("ok");
+    await api("POST", "/api/language/generate", {});
+    const imgBefore = await api("GET", "/api/language/today");
+    eq("L36 还没画图时 image 为 null", imgBefore.json.image, null);
+
+    const ig1 = await api("POST", "/api/language/image", {});
+    eq("L37 画图成功返回 200", ig1.status, 200);
+    const imgInfo = ig1.json.image as { ready: boolean; url: string; version: string };
+    eq("L38 画好后 ready=true", imgInfo?.ready, true);
+    ok("L39 给的是我们自己后端的图片地址", imgInfo?.url.startsWith("/api/language/image/") === true, imgInfo?.url);
+
+    const pic = await api("GET", imgInfo.url, undefined, true);
+    eq("L40 图片可下载且为 PNG", pic.headers.get("content-type"), "image/png");
+    ok("L41 图片内容非空", (pic.buf?.length ?? 0) > 0, `len=${pic.buf?.length ?? 0}`);
+
+    // 只挑文生图那次请求来看（同一轮里还有出题的 chat 请求）
+    const iprompt = (await mockCalls()).calls.find((c) => c.url === "/__image")?.prompt ?? "";
+    ok("L42 发给文生图的提示词带上了画面描述", iprompt.includes("放风筝"), iprompt.slice(0, 90));
+    ok("L43 提示词钉死了「不出现文字」", iprompt.includes("不能出现任何文字"), iprompt.slice(0, 90));
+
+    // 幂等：同一场景不重复画（不重复花钱）
+    await resetMock();
+    const ig2 = await api("POST", "/api/language/image", {});
+    eq("L44 同一场景重复请求走缓存", ig2.json.cached, true);
+    eq("L45 缓存时不再调用文生图接口", (await mockCalls()).count, 0);
+
+    // 画图失败：返回 502，但题目本身照常可用（前端会退回文字描述）
+    await setMockMode("imgfail");
+    const igBad = await api("POST", "/api/language/image", { force: true });
+    eq("L46 文生图失败返回 502", igBad.status, 502);
+    ok("L47 失败提示写清是「画图失败」", String(igBad.json.error).includes("画图失败"), String(igBad.json.error).slice(0, 70));
+    await setMockMode("ok");
+    const stillOk = await api("GET", "/api/language/today");
+    eq("L48 画图失败不影响题目本身", (stillOk.json.set as { questions: unknown[] }).questions.length, 9);
+
+    // 家长后台「重置今日」要把当天的配图记录一起清掉
+    const imageDate = String(stillOk.json.date);
+    await api("POST", "/api/admin/reset", { scope: "today" });
+    const afterReset = await api("GET", "/api/language/today");
+    eq("L49 resetToday 清掉当天配图记录", afterReset.json.image, null);
+    const picGone = await api("GET", `/api/language/image/${imageDate}`);
+    eq("L50 重置后配图地址返回 404", picGone.status, 404);
+
+    // 没有题目时要画图 → 明确报 404（而不是画一张无意义的图）
+    const igNoSet = await api("POST", "/api/language/image", {});
+    eq("L51 没有题目时画图返回 404", igNoSet.status, 404);
 
     /* ============================ D. 语音合成 ============================ */
     group("D. 语音合成（Edge TTS）");
@@ -1005,7 +1070,7 @@ function cleanup(): void {
       /* ignore */
     }
   }
-  for (const d of [TEST_TTS, TEST_BACKUP]) {
+  for (const d of [TEST_TTS, TEST_IMAGES, TEST_BACKUP]) {
     try {
       fs.rmSync(d, { recursive: true, force: true });
     } catch {

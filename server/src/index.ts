@@ -31,6 +31,7 @@ import { seedLessons } from "./seed/index.js";
 import { scheduleDailyBackup, stopDailyBackup } from "./services/backup.js";
 import { currentChildId } from "./services/child.js";
 import { failStaleTasks } from "./services/mark.js";
+import { imagegenInfo } from "./services/imagegen.js";
 import { setRuntimeVoice, ttsInfo } from "./services/tts/index.js";
 
 function localAddresses(port: number): string[] {
@@ -216,6 +217,18 @@ async function main(): Promise<void> {
       "大模型配置",
     );
   }
+
+  // 文生图（语言强化看图题的配图）。它默认复用判卷那把百炼 Key，配错了一看就知道
+  const ig = imagegenInfo();
+  logSys.info(
+    {
+      enabled: ig.enabled,
+      model: ig.model,
+      size: ig.size,
+      key: ig.configured ? `已配置（${ig.keyFrom === "own" ? "独立" : "复用判卷 Key"}）` : "(未配置，看图题将退回文字描述)",
+    },
+    "文生图配置",
+  );
 
   const app = createApp();
   const server = app.listen(cfg.server.port, cfg.server.host, () => {

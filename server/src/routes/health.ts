@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { loadConfig, startupWarnings } from "../config.js";
+import { imagegenSummary, loadConfig, resolveImagegen, startupWarnings } from "../config.js";
 import { db } from "../db/index.js";
 import { countChars, listLessons } from "../db/repo/lessons.js";
 import { llmConfigSummary } from "../services/llm.js";
+import { imageCount } from "../services/imagegen.js";
 import { ttsInfo, ttsStats } from "../services/tts/index.js";
 import { ah, ok } from "./helpers.js";
 
@@ -22,6 +23,8 @@ healthRouter.get(
       uptimeMs: Date.now() - startedAt,
       db: { driver: db().driver, lessons: lessons.length, chars },
       llm: llmConfigSummary(),
+      // 文生图（语言强化看图题的配图）：家长在后台能一眼看出「用的哪个模型、key 从哪来」
+      imagegen: { ...imagegenSummary(cfg), files: await imageCount(resolveImagegen(cfg).dir) },
       tts: { ...ttsInfo(), cacheCount: tts.count, cacheBytes: tts.bytes },
       server: { port: cfg.server.port, host: cfg.server.host, authEnabled: cfg.server.auth.enabled },
       warnings: startupWarnings(cfg),

@@ -76,6 +76,17 @@ const ConfigSchema = z.object({
     }),
   }),
 
+  imagegen: z.object({
+    enabled: z.boolean().default(true),
+    model: z.string().default("qwen-image-plus"),
+    baseUrl: z.string().default(""),
+    /** 留空 = 回落 mark（判卷）用途的 Key —— 都是阿里云百炼，一把 Key 通用 */
+    apiKey: z.string().default(""),
+    size: z.string().default("1328*1328"),
+    dir: z.string().default("./data/images"),
+    timeoutMs: z.number().int().min(1000).default(120000),
+  }),
+
   tts: z.object({
     provider: z.enum(["edge"]).default("edge"),
     voice: z.string().default("zh-CN-XiaoyiNeural"),
@@ -160,6 +171,7 @@ function normalize(parsed: unknown): Record<string, unknown> {
     server: { ...server, auth: obj(server.auth) },
     db: { ...db, sqlite: obj(db.sqlite), mysql: obj(db.mysql) },
     llm: { ...llm, timeoutMs: obj(llm.timeoutMs), temperature: obj(llm.temperature) },
+    imagegen: obj(root.imagegen),
     tts: obj(root.tts),
     logging: obj(root.logging),
     backup: obj(root.backup),
@@ -201,6 +213,7 @@ export function loadConfig(force = false): AppConfig {
   // 目录统一解析为绝对路径
   cfg.db.sqlite.file = resolveFromRoot(cfg.db.sqlite.file);
   cfg.tts.cacheDir = resolveFromRoot(cfg.tts.cacheDir);
+  cfg.imagegen.dir = resolveFromRoot(cfg.imagegen.dir);
   cfg.logging.dir = resolveFromRoot(cfg.logging.dir);
   cfg.backup.dir = resolveFromRoot(cfg.backup.dir);
 
@@ -210,7 +223,7 @@ export function loadConfig(force = false): AppConfig {
 
 /** 需要启动时就建好的目录 */
 export function ensureDirs(cfg: AppConfig): void {
-  for (const d of [path.dirname(cfg.db.sqlite.file), cfg.tts.cacheDir, cfg.logging.dir, cfg.backup.dir]) {
+  for (const d of [path.dirname(cfg.db.sqlite.file), cfg.tts.cacheDir, cfg.imagegen.dir, cfg.logging.dir, cfg.backup.dir]) {
     fs.mkdirSync(d, { recursive: true });
   }
 }
@@ -364,6 +377,66 @@ export function resolveLlm(cfg: AppConfig, purpose: LlmPurpose): ResolvedLlm {
 /** 三个用途一次全解析出来（诊断页面 / 启动日志用） */
 export function resolveAllLlm(cfg: AppConfig): ResolvedLlm[] {
   return (["story", "mark", "suggest"] as const).map((p) => resolveLlm(cfg, p));
+}
+
+/* ------------------------------------------------------------ 文生图 */
+
+/** 阿里云百炼「千问-文生图」同步接口的默认地址（config 里没写时用） */
+export const DEFAULT_IMAGE_URL =
+  "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+
+export interface ResolvedImagegen {
+  enabled: boolean;
+  model: string;
+  url: string;
+  apiKey: string;
+  size: string;
+  dir: string;
+  timeoutMs: number;
+  /** Key 是从哪儿来的（诊断用：独立配置 / 复用判卷 Key） */
+  keyFrom: "own" | "mark" | "none";
+  configured: boolean;
+}
+
+/**
+ * 解析文生图该怎么调。
+ *
+ * Key 的优先级：imagegen.apiKey → mark（判卷）用途的 Key。
+ * 判卷用的就是阿里云百炼，而千问文生图也在百炼上 —— 同一把 Key 通用，
+ * 所以家长在后台填过判卷 Key 之后，画图功能不需要任何额外配置就能用。
+ */
+export function resolveImagegen(cfg: AppConfig): ResolvedImagegen {
+  const ig = cfg.imagegen;
+  const mark = resolveLlm(cfg, "mark");
+  const ownKey = (ig.apiKey || "").trim();
+  const apiKey = ownKey || mark.apiKey;
+  const keyFrom: ResolvedImagegen["keyFrom"] = ownKey ? "own" : mark.apiKey ? "mark" : "none";
+
+  return {
+    enabled: ig.enabled,
+    model: ig.model,
+    url: (ig.baseUrl || DEFAULT_IMAGE_URL).trim(),
+    apiKey,
+    size: ig.size,
+    dir: ig.dir,
+    timeoutMs: ig.timeoutMs,
+    keyFrom,
+    configured: Boolean(ig.model && apiKey),
+  };
+}
+
+/** 文生图配置摘要（/api/health 展示，密钥脱敏） */
+export function imagegenSummary(cfg: AppConfig): Record<string, unknown> {
+  const r = resolveImagegen(cfg);
+  return {
+    enabled: r.enabled,
+    model: r.model,
+    url: r.url,
+    size: r.size,
+    timeoutMs: r.timeoutMs,
+    apiKey: r.apiKey ? `${maskKey(r.apiKey)} · ${r.keyFrom === "own" ? "独立" : "复用判卷 Key"}` : "(未配置)",
+    ok: r.enabled && r.configured,
+  };
 }
 
 /**

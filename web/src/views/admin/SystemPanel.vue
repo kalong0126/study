@@ -341,6 +341,19 @@ async function resetAll(): Promise<void> {
         </div>
       </div>
 
+      <div class="field">
+        <label>看图配图 · 语言强化「看图观察」（文生图）</label>
+        <div class="row" style="gap: 8px; flex-wrap: wrap; align-items: center">
+          <span class="badge-lite">{{ health.imagegen.enabled ? health.imagegen.model : "已关闭" }}</span>
+          <span class="badge-lite" :class="health.imagegen.ok ? '' : 'err'">{{ health.imagegen.ok ? "可用" : "不可用" }}</span>
+          <span style="font-size: 13px; color: var(--ink2)">已有 {{ health.imagegen.files }} 张图</span>
+        </div>
+        <div style="margin-top: 6px; font-size: 12.5px; color: var(--ink3)">
+          密钥 {{ health.imagegen.apiKey }}。
+          {{ health.imagegen.ok ? "孩子打开看图题时会自动画一张真图（约 7 秒），画好就存起来，不会再重复花钱。" : "没有可用密钥时，看图题会退回文字描述，不影响做题。" }}
+        </div>
+      </div>
+
       <div class="field" style="margin-top: 4px">
         <label>大模型配置（保存即生效）</label>
         <div class="grid2">

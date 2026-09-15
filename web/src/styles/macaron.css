@@ -476,8 +476,23 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .lg-order-chip:hover:not(:disabled) { border-color: var(--blue); background: #F6FBFF; }
 .lg-order-chip:disabled { cursor: default; opacity: .6; }
 
-.lg-pic { position: relative; border: 2px dashed #CFE3F7; border-radius: 16px; padding: 30px 14px 14px; background: linear-gradient(160deg, #FBFDFF, #F3FAFF); font-size: 16px; line-height: 2; color: var(--ink); font-weight: 600; }
-.lg-pic-tag { position: absolute; top: -12px; left: 14px; display: inline-flex; align-items: center; gap: 5px; background: #EAF3FF; color: var(--blue-d); border-radius: 999px; padding: 3px 11px; font-size: 11.5px; font-weight: 800; }
+/* ---------- 语言强化 · 看图题配图 ---------- */
+/* 看图观察 / 看图说话共用一块真图：图占满内容宽度，圆角与卡片一致；
+   还没画好时用同尺寸虚线占位，避免出现后把下面的问题顶下去（布局跳动）。 */
+.lg-imgwrap { position: relative; margin: 4px 0 12px; }
+.lg-imgcap { display: inline-flex; align-items: center; gap: 5px; background: #EAF3FF; color: var(--blue-d); border-radius: 999px; padding: 3px 11px; font-size: 11.5px; font-weight: 800; margin-bottom: 8px; }
+/* 高度上限刻意压到 46vh：孩子端是固定视口（只有内容区滚），
+   图占满屏就没法一边看图一边读问题了 —— 46vh 能让图和问题同屏。 */
+.lg-img { display: block; width: 100%; max-height: 46vh; object-fit: contain; border-radius: 16px; border: 2px solid #E3EFFB; background: #FBFDFF; box-shadow: 0 6px 18px rgba(120, 160, 205, .12); }
+.lg-imgph { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 34vh; padding: 22px 16px; text-align: center; border: 2px dashed #CFE3F7; border-radius: 16px; background: linear-gradient(160deg, #FBFDFF, #F3FAFF); color: var(--ink2); }
+.lg-imgph-i { color: var(--blue-d); opacity: .75; }
+.lg-imgph b { font-size: 15.5px; color: var(--ink); }
+.lg-imgph-s { font-size: 12.5px; color: var(--ink3); line-height: 1.7; max-width: 420px; }
+.lg-imgph .btn { margin-top: 6px; }
+/* 文字画面描述：默认折叠，只有一张图看不清时才展开（不然等于直接给孩子答案） */
+.lg-pic-fold { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 12px; background: #FCFDFF; padding: 8px 12px; }
+.lg-pic-fold summary { cursor: pointer; font-size: 12.5px; color: var(--blue-d); font-weight: 700; }
+.lg-pic-fold p { margin: 8px 0 2px; font-size: 14.5px; line-height: 1.95; color: var(--ink); }
 .lg-qs { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-direction: column; gap: 9px; }
 .lg-qs li { display: flex; gap: 9px; font-size: 15.5px; font-weight: 700; color: var(--ink); line-height: 1.7; }
 .lg-qs li .qn { width: 22px; height: 22px; flex: none; border-radius: 7px; background: #EAF3FB; color: var(--blue-d); font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: 3px; }

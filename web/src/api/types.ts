@@ -135,6 +135,23 @@ export interface LanguageProgressEntry {
 
 export type LanguageProgress = Record<string, LanguageProgressEntry>;
 
+/**
+ * 看图题的配图（文生图模型画的真实图片）。
+ *
+ * 图片落在后端磁盘上（厂商给的地址只有 24 小时有效，不能直接给前端用），
+ * 这里只拿到我们自己后端的地址；`version` 是文件的场景哈希，
+ * 换过主题重画之后地址里的版本号会变，浏览器不会拿到上一张旧图。
+ */
+export interface LanguageImageInfo {
+  /** 图片是否已经在磁盘上（false = 还没画好，或文件丢了） */
+  ready: boolean;
+  /** 可直接用于 <img src> 的地址 */
+  url: string;
+  version: string;
+  model: string;
+  createdAt: string;
+}
+
 /** 当天的题集 + 作答进度（没有题集时 set 为 null） */
 export interface LanguageToday {
   date: string;
@@ -142,6 +159,8 @@ export interface LanguageToday {
   progress: LanguageProgress;
   /** 最近用过的主题（生成时会避开） */
   themes: string[];
+  /** 当天看图题的配图；从没画过时为 null */
+  image: LanguageImageInfo | null;
 }
 
 export interface TimerState {
@@ -238,6 +257,19 @@ export interface HealthInfo {
     /** 生效密钥的脱敏形态（如 "sk-…abcd"），前端用于「已配置，留空则不修改」占位提示 */
     storyApiKeyMasked: string;
     markApiKeyMasked: string;
+  };
+  /** 文生图（语言强化看图题的配图） */
+  imagegen: {
+    enabled: boolean;
+    model: string;
+    url: string;
+    size: string;
+    timeoutMs: number;
+    /** 脱敏后的密钥来源说明 */
+    apiKey: string;
+    ok: boolean;
+    /** 磁盘上现存几张图 */
+    files: number;
   };
   tts: {
     provider: string;

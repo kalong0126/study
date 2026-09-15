@@ -11,6 +11,7 @@ import {
   type DailyState,
   type DiagReport,
   type HealthInfo,
+  type LanguageImageInfo,
   type LanguageProgress,
   type LanguageSet,
   type LanguageToday,
@@ -189,6 +190,16 @@ export const api = {
   /** 清掉当天的语言强化题目与作答 */
   resetLanguage: (date?: string) =>
     request<{ date: string }>("/language/reset", { method: "POST", body: JSON.stringify({ date }) }),
+
+  /**
+   * 给当天的看图题画一张真实的图。
+   * 幂等：已经画过且场景没变就直接返回（不会重复花钱）；force=true 才强制重画。
+   */
+  generateLanguageImage: (body: { date?: string; force?: boolean } = {}) =>
+    request<{ image: LanguageImageInfo | null; cached: boolean; ms?: number; model?: string; bytes?: number }>(
+      "/language/image",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 
   deleteStory: (title: string) =>
     request<{ removed: number; stories: StoryRow[]; readTitles: string[] }>("/state/story/delete", {

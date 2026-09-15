@@ -8,7 +8,8 @@
  *   4. 句子排序（排序题）：按正确顺序点句子 → 自动判对
  *   5. 每日词语（口述题）：出现「大人判定」按钮，点「通过」后记完成
  *   6. 进度汇总（完成 3/9）在刷新后依然存在（说明真的存在服务端）
- *   7. 看图观察渲染出「画面描述」面板
+ *   7. 看图观察真的展示了 AI 画出来的图片（<img> 且 naturalWidth > 0），
+ *      看图说话复用同一张图；画面文字描述默认折叠（不然等于直接给答案）
  *   8. 全程零 console error
  *
  * 为什么要用隔离实例（端口 8796 + 独立 DB + mock 大模型）：
@@ -82,6 +83,14 @@ tts:
   voice: zh-CN-XiaoyiNeural
   rate: "-12%"
   cacheDir: ./data/_langtest_tts
+imagegen:
+  enabled: true
+  model: mock-image
+  baseUrl: http://127.0.0.1:${MOCK_PORT}/__image
+  apiKey: test-key-for-image
+  size: 1328*1328
+  dir: ./data/_langtest_images
+  timeoutMs: 20000
 backup:
   enabled: false
   dir: ./data/_langtest_backup
@@ -232,14 +241,32 @@ try {
   const firstCellClass = await page.locator(".lg-cell", { hasText: "每日词语" }).first().getAttribute("class");
   ok("判定通过后该题标记为已完成", (firstCellClass ?? "").includes("done"), String(firstCellClass));
 
-  /* ————————————————————————————— 5. 看图观察面板 */
-  step("5. 看图观察 → 渲染画面描述");
+  /* ————————————————————————————— 5. 看图观察：AI 画出来的真图 */
+  step("5. 看图观察 → 展示真实图片");
   await page.locator(".lg-cell", { hasText: "看图观察" }).first().click();
-  await page.waitForSelector(".lg-pic", { timeout: 10000 });
-  const pic = await page.locator(".lg-pic").first().innerText();
-  ok("画面描述非空且含场景细节", pic.includes("公园") && pic.length > 30, pic.slice(0, 40));
+  await page.waitForSelector(".lg-imgwrap", { timeout: 10000 });
+  // 配图是「打开这一题」时才触发生成的，所以要等它画好
+  await page.waitForSelector(".lg-img", { timeout: 40000 });
+  const dim = await page.locator(".lg-img").first().evaluate((el) => ({
+    w: el.naturalWidth,
+    h: el.naturalHeight,
+    src: el.getAttribute("src"),
+  }));
+  ok("展示出真实图片（不是文字描述）", (await page.locator(".lg-img").count()) === 1);
+  ok("图片确实加载成功（naturalWidth > 0）", dim.w > 0, JSON.stringify(dim));
+  ok("图片来自后端配图接口", String(dim.src).includes("/api/language/image/"), String(dim.src));
   ok("观察问题已渲染", (await page.locator(".lg-qs li").count()) >= 3);
+  ok("画面文字描述默认折叠（不直接把答案给孩子）", (await page.locator(".lg-pic-fold:not([open])").count()) === 1);
   await shot("lg-04-observe.png");
+
+  /* ————————————————————————————— 5b. 看图说话复用同一张图 */
+  step("5b. 看图说话 → 复用同一张图");
+  await page.locator("button", { hasText: "下一题" }).first().click();
+  await page.waitForSelector(".lg-img", { timeout: 15000 });
+  const src2 = await page.locator(".lg-img").first().getAttribute("src");
+  ok("看图说话复用同一张图（不重复花钱重画）", src2 === dim.src, String(src2));
+  ok("带「还是这幅图」图注", (await page.locator(".lg-imgcap").count()) === 1);
+  await shot("lg-05-speaking.png");
 
   /* ————————————————————————————— 6. 进度汇总 + 刷新后仍在 */
   step("6. 进度汇总与持久化");
@@ -273,7 +300,7 @@ try {
       /* ignore */
     }
   }
-  for (const d of ["_langtest_tts", "_langtest_backup"]) {
+  for (const d of ["_langtest_tts", "_langtest_backup", "_langtest_images"]) {
     try {
       fs.rmSync(path.join(SERVER, "data", d), { recursive: true, force: true });
     } catch {

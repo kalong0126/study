@@ -7,7 +7,17 @@
  */
 import http from "node:http";
 
-type Mode = "ok" | "badjson" | "wrongcount" | "http401" | "http500" | "slow" | "empty" | "notjson" | "langcount";
+type Mode =
+  | "ok"
+  | "badjson"
+  | "wrongcount"
+  | "http401"
+  | "http500"
+  | "slow"
+  | "empty"
+  | "notjson"
+  | "langcount"
+  | "imgfail";
 
 let mode: Mode = "ok";
 let calls: { url: string; model: string; prompt: string; hasImage: boolean; at: number }[] = [];
@@ -209,6 +219,24 @@ function languagePayload(theme: string, count = 9): string {
   });
 }
 
+/* --------------------------------------------------- 文生图（千问 qwen-image） */
+
+/**
+ * 1×1 的纯色 PNG。
+ * 测试只关心「接口给回图片地址 → 我们下载 → 落盘 → 前端 <img> 能加载」这条链路，
+ * 所以图不必要大，也不必好看；能通过 content-type / 尺寸校验就行。
+ */
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** 从千问文生图的请求体里取出正向提示词（用于断言「场景描述确实被发出去了」） */
+function imagePromptOf(payload: Record<string, unknown>): string {
+  const input = payload.input as { messages?: { content?: { text?: string }[] }[] } | undefined;
+  return input?.messages?.[0]?.content?.[0]?.text ?? "";
+}
+
 function chatResponse(prompt: string, hasImage: boolean, allText = ""): string {
   // 语言强化：系统提示词很长，参数在第一条 user 消息里，所以看的是「全部消息」
   if (/本次训练参数/.test(allText) || /上一次的输出无法被程序解析/.test(allText)) {
@@ -272,6 +300,52 @@ const server = http.createServer((req, res) => {
     if (url === "/__calls") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ count: calls.length, calls }));
+      return;
+    }
+
+    /* ---- 文生图：同步接口（一次请求直接回图片地址） ---- */
+    // 真实接口回的是 24 小时有效的 OSS 签名地址，这里回一个指向本 mock 的地址，
+    // 顺带把「拿到地址后必须自己下载落盘」这条链路也测到。
+    if (url === "/__image") {
+      if (mode === "imgfail") {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { message: "mock: 画图服务端错误" } }));
+        return;
+      }
+      let ip: Record<string, unknown> = {};
+      try {
+        ip = JSON.parse(body || "{}");
+      } catch {
+        /* ignore */
+      }
+      calls.push({
+        url,
+        model: String(ip.model ?? ""),
+        prompt: imagePromptOf(ip).slice(0, 3000),
+        hasImage: false,
+        at: Date.now(),
+      });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          output: {
+            choices: [
+              {
+                finish_reason: "stop",
+                message: { role: "assistant", content: [{ image: `http://127.0.0.1:${PORT}/__image/pic.png` }] },
+              },
+            ],
+            task_metric: { FAILED: 0, SUCCEEDED: 1, TOTAL: 1 },
+          },
+          usage: { width: 1328, height: 1328, image_count: 1 },
+          request_id: "mock-image",
+        }),
+      );
+      return;
+    }
+    if (url === "/__image/pic.png") {
+      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": String(TINY_PNG.length) });
+      res.end(TINY_PNG);
       return;
     }
 
