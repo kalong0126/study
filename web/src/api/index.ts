@@ -11,6 +11,9 @@ import {
   type DailyState,
   type DiagReport,
   type HealthInfo,
+  type LanguageProgress,
+  type LanguageSet,
+  type LanguageToday,
   type Lesson,
   type LogRow,
   type MarkTaskView,
@@ -157,6 +160,35 @@ export const api = {
 
   listStories: (limit = 30) =>
     request<{ stories: StoryRow[]; readTitles: string[] }>(`/stories${qs({ limit })}`),
+
+  /* -------------------------------------------------------------- 语言强化 */
+
+  /** 当天的语言强化题目 + 作答进度（未生成时 set 为 null） */
+  languageToday: (date?: string) => request<LanguageToday>(`/language/today${qs({ date })}`),
+
+  /** 生成当天 9 道题；已有题目时幂等返回（force=true 才会换一套） */
+  generateLanguage: (body: { date?: string; theme?: string; difficulty?: number; force?: boolean } = {}) =>
+    request<{ set: LanguageSet; cached: boolean; ms: number; model: string }>("/language/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** 保存一题的作答（自动判卷 / 家长判定） */
+  saveLanguageProgress: (body: {
+    date?: string;
+    questionId: number;
+    status: "done" | "wrong";
+    judgedBy?: "auto" | "parent";
+    answer?: string;
+  }) =>
+    request<{ progress: LanguageProgress }>("/language/progress", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** 清掉当天的语言强化题目与作答 */
+  resetLanguage: (date?: string) =>
+    request<{ date: string }>("/language/reset", { method: "POST", body: JSON.stringify({ date }) }),
 
   deleteStory: (title: string) =>
     request<{ removed: number; stories: StoryRow[]; readTitles: string[] }>("/state/story/delete", {

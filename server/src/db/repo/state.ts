@@ -399,9 +399,10 @@ export interface ResetStats {
 
 /**
  * 重置「今天」的学习数据。
- * 清：今天的任务打勾、口算题组与计时、按日期的 KV、今天动过的掌握度、今天新进的错题、
- *     今天发放的积分与今天发生的兑换（余额回退到今天开始前）。
- * 保留：历史日期、历史错题、故事 / 已读标题、课文与生字、历史掌握度、历史积分与历史兑换。
+ * 清：今天的任务打勾、口算题组与计时、按日期的 KV（含今天的语言强化题目与作答）、
+ *     今天动过的掌握度、今天新进的错题、今天发放的积分与今天发生的兑换（余额回退到今天开始前）。
+ * 保留：历史日期、历史错题、故事 / 已读标题、课文与生字、历史掌握度、历史积分与历史兑换、
+ *     语言强化的历史题目（按天的键才清）。
  */
 export async function resetToday(
   childId: number,
@@ -420,8 +421,14 @@ export async function resetToday(
     await t.run("DELETE FROM daily_progress WHERE child_id = ? AND date = ?", [childId, date]);
     await t.run("DELETE FROM math_sets WHERE child_id = ? AND date = ?", [childId, date]);
 
-    // 只清按日期生成的 KV 键，跨天键（timer / seeded_at / 系统设置）一律保留
-    const dailyKeys = [`reviewCount:${date}`, `reviewTarget:${date}`, `mathElapsed:${date}`];
+    // 只清按日期生成的 KV 键，跨天键（timer / seeded_at / 系统设置 / languageRecent）一律保留
+    const dailyKeys = [
+      `reviewCount:${date}`,
+      `reviewTarget:${date}`,
+      `mathElapsed:${date}`,
+      `language:${date}`,
+      `languageProgress:${date}`,
+    ];
     let kv = 0;
     for (const k of dailyKeys) {
       const c = await t.get<{ n: number }>(

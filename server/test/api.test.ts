@@ -437,6 +437,115 @@ async function main(): Promise<void> {
     eq("C17 超时返回 504", s6.status, 504);
     eq("C18 错误分类为 timeout", s6.json.kind, "timeout");
 
+    /* ============================ L. 语言强化 ============================ */
+    group("L. 语言强化（mock · 9 题型出题 / 作答 / 换题）");
+    await resetMock();
+    await setMockMode("ok");
+
+    const l0 = await api("GET", "/api/language/today");
+    eq("L1 初始没有当天的语言强化题目", l0.json.set, null);
+    eq("L2 初始作答进度为空", Object.keys(l0.json.progress as Record<string, unknown>).length, 0);
+
+    const lg1 = await api("POST", "/api/language/generate", {});
+    eq("L3 出题成功", lg1.status, 200);
+    interface LQ {
+      id: number;
+      type: string;
+      mode: string;
+      question: string;
+      options: string[];
+      answer: string | string[];
+      sentences: string[];
+      reference: string;
+      referenceList: string[];
+      observationQuestions: string[];
+      guideQuestions: string[];
+      word: string;
+    }
+    const lgSet = lg1.json.set as { theme: string; difficulty: number; questions: LQ[] };
+    const lqs = lgSet.questions;
+    eq("L4 恰好 9 道题", lqs.length, 9);
+    eq(
+      "L5 题型顺序固定为 9 种",
+      lqs.map((x) => x.type).join(","),
+      "word,word_collocation,sentence_expand,sentence_correction,sentence_detail,sentence_order,image_observation,image_speaking,short_writing",
+    );
+    eq("L6 题号从 1 到 9", lqs.map((x) => x.id).join(","), "1,2,3,4,5,6,7,8,9");
+    ok("L7 主题非空", !!lgSet.theme, lgSet.theme);
+
+    const byType = (t: string): LQ => lqs.find((x) => x.type === t) as LQ;
+    eq("L8 词语搭配为「选择」模式（可自动判卷）", byType("word_collocation").mode, "choice");
+    ok("L9 选择题有 3 个以上候选", byType("word_collocation").options.length >= 2, String(byType("word_collocation").options.length));
+    eq("L10 句子排序为「排序」模式", byType("sentence_order").mode, "order");
+    eq("L11 排序题答案为 3 句", (byType("sentence_order").answer as string[]).length, 3);
+    ok(
+      "L12 排序题展示顺序已打乱（不等于答案顺序）",
+      (byType("sentence_order").sentences as string[]).join("|") !== (byType("sentence_order").answer as string[]).join("|"),
+    );
+    eq("L13 简短写作为「口述 + 大人判」模式", byType("short_writing").mode, "open");
+    ok("L14 开放题带参考答案", !!byType("short_writing").reference, byType("short_writing").reference.slice(0, 40));
+    eq(
+      "L15 看图观察的参考答案与观察问题一一对应",
+      byType("image_observation").referenceList.length,
+      byType("image_observation").observationQuestions.length,
+    );
+    ok("L16 每日词语带词语与例句", !!byType("word").word, byType("word").word);
+
+    let lcalls = await mockCalls();
+    ok("L17 出题时把主题与参数发给了模型", lcalls.calls[0]?.prompt.includes("本次训练参数") === true, lcalls.calls[0]?.prompt.slice(0, 80));
+    eq("L18 出题用的是 story 用途的模型", lcalls.calls[0]?.model, "mock-story");
+
+    // 幂等：当天已有题目时不重复出题、不重复花钱
+    await resetMock();
+    const lg2 = await api("POST", "/api/language/generate", {});
+    eq("L19 当天已有题目时幂等返回", lg2.json.cached, true);
+    lcalls = await mockCalls();
+    eq("L20 幂等时不调用大模型", lcalls.count, 0);
+
+    // 作答：自动判卷（选择）与家长判定（口述）都走同一接口
+    const lp1 = await api("POST", "/api/language/progress", {
+      questionId: 2,
+      status: "done",
+      judgedBy: "auto",
+      answer: String(byType("word_collocation").answer),
+    });
+    eq("L21 保存作答返回 200", lp1.status, 200);
+    eq("L22 第 2 题记为已完成", (lp1.json.progress as Record<string, { status: string }>)["2"]?.status, "done");
+    const lp2 = await api("POST", "/api/language/progress", { questionId: 9, status: "wrong", judgedBy: "parent" });
+    const p2p = lp2.json.progress as Record<string, { status: string; judgedBy: string }>;
+    eq("L23 家长判定「再练一练」记为 wrong", p2p["9"]?.status, "wrong");
+    eq("L24 家长判定标记 judgedBy=parent", p2p["9"]?.judgedBy, "parent");
+    eq("L25 已有作答的两题都在进度里", Object.keys(p2p).length, 2);
+
+    const badQ = await api("POST", "/api/language/progress", { questionId: 99, status: "done" });
+    eq("L26 不存在的题号返回 400", badQ.status, 400);
+    const badS = await api("POST", "/api/language/progress", { questionId: 1, status: "meh" });
+    eq("L27 非法状态返回 400", badS.status, 400);
+
+    // 指定主题：出题必须使用传进来的主题，并记入「最近主题」用于去重
+    await resetMock();
+    const lg3 = await api("POST", "/api/language/generate", { force: true, theme: "测试主题" });
+    eq("L28 指定主题时按传入主题出题", (lg3.json.set as { theme: string }).theme, "测试主题");
+    const todayL = await api("GET", "/api/language/today");
+    ok("L29 「最近主题」记录了本次主题", (todayL.json.themes as string[]).includes("测试主题"));
+    eq("L30 换一套后作答进度被清空", Object.keys(todayL.json.progress as Record<string, unknown>).length, 0);
+
+    // 模型少返题：重试一次仍失败 → 502 + kind=parse
+    await resetMock();
+    await setMockMode("langcount");
+    const lgBad = await api("POST", "/api/language/generate", { force: true });
+    eq("L31 模型题数不对时返回 502", lgBad.status, 502);
+    eq("L32 错误分类为 parse", lgBad.json.kind, "parse");
+    lcalls = await mockCalls();
+    eq("L33 解析失败会自动重试一次（共 2 次请求）", lcalls.count, 2);
+
+    await resetMock();
+    await setMockMode("ok");
+    await api("POST", "/api/language/reset", {});
+    const lAfter = await api("GET", "/api/language/today");
+    eq("L34 reset 后当天题目被清掉", lAfter.json.set, null);
+    ok("L35 reset 不影响「最近主题」历史", (lAfter.json.themes as string[]).length >= 1);
+
     /* ============================ D. 语音合成 ============================ */
     group("D. 语音合成（Edge TTS）");
     await resetMock();
@@ -803,6 +912,17 @@ async function main(): Promise<void> {
       "R9 重置前错题本有今天的数学 + 语文错题",
       wrongB2.math.length >= 1 && wrongB2.chinese.length >= 1,
     );
+    // 语言强化也属于「今天的进度」：先把当天的题目与作答造出来，验证同一个 resetToday 会一并清掉
+    await resetMock();
+    await setMockMode("ok");
+    await api("POST", "/api/language/generate", { force: true });
+    await api("POST", "/api/language/progress", { questionId: 1, status: "done", judgedBy: "parent" });
+    const langBefore = await api("GET", "/api/language/today");
+    ok(
+      "R9b 重置前当天已有语言强化题目与作答",
+      !!langBefore.json.set && Object.keys(langBefore.json.progress as Record<string, unknown>).length === 1,
+    );
+
     const rToday2 = await api("POST", "/api/admin/reset", { scope: "today" });
     ok(
       "R10 resetToday 返回含 removed.wrong 字段",
@@ -810,6 +930,11 @@ async function main(): Promise<void> {
     );
     const wrongA2 = (await api("GET", "/api/state")).json.wrong as { math: unknown[]; chinese: unknown[] };
     eq("R11 resetToday 清空今天的错题", wrongA2.math.length + wrongA2.chinese.length, 0);
+
+    const langAfter = await api("GET", "/api/language/today");
+    eq("R11b resetToday 清掉当天的语言强化题目", langAfter.json.set, null);
+    eq("R11c resetToday 清掉当天的语言强化作答", Object.keys(langAfter.json.progress as Record<string, unknown>).length, 0);
+    ok("R11d 语言强化的「最近主题」是跨天键，重置今日后保留", (langAfter.json.themes as string[]).length >= 1);
 
     // resetToday 撤销「今日」的积分变动：今天发放的正分、今天发生的兑换一起清掉，余额回到今天开始前。
     // 攒 50 分（math_done 10 + dictation_done 10 + reading_done 20 + all_done 10），

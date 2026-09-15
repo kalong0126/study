@@ -50,7 +50,12 @@ export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
   retries?: number;
-  /** 日志标签，例如 "story" / "mark" / "suggest" */
+  /**
+   * 要求模型「只输出 JSON」。DeepSeek / 阿里百炼等 OpenAI 兼容接口都支持。
+   * 少数网关不支持这个字段（会返回 400），调用方应当捕获后去掉它再重试一次。
+   */
+  responseFormat?: "json_object";
+  /** 日志标签，例如 "story" / "mark" / "suggest" / "language" */
   tag: string;
 }
 
@@ -163,6 +168,7 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
           messages: opts.messages,
           ...(temperature !== undefined ? { temperature } : {}),
           ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+          ...(opts.responseFormat ? { response_format: { type: opts.responseFormat } } : {}),
         }),
         signal: ac.signal,
       });

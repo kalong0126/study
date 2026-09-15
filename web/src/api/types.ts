@@ -64,6 +64,86 @@ export interface StoryRow {
   createdAt: string;
 }
 
+/* ------------------------------------------------------------ 语言强化 */
+
+/** 交互方式：choice/fill/order 由系统自动判卷；open 由孩子口述 + 家长判定 */
+export type LanguageMode = "choice" | "fill" | "order" | "open";
+
+export interface LanguageQuestion {
+  id: number;
+  type: string;
+  /** 中文题型名（服务端补全） */
+  typeName: string;
+  icon: string;
+  ability: string;
+  subAbility: string;
+  difficulty: number;
+  mode: LanguageMode;
+  /** 这题怎么玩（服务端生成的一句话说明） */
+  howTo: string;
+  question: string;
+  /** 自动判卷的答案：choice/fill 为字符串，order 为正确顺序的句子数组 */
+  answer: string | string[];
+  options: string[];
+  /** 排序题的**打乱后**句子（展示用） */
+  sentences: string[];
+  /** 开放题参考答案 */
+  reference: string;
+  referenceList: string[];
+  guideQuestions: string[];
+  word: string;
+  meaning: string;
+  collocation: string;
+  example: string;
+  baseSentence: string;
+  wrongSentence: string;
+  errorType: string;
+  errorTypeName: string;
+  orderType: string;
+  fullParagraph: string;
+  keywords: string[];
+  requirements: Record<string, unknown> | null;
+  imagePrompt: string;
+  imageElements: Record<string, unknown> | null;
+  observationQuestions: string[];
+  hint: string;
+  analysis: string;
+  answerType: string;
+  tags: string[];
+}
+
+export interface LanguageSet {
+  date: string;
+  theme: string;
+  grade: number;
+  difficulty: number;
+  trainingGoal: string;
+  questions: LanguageQuestion[];
+  createdAt: string;
+  model: string;
+  ms: number;
+}
+
+export interface LanguageProgressEntry {
+  questionId: number;
+  status: "done" | "wrong";
+  judgedBy: "auto" | "parent";
+  answer: string;
+  attempts: number;
+  at: string;
+}
+
+export type LanguageProgress = Record<string, LanguageProgressEntry>;
+
+/** 当天的题集 + 作答进度（没有题集时 set 为 null） */
+export interface LanguageToday {
+  date: string;
+  set: LanguageSet | null;
+  progress: LanguageProgress;
+  /** 最近用过的主题（生成时会避开） */
+  themes: string[];
+}
+
 export interface TimerState {
   running: boolean;
   endAt: number;

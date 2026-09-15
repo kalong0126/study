@@ -5,6 +5,12 @@ const routes: RouteRecordRaw[] = [
   { path: "/math", name: "math", component: () => import("@/views/MathView.vue"), meta: { title: "口算" } },
   { path: "/chinese", name: "chinese", component: () => import("@/views/ChineseView.vue"), meta: { title: "语文" } },
   { path: "/story", name: "story", component: () => import("@/views/StoryView.vue"), meta: { title: "童话" } },
+  {
+    path: "/language",
+    name: "language",
+    component: () => import("@/views/LanguageView.vue"),
+    meta: { title: "语言强化" },
+  },
   { path: "/wrong", name: "wrong", component: () => import("@/views/WrongView.vue"), meta: { title: "错题本" } },
   { path: "/points", name: "points", component: () => import("@/views/PointsView.vue"), meta: { title: "我的积分" } },
   {

@@ -1,7 +1,7 @@
 /**
  * 固定视口布局回归
  *
- * 目标：孩子端（/ /math /chinese /story /wrong）在任何视口下都满足
+ * 目标：孩子端（/ /math /chinese /story /language /wrong）在任何视口下都满足
  *   1. 整页不滚动（document 高度 == 视口高度，没有整页滚动条）
  *   2. .kid-shell 外壳高度 == 视口高度
  *   3. 顶栏、底栏都在视口内（不被推出屏幕）
@@ -34,7 +34,7 @@ const VIEWPORTS = [
   { name: "桌面", width: 1280, height: 800 },
 ];
 
-const KID_ROUTES = ["/", "/math", "/chinese", "/story", "/wrong"];
+const KID_ROUTES = ["/", "/math", "/chinese", "/story", "/language", "/wrong"];
 
 /** 读取当前页面的布局度量 */
 async function measure(page) {
@@ -107,7 +107,7 @@ for (const vp of VIEWPORTS) {
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".kid-shell", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);
-  for (const route of ["/math", "/chinese", "/story", "/wrong", "/"]) {
+  for (const route of ["/math", "/chinese", "/story", "/language", "/wrong", "/"]) {
     await page.click(`.nav a[href="${route}"]`);
     await page.waitForTimeout(420);
     const m = await measure(page);

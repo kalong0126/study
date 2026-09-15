@@ -20,6 +20,7 @@ import { backupRouter } from "./routes/backup.js";
 import { diagRouter } from "./routes/diag.js";
 import { fail } from "./routes/helpers.js";
 import { healthRouter } from "./routes/health.js";
+import { languageRouter } from "./routes/language.js";
 import { lessonsRouter } from "./routes/lessons.js";
 import { markRouter } from "./routes/mark.js";
 import { pointsRouter } from "./routes/points.js";
@@ -93,6 +94,7 @@ function createApp(): express.Express {
   api.use(healthRouter);
   api.use(lessonsRouter);
   api.use(storyRouter);
+  api.use(languageRouter);
   api.use(ttsRouter);
   api.use(markRouter);
   api.use(pointsRouter);

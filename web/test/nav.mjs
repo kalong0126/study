@@ -46,6 +46,7 @@ const ROUTES = [
   { path: "/math", name: "口算", nav: "口算", sel: ".m-row", eq: 20, what: "口算题行" },
   { path: "/chinese", name: "语文", nav: "语文", sel: ".story-text", min: 1, what: "课文原文" },
   { path: "/story", name: "童话", nav: "童话", sel: ".card", min: 1, what: "卡片" },
+  { path: "/language", name: "语言", nav: "语言", sel: ".card", min: 1, what: "卡片" },
   { path: "/wrong", name: "错题本", nav: "错题本", sel: ".wb-tabs", min: 1, what: "分区标签" },
 ];
 
@@ -105,7 +106,7 @@ if (/占位|Transition|RouterView/.test(base.bodyText)) {
   fail("页面正文里出现了模板注释文本（HTML 注释被提前闭合漏进 DOM）");
 }
 
-// ————————————————————————————— 2. 底部导航：跑遍 5 条路由（应用内点击）
+// ————————————————————————————— 2. 底部导航：跑遍全部路由（应用内点击）
 step("底部导航逐条切换（应用内点击，不刷新）");
 for (const r of ROUTES) {
   if (r.path !== "/") {
