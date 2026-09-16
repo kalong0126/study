@@ -141,12 +141,14 @@ imagegen:
 # 浏览器，前端就是一个普通的 <video src="/api/video/stream/...">。
 #
 # dir 填「后端进程自己读得到的路径」，两种部署写法不同：
-#   · Windows（服务跑在本机）—— UNC 路径，例如：
+#   · Windows（服务直接跑在这台机器上）—— UNC 路径，例如：
 #       \\172.10.10.14\156xxxx2677\PTStation\TV\guess how much i love you
 #     只要「运行后端那个 Windows 账号」能在资源管理器里打开它就行。
-#   · NAS / Linux（Docker 部署）—— 先把共享挂到本地再填挂载点，例如：
-#       /mnt/ptstation/guess how much i love you
-#     挂载要用共享的账号密码，命令见 docker-compose.yml 文件头的说明。
+#   · Docker（NAS / Linux）—— **别在这里填宿主机的挂载点**，容器里看不到它。
+#     正确做法：把宿主机上已挂好的目录填进 deploy/.env 的 VIDEO_DIR_HOST，
+#     compose 会把它挂成容器内的 /app/server/video 并用环境变量 VIDEO_DIR 覆盖本项
+#     （所以下面这个默认值在 Docker 下不生效）。步骤见 docker-compose.yml 文件头。
+#     ⚠️ 容器里报「目录不存在：/xxx」而宿主机上明明有文件 = 没挂进容器，不是路径写错。
 #
 # exts 只放浏览器**播得动**的容器：mkv / avi / rmvb 一律跳过（Chrome 不支持），
 # 目录里如果全是 mkv，页面会明说「没有能播的视频」，而不是一直转圈。

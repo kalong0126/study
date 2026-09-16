@@ -31,6 +31,12 @@
 #   3. docker compose up -d          # 只改了 .env 不用 --build
 # 注意：开了 HTTPS 之后访问地址要改成 https://<服务器内网IP>:8788，
 #       并且平板必须先装一次根证书（先下载 http://<IP>:8788/api/diag/rootca.crt，再开 HTTPS）。
+#
+# 英文故事（孩子端「英文」页从共享目录随机抽视频播）：
+#   容器看不到宿主机上的路径，**必须**把挂着视频的那个宿主机目录填进 .env：
+#     VIDEO_DIR_HOST=/vol02/1000-0-bfb475f2        # 例：fnOS 上挂好的共享挂载点
+#   改完 docker compose up -d（不用 --build）。容器内固定挂成 /app/server/video，
+#   config.yaml 的 video.dir 不用动（会被环境变量 VIDEO_DIR 覆盖）。
 # =============================================================================
 
 services:
@@ -61,6 +67,10 @@ services:
       # HTTPS：默认关（内网 HTTP 也能用，只是平板装不成应用）。开了要配 certs 挂载，见文件头
       HTTPS_ENABLED: ${HTTPS_ENABLED:-false}
       TZ: Asia/Shanghai
+      # 英文故事视频目录：**容器内**路径，固定挂在 /app/server/video（见下面 volumes）。
+      # 宿主机上的真实路径由 .env 的 VIDEO_DIR_HOST 决定 —— 所以 config.yaml 里的
+      # video.dir 默认值（UNC 路径）在 Docker 下会被这一行覆盖掉，不用去改配置。
+      VIDEO_DIR: /app/server/video
     ports:
       # 只绑内网网段也行，例如 "192.168.1.10:8788:8788"
       - "${APP_PORT:-8788}:8788"
@@ -74,6 +84,15 @@ services:
       # 三件套：cert.pem / key.pem / rootCA.crt（缺 rootCA.crt 平板就下不到根证书）。
       # 容器内对应 /app/server/certs —— 正好是 config.yaml 里 certFile 的相对默认值，无需改配置。
       - ../server/certs:/app/server/certs:ro
+      # 英文故事视频（**只读**）。宿主机上先把共享挂到本地，再把那个挂载点填进 .env：
+      #     VIDEO_DIR_HOST=/vol02/1000-0-bfb475f2
+      # 容器内固定挂到 /app/server/video（正好是上面 VIDEO_DIR 的值）。
+      # ⚠️ 这一行是「容器能不能看见视频」的唯一开关。没挂进来时容器里根本没有这个路径，
+      #    页面会报「目录不存在：/xxx」——而此时宿主机上明明能看到文件。
+      #    NAS 上最常见的踩法：视频挂在了别的容器里，或只挂进了 fnOS 的文件管理，没挂给这个容器。
+      # ⚠️ 换成新路径后不用 --build，docker compose up -d 重建容器即可生效。
+      # 不填 VIDEO_DIR_HOST 时挂 ./video（空目录）→ 页面提示「还没配置视频目录」，不会报错。
+      - ${VIDEO_DIR_HOST:-./video}:/app/server/video:ro
       # 想改 config.yaml 里的高级项（音色、超时等）又不想重建镜像：
       #   1) cp ../server/config/config.yaml ./config.yaml
       #   2) 去掉下面这行的注释

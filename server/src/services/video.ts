@@ -88,7 +88,11 @@ export function cleanTitle(fileName: string): string {
 export function explainFsError(dir: string, e: unknown): string {
   const err = e as NodeJS.ErrnoException;
   const code = err?.code ?? "";
-  if (code === "ENOENT") return `目录不存在：${dir}（共享没挂上、路径写错或大小写对不上）`;
+  if (code === "ENOENT") {
+    // Docker 部署最常见的坑：宿主机上挂得好好的，但没 bind mount 进容器，
+    // 容器里就是个不存在的路径 —— 这句提示专门为了让家长少绕这一圈。
+    return `目录不存在：${dir}（共享没挂上、路径写错、大小写对不上；Docker 部署还要确认这个路径已挂进容器）`;
+  }
   if (code === "EACCES" || code === "EPERM") return `没有权限读：${dir}（运行后端的账号没被授权访问这个共享）`;
   if (["EBUSY", "ETIMEDOUT", "ENOTFOUND", "EHOSTDOWN", "EIO", "ECONNRESET", "ENETUNREACH"].includes(code)) {
     return `连不上共享：${dir}（那台机器没开机，或 SMB 会话断了）`;
