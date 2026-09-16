@@ -17,11 +17,20 @@
 # 浏览器访问：http://<服务器内网IP>:8788
 #
 # 想让平板「添加到主屏幕」后没有浏览器地址栏 / 底栏（装成独立应用）：
-#   1. 在**宿主机**上跑 scripts/https-setup.ps1 生成证书（也可用 openssl / mkcert 手工生成）
+#   1. 生成证书（mkcert 自签），放成 server/certs/{cert.pem,key.pem,rootCA.crt}
+#      · 这台机器是 Windows、且服务就跑在它上面 → 仓库根跑 scripts/https-setup.ps1
+#      · 服务跑在 NAS / Linux 上 → 跑不了 .ps1（PowerShell + winget），两条路：
+#        a) 在该主机上装 mkcert 直接签；
+#        b) 在 Windows 上签，但**必须把该主机的内网 IP 写进 SAN**：
+#           mkcert -cert-file cert.pem -key-file key.pem <NAS的IP> localhost 127.0.0.1
+#           再把三件套（含 mkcert -CAROOT 里的 rootCA.pem → 改名 rootCA.crt）拷过去。
+#      ⚠️ 签的是「谁的内网 IP」，平板打开的就必须是那个 IP —— 签错机器 = 还是提示不安全。
+#      ⚠️ rootCA.crt 千万不能漏：/api/diag/rootca.crt 是在 cert.pem **同目录**找它
+#         （不是去 mkcert 的 CAROOT 找），少了它平板就下不到根证书。
 #   2. 把 deploy/.env 里的 HTTPS_ENABLED 改成 true，并去掉下面 app 服务里 certs 那行的注释
-#   3. docker compose up -d
+#   3. docker compose up -d          # 只改了 .env/compose 不用 --build
 # 注意：开了 HTTPS 之后访问地址要改成 https://<服务器内网IP>:8788，
-#       并且平板必须先装一次 mkcert 的根证书（脚本会打印步骤）。
+#       并且平板必须先装一次根证书（先下载 http://<IP>:8788/api/diag/rootca.crt，再开 HTTPS）。
 # =============================================================================
 
 services:
@@ -59,7 +68,9 @@ services:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
       - app-logs:/app/server/logs
-      # 开了 HTTPS_ENABLED 才需要挂证书（证书在宿主机上生成，别打进镜像）
+      # 开了 HTTPS_ENABLED 才需要挂证书（在宿主机上生成，别打进镜像）。
+      # 目录里要有三件套：cert.pem / key.pem / rootCA.crt（缺 rootCA.crt 则平板下不到根证书）。
+      # 容器里对应 /app/server/certs —— 刚好是 config.yaml 里 certFile 的默认相对路径。
       # - ../server/certs:/app/server/certs:ro
       # 想改 config.yaml 里的高级项（音色、超时等）又不想重建镜像：
       #   1) cp ../server/config/config.yaml ./config.yaml
@@ -68,7 +79,14 @@ services:
       # 数据库地址、密钥这类常用项用 .env 就够了，不用动这个文件。
       # - ./config.yaml:/app/server/config/config.yaml:ro
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # 开了 HTTPS 之后服务**只监听 https**（http / https 二选一，不是双监听），
+      # 所以健康检查必须跟着换协议，否则容器永远 unhealthy（应用本身是好的，纯误报）。
+      # 证书是自签的 → rejectUnauthorized:false；只探本机回环，不涉及外部。
+      test:
+        - CMD
+        - node
+        - -e
+        - "const s=process.env.HTTPS_ENABLED==='true';const m=s?require('https'):require('http');const r=m.request({host:'127.0.0.1',port:8788,path:'/api/health',rejectUnauthorized:false},res=>process.exit(res.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end();"
       interval: 30s
       timeout: 5s
       retries: 3
