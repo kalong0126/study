@@ -15,6 +15,13 @@
 #   docker compose down
 #
 # 浏览器访问：http://<服务器内网IP>:8788
+#
+# 想让平板「添加到主屏幕」后没有浏览器地址栏 / 底栏（装成独立应用）：
+#   1. 在**宿主机**上跑 scripts/https-setup.ps1 生成证书（也可用 openssl / mkcert 手工生成）
+#   2. 把 deploy/.env 里的 HTTPS_ENABLED 改成 true，并去掉下面 app 服务里 certs 那行的注释
+#   3. docker compose up -d
+# 注意：开了 HTTPS 之后访问地址要改成 https://<服务器内网IP>:8788，
+#       并且平板必须先装一次 mkcert 的根证书（脚本会打印步骤）。
 # =============================================================================
 
 services:
@@ -42,6 +49,8 @@ services:
       LLM_SUGGEST_BASE_URL: ${LLM_SUGGEST_BASE_URL:-}
       LLM_SUGGEST_API_KEY: ${LLM_SUGGEST_API_KEY:-}
       # —— 其它 ——
+      # HTTPS：默认关（内网 HTTP 也能用，只是平板装不成应用）。开了要配 certs 挂载，见文件头
+      HTTPS_ENABLED: ${HTTPS_ENABLED:-false}
       TZ: Asia/Shanghai
     ports:
       # 只绑内网网段也行，例如 "192.168.1.10:8788:8788"
@@ -50,6 +59,8 @@ services:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
       - app-logs:/app/server/logs
+      # 开了 HTTPS_ENABLED 才需要挂证书（证书在宿主机上生成，别打进镜像）
+      # - ../server/certs:/app/server/certs:ro
       # 想改 config.yaml 里的高级项（音色、超时等）又不想重建镜像：
       #   1) cp ../server/config/config.yaml ./config.yaml
       #   2) 去掉下面这行的注释

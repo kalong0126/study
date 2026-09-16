@@ -6,11 +6,22 @@
  * 任何一步失败都直接退出并打印原因，避免「服务起来了但根本不能用」这种更难查的状态。
  */
 import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
-import { SERVER_ROOT, ensureDirs, loadConfig, maskKey, resolveAllLlm, setLlmRuntimeOverride, startupWarnings } from "./config.js";
+import {
+  SERVER_ROOT,
+  ensureDirs,
+  loadConfig,
+  maskKey,
+  resolveAllLlm,
+  resolveHttps,
+  setLlmRuntimeOverride,
+  startupWarnings,
+} from "./config.js";
 import { dotEnvCandidates, dotEnvSummary } from "./env.js";
 import { closeDb, initDb } from "./db/index.js";
 import { kvGet } from "./db/repo/state.js";
@@ -34,7 +45,7 @@ import { failStaleTasks } from "./services/mark.js";
 import { imagegenInfo } from "./services/imagegen.js";
 import { setRuntimeVoice, ttsInfo } from "./services/tts/index.js";
 
-function localAddresses(port: number): string[] {
+function localAddresses(port: number, scheme: "http" | "https"): string[] {
   const out: string[] = [];
   // 过滤掉虚拟网卡（WSL / Docker / VMware / VirtualBox）：
   // 它们的地址打印出来只会误导——平板根本连不上 172.17.x.x 这种。
@@ -45,7 +56,7 @@ function localAddresses(port: number): string[] {
     for (const info of ifaces[name] ?? []) {
       if (info.family !== "IPv4" || info.internal) continue;
       if (info.address.startsWith("169.254.")) continue; // APIPA，无效地址
-      out.push(`http://${info.address}:${port}`);
+      out.push(`${scheme}://${info.address}:${port}`);
     }
   }
   return out;
@@ -231,9 +242,23 @@ async function main(): Promise<void> {
   );
 
   const app = createApp();
-  const server = app.listen(cfg.server.port, cfg.server.host, () => {
-    logSys.info({ port: cfg.server.port, host: cfg.server.host }, "服务已就绪");
-    for (const addr of localAddresses(cfg.server.port)) {
+
+  // HTTPS：安卓 Chrome 只有在安全上下文里才会把网页装成应用（WebAPK，没有地址栏和底栏），
+  // 也才能注册 Service Worker。证书读不出来时 resolveHttps 会给出 problem，
+  // 这里**回退 HTTP 而不是退出** —— 学习台停服比降级糟得多，具体原因 startupWarnings 已经喊过了。
+  const tls = resolveHttps(cfg);
+  if (tls.enabled) {
+    logSys.info({ cert: tls.certFile }, "已启用 HTTPS（安全上下文，平板可安装为应用）");
+  }
+
+  const scheme: "http" | "https" = tls.enabled ? "https" : "http";
+  const server: http.Server = tls.enabled
+    ? https.createServer({ cert: tls.cert ?? undefined, key: tls.key ?? undefined }, app)
+    : http.createServer(app);
+
+  server.listen(cfg.server.port, cfg.server.host, () => {
+    logSys.info({ port: cfg.server.port, host: cfg.server.host, scheme }, "服务已就绪");
+    for (const addr of localAddresses(cfg.server.port, scheme)) {
       logSys.info({ 访问地址: addr }, "平板 / 电脑可用这个地址打开");
     }
   });

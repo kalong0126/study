@@ -20,6 +20,14 @@ const ConfigSchema = z.object({
     port: z.number().int().min(1).max(65535).default(8788),
     host: z.string().default("0.0.0.0"),
     corsOrigins: z.array(z.string()).default([]),
+    // HTTPS：安卓 Chrome 要「装成应用」（独立窗口、没有地址栏）必须走安全上下文。
+    // 内网没有域名、也不想暴露公网，所以用 mkcert 自签证书——见 scripts/https-setup.ps1。
+    https: z.object({
+      enabled: z.boolean().default(false),
+      // 相对路径按 server/ 解析
+      certFile: z.string().default("./certs/cert.pem"),
+      keyFile: z.string().default("./certs/key.pem"),
+    }),
     auth: z.object({
       enabled: z.boolean().default(false),
       childPin: z.string().default(""),
@@ -168,7 +176,7 @@ function normalize(parsed: unknown): Record<string, unknown> {
   const db = obj(root.db);
   const llm = obj(root.llm);
   return {
-    server: { ...server, auth: obj(server.auth) },
+    server: { ...server, https: obj(server.https), auth: obj(server.auth) },
     db: { ...db, sqlite: obj(db.sqlite), mysql: obj(db.mysql) },
     llm: { ...llm, timeoutMs: obj(llm.timeoutMs), temperature: obj(llm.temperature) },
     imagegen: obj(root.imagegen),
@@ -212,6 +220,8 @@ export function loadConfig(force = false): AppConfig {
 
   // 目录统一解析为绝对路径
   cfg.db.sqlite.file = resolveFromRoot(cfg.db.sqlite.file);
+  cfg.server.https.certFile = resolveFromRoot(cfg.server.https.certFile);
+  cfg.server.https.keyFile = resolveFromRoot(cfg.server.https.keyFile);
   cfg.tts.cacheDir = resolveFromRoot(cfg.tts.cacheDir);
   cfg.imagegen.dir = resolveFromRoot(cfg.imagegen.dir);
   cfg.logging.dir = resolveFromRoot(cfg.logging.dir);
@@ -223,8 +233,62 @@ export function loadConfig(force = false): AppConfig {
 
 /** 需要启动时就建好的目录 */
 export function ensureDirs(cfg: AppConfig): void {
-  for (const d of [path.dirname(cfg.db.sqlite.file), cfg.tts.cacheDir, cfg.imagegen.dir, cfg.logging.dir, cfg.backup.dir]) {
+  const dirs = [
+    path.dirname(cfg.db.sqlite.file),
+    cfg.tts.cacheDir,
+    cfg.imagegen.dir,
+    cfg.logging.dir,
+    cfg.backup.dir,
+    // 证书目录也建好：没跑过 https-setup.ps1 时，家长至少知道证书该放哪儿
+    path.dirname(cfg.server.https.certFile),
+  ];
+  for (const d of dirs) {
     fs.mkdirSync(d, { recursive: true });
+  }
+}
+
+/* ------------------------------------------------------------------ HTTPS */
+
+export interface HttpsResolved {
+  /** 是否真的能以 HTTPS 启动（enabled 且证书读得出来） */
+  enabled: boolean;
+  certFile: string;
+  keyFile: string;
+  cert: Buffer | null;
+  key: Buffer | null;
+  /** 配了 HTTPS 却起不来的原因；enabled 为 true 时必为空 */
+  problem: string;
+}
+
+/**
+ * 解析 HTTPS 配置，并把证书**在启动时一次性读进内存**。
+ *
+ * 刻意不用「配置错了就退出」：证书过期、路径写错、忘了跑 https-setup.ps1 都会让
+ * 整个学习台打不开，而孩子是按点用平板的 —— 停服比降级糟得多。
+ * 所以读不出来就带着 problem 回退 HTTP，由启动日志大声喊出来，服务照常可用。
+ */
+export function resolveHttps(cfg: AppConfig): HttpsResolved {
+  const h = cfg.server.https;
+  const base: HttpsResolved = {
+    enabled: false,
+    certFile: h.certFile,
+    keyFile: h.keyFile,
+    cert: null,
+    key: null,
+    problem: "",
+  };
+  if (!h.enabled) return base;
+
+  const missing = [h.certFile, h.keyFile].filter((f) => !fs.existsSync(f));
+  if (missing.length) {
+    return { ...base, problem: `找不到证书文件 ${missing.join("、")}（先在仓库根目录跑 scripts/https-setup.ps1）` };
+  }
+  try {
+    const cert = fs.readFileSync(h.certFile);
+    const key = fs.readFileSync(h.keyFile);
+    return { ...base, enabled: true, cert, key };
+  } catch (e) {
+    return { ...base, problem: `证书读取失败：${(e as Error).message}` };
   }
 }
 
@@ -261,6 +325,17 @@ export function startupWarnings(cfg: AppConfig): string[] {
   }
   // 模型名和接口地址对不上，是「明明填了 key 却一直报错」的最常见原因
   for (const m of providerModelMismatches(cfg)) w.push(m);
+
+  // HTTPS 配了却起不来 —— 不拦启动，但必须说清楚症状，否则家长只会看到「还是没全屏」
+  if (cfg.server.https.enabled) {
+    const h = resolveHttps(cfg);
+    if (h.problem) {
+      w.push(
+        `server.https.enabled=true 但 ${h.problem} → 已回退 HTTP。\n` +
+          `    后果：平板上的浏览器地址栏/底栏去不掉，Service Worker 也注册不了（非安全上下文）。`,
+      );
+    }
+  }
   return w;
 }
 

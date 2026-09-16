@@ -16,6 +16,9 @@ data/
 deploy/.env
 deploy/offsite/
 
+# HTTPS 自签证书（含私钥，绝不进 git；用 scripts/https-setup.ps1 在每台机器上自己生成）
+server/certs/
+
 # 测试残留
 web/test/shots/
 *.log

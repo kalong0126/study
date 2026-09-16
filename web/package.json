@@ -18,7 +18,8 @@
     "test:wrong": "node test/wrong-answer.mjs",
     "test:review": "node test/review-gate.mjs",
     "test:dictation": "node test/dictation-continue.mjs",
-    "test:sentences": "node ../server/node_modules/tsx/dist/cli.mjs test/sentences.test.ts"
+    "test:sentences": "node ../server/node_modules/tsx/dist/cli.mjs test/sentences.test.ts",
+    "test:pwa": "node test/pwa.mjs"
   },
   "dependencies": {
     "pinia": "^4.0.3",

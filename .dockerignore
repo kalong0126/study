@@ -15,6 +15,8 @@ data
 .env
 .env.local
 deploy/offsite
+# HTTPS 自签证书（运行时用卷挂进容器，别打进镜像）
+server/certs
 
 # ---- 版本控制 / 本地工具工作区 ----
 .git

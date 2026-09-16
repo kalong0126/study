@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "二年级快乐学习台",
   "short_name": "学习台",
   "description": "口算、听写、童话、错题本 —— 二年级快乐学习台",
@@ -11,14 +12,20 @@
   "lang": "zh-CN",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='48' fill='%238ECDF5'/%3E%3Cpath d='M96 40 28 72l68 32 68-32-68-32Z' fill='%23fff'/%3E%3Cpath d='M52 90v38c0 12 20 21.6 44 21.6S140 140 140 128V90l-44 20.7z' fill='%23fff' opacity='.78'/%3E%3C/svg%3E",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='128' fill='%238ECDF5'/%3E%3Cpath d='M256 107 75 192l181 85 181-85-181-85Z' fill='%23fff'/%3E%3Cpath d='M139 240v101c0 32 53 58 117 58s117-26 117-58V240L256 295z' fill='%23fff' opacity='.78'/%3E%3C/svg%3E",
+      "src": "/icon-512.png",
       "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }

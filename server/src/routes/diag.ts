@@ -6,7 +6,10 @@
  *   /api/diag/logs      最近的运行日志（与后台日志同源）
  *   /api/diag/llm       配置与网络可达性自检（不消耗 token）
  *   /api/diag/llm-test  真实调用一次（消耗极少 token，用来确认密钥与模型可用）
+ * 外加一个给平板用的：/api/diag/rootca.crt（下载自签 CA 的根证书）
  */
+import fs from "node:fs";
+import path from "node:path";
 import { Router } from "express";
 import { loadConfig, providerModelMismatches, resolveAllLlm, resolveLlm, startupWarnings } from "../config.js";
 import { db, nowIso } from "../db/index.js";
@@ -16,6 +19,29 @@ import { synthesize, ttsInfo, ttsStats } from "../services/tts/index.js";
 import { ah, bStr, fail, handleLlmError, ok, qInt } from "./helpers.js";
 
 export const diagRouter = Router();
+
+/**
+ * 下载本机自签 CA 的根证书 —— 专门给平板用。
+ *
+ * 开了 HTTPS 之后，平板必须装一次根证书才认这个站点。而「把 pem 弄到安卓平板上」
+ * 本身就很绕（USB / 网盘 / 邮件都得试），所以干脆让服务自己发一份：
+ * 平板浏览器打开这个地址就能下载，装完再用 https 打开就是全信任的。
+ *
+ * 只发**公钥证书**，不涉及任何私钥（rootCA-key.pem 始终留在 mkcert 的 CAROOT 里）。
+ * 走 http 访问时也能下 —— 本来就是为了在切到 https 之前把证书装好。
+ */
+diagRouter.get("/diag/rootca.crt", (_req, res) => {
+  const cfg = loadConfig();
+  const file = path.join(path.dirname(cfg.server.https.certFile), "rootCA.crt");
+  if (!fs.existsSync(file)) {
+    fail(res, 404, "还没有根证书：先在仓库根目录跑 scripts/https-setup.ps1");
+    return;
+  }
+  res.setHeader("Content-Type", "application/x-x509-ca-cert");
+  res.setHeader("Content-Disposition", 'attachment; filename="rootCA.crt"');
+  res.setHeader("Cache-Control", "no-store");
+  res.send(fs.readFileSync(file));
+});
 
 /** 只取主机名，诊断信息里没必要铺一长串路径 */
 function hostOf(url: string): string {
