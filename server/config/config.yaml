@@ -35,7 +35,7 @@ server:
 
   auth:
     # 内网部署默认关闭。将来若要暴露公网，改成 true 并设置两个 PIN。
-    enabled: false
+    enabled: true
     childPin: "1234"
     parentPin: "8888"
     sessionDays: 30
@@ -155,7 +155,7 @@ imagegen:
 # ---------------------------------------------------------------------------
 video:
   enabled: ${VIDEO_ENABLED:-true}
-  dir: ${VIDEO_DIR:-}
+  dir: ${VIDEO_DIR:-\\Z2s-cg7t\共享文件\PTStation\TV\guess how much i love you}
   exts:
     - .mp4
     - .m4v
