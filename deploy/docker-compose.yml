@@ -27,8 +27,8 @@
 #      ⚠️ 签的是「谁的内网 IP」，平板打开的就必须是那个 IP —— 签错机器 = 还是提示不安全。
 #      ⚠️ rootCA.crt 千万不能漏：/api/diag/rootca.crt 是在 cert.pem **同目录**找它
 #         （不是去 mkcert 的 CAROOT 找），少了它平板就下不到根证书。
-#   2. 把 deploy/.env 里的 HTTPS_ENABLED 改成 true，并去掉下面 app 服务里 certs 那行的注释
-#   3. docker compose up -d          # 只改了 .env/compose 不用 --build
+#   2. 把 deploy/.env 里的 HTTPS_ENABLED 改成 true（证书目录已默认挂好，不用再动 compose）
+#   3. docker compose up -d          # 只改了 .env 不用 --build
 # 注意：开了 HTTPS 之后访问地址要改成 https://<服务器内网IP>:8788，
 #       并且平板必须先装一次根证书（先下载 http://<IP>:8788/api/diag/rootca.crt，再开 HTTPS）。
 # =============================================================================
@@ -68,10 +68,12 @@ services:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
       - app-logs:/app/server/logs
-      # 开了 HTTPS_ENABLED 才需要挂证书（在宿主机上生成，别打进镜像）。
-      # 目录里要有三件套：cert.pem / key.pem / rootCA.crt（缺 rootCA.crt 则平板下不到根证书）。
-      # 容器里对应 /app/server/certs —— 刚好是 config.yaml 里 certFile 的默认相对路径。
-      # - ../server/certs:/app/server/certs:ro
+      # 证书（HTTPS 用）。默认就挂上：HTTPS_ENABLED=false 时用不到，挂个空目录也没副作用。
+      # ⚠️ 起容器前先在宿主机上 mkdir -p server/certs —— 目录不存在时 Docker 会自己建一个
+      #    **空目录**（Linux 上属主 root），现象是「明明拷了证书，容器里却是空的」。
+      # 三件套：cert.pem / key.pem / rootCA.crt（缺 rootCA.crt 平板就下不到根证书）。
+      # 容器内对应 /app/server/certs —— 正好是 config.yaml 里 certFile 的相对默认值，无需改配置。
+      - ../server/certs:/app/server/certs:ro
       # 想改 config.yaml 里的高级项（音色、超时等）又不想重建镜像：
       #   1) cp ../server/config/config.yaml ./config.yaml
       #   2) 去掉下面这行的注释
