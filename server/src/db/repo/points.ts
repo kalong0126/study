@@ -27,6 +27,7 @@ export const POINT_VALUES: Record<string, number> = {
   dictation_perfect: 10,
   reading_done: 20,
   language_done: 20,
+  video_done: 10,
   all_done: 10,
 };
 
@@ -36,6 +37,7 @@ export const POINT_REASONS: Record<string, string> = {
   dictation: "dictation_done",
   reading: "reading_done",
   language: "language_done",
+  video: "video_done",
 };
 
 export interface Reward {

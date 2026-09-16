@@ -236,6 +236,7 @@ async function main(): Promise<void> {
       dictation: false,
       reading: false,
       language: false,
+      video: false,
       review: false,
     });
     ok("B2 初始无口算题组", st0.json.mathSet === null);
@@ -375,21 +376,21 @@ async function main(): Promise<void> {
     const a3 = await api("POST", "/api/points/award", { reason: "dictation_perfect" });
     eq("P8 听写全对 +10", a3.json.balance, 60);
 
-    // 打勾 review（本身不加分）：这时还差「语言强化」没完成，所以全勤奖不发
+    // 打勾 review（本身不加分）：这时「语言强化」和「英文故事」都还没完成，所以全勤奖不发
     await api("PATCH", "/api/state/daily", { date: today, tasks: { review: true } });
     const p4 = await api("GET", "/api/points");
-    eq("P9 还差一项时不给全勤奖（余额停在 60）", p4.json.balance, 60);
+    eq("P9 还差两项时不给全勤奖（余额停在 60）", p4.json.balance, 60);
 
-    // 语言强化 9 道题全做完 → +20；这一项刚好凑满五项 → 全勤奖 +10 同一次到账
+    // 语言强化 9 道题全做完 → +20；但还差「英文故事」没看完，全勤奖仍然不发
     await api("PATCH", "/api/state/daily", { date: today, tasks: { language: true } });
     const p5 = await api("GET", "/api/points");
-    eq("P9b 语言强化完成 +20 且凑满五项全勤再 +10", p5.json.balance, 90);
+    eq("P9b 语言强化完成 +20，差英文故事时不发全勤奖（余额 80）", p5.json.balance, 80);
     await api("PATCH", "/api/state/daily", { date: today, tasks: { language: true } });
     const p6 = await api("GET", "/api/points");
-    eq("P9c 重复打勾不重复发分", p6.json.balance, 90);
+    eq("P9c 重复打勾不重复发分", p6.json.balance, 80);
 
     const r1 = await api("POST", "/api/points/redeem", { reward: "screen_30min" });
-    eq("P10 兑换半小时平板扣 50 分", r1.json.balance, 40);
+    eq("P10 兑换半小时平板扣 50 分", r1.json.balance, 30);
     const rd = await api("GET", "/api/points");
     eq("P11 兑换记录可查询", (rd.json.redemptions as unknown[]).length, 1);
 
@@ -400,8 +401,16 @@ async function main(): Promise<void> {
     eq("P13 未知兑换项目返回 400", r3.status, 400);
 
     const stP = await api("GET", "/api/state");
-    eq("P14 /api/state 返回 balance", stP.json.balance, 40);
+    eq("P14 /api/state 返回 balance", stP.json.balance, 30);
     ok("P15 /api/state 返回 redemptions", Array.isArray(stP.json.redemptions));
+
+    // 补上最后一项「英文故事看完」（+10）→ 六项齐 → 全勤奖 +10 同一次到账
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { video: true } });
+    const p7 = await api("GET", "/api/points");
+    eq("P15b 六项全做完 → video_done +10 与全勤奖 +10 一起到账（30 → 50）", p7.json.balance, 50);
+    await api("PATCH", "/api/state/daily", { date: today, tasks: { video: true } });
+    const p8 = await api("GET", "/api/points");
+    eq("P15c 重复打勾英文故事不重复发分", p8.json.balance, 50);
 
     // 收尾：清掉积分，避免影响后面用例的 balance 断言（后面不再测积分）
     const resetAllP = await api("POST", "/api/admin/reset", { scope: "all" });
@@ -1046,18 +1055,19 @@ async function main(): Promise<void> {
     ok("R11d 语言强化的「最近主题」是跨天键，重置今日后保留", (langAfter.json.themes as string[]).length >= 1);
 
     // resetToday 撤销「今日」的积分变动：今天发放的正分、今天发生的兑换一起清掉，余额回到今天开始前。
-    // 攒 70 分（math_done 10 + dictation_done 10 + reading_done 20 + language_done 20 + all_done 10），
-    // 兑一次（-50 → 20），再补一条当日发放（math_perfect +10 → 30），resetToday 后应回到 0 分 0 兑换。
+    // 攒 80 分（math_done 10 + dictation_done 10 + reading_done 20 + language_done 20 + video_done 10
+    // + all_done 10），兑一次（-50 → 30），再补一条当日发放（math_perfect +10 → 40），
+    // resetToday 后应回到 0 分 0 兑换。
     await api("PATCH", "/api/state/daily", {
       date: todayR,
-      tasks: { math: true, dictation: true, reading: true, language: true, review: true },
+      tasks: { math: true, dictation: true, reading: true, language: true, video: true, review: true },
     });
     const pBefore = await api("GET", "/api/points");
-    eq("R12 重置前攒够 70 分", pBefore.json.balance, 70);
+    eq("R12 重置前攒够 80 分", pBefore.json.balance, 80);
     await api("POST", "/api/points/redeem", { reward: "screen_30min" });
     await api("POST", "/api/points/award", { reason: "math_perfect" });
     const pAfterAward = await api("GET", "/api/points");
-    eq("R13 兑换后再发当日积分，余额为 30", pAfterAward.json.balance, 30);
+    eq("R13 兑换后再发当日积分，余额为 40", pAfterAward.json.balance, 40);
     const rToday3 = await api("POST", "/api/admin/reset", { scope: "today" });
     ok(
       "R14 resetToday 返回含 removed.redemptions",
@@ -1071,7 +1081,7 @@ async function main(): Promise<void> {
     // created_at 都改成昨天，再 resetToday —— 今天的正分清掉，这条「昨天」的兑换应保留。
     await api("PATCH", "/api/state/daily", {
       date: todayR,
-      tasks: { math: true, dictation: true, reading: true, language: true, review: true },
+      tasks: { math: true, dictation: true, reading: true, language: true, video: true, review: true },
     });
     await api("POST", "/api/points/redeem", { reward: "money_1yuan" });
     const dbMod2 = new DbCtor(TEST_DB);

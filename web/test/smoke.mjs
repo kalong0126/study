@@ -249,7 +249,7 @@ if (await diagBtn.count()) {
 // ——————————————————————————————————————— 8. 响应式
 step("窄屏 360×780 回归");
 await page.setViewportSize({ width: 360, height: 780 });
-for (const p of ["/", "/math", "/chinese", "/story", "/wrong"]) {
+for (const p of ["/", "/math", "/chinese", "/story", "/language", "/video", "/wrong"]) {
   await page.goto(`${BASE}${p}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(500);
   const overflow = await page.evaluate(

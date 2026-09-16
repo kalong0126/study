@@ -15,6 +15,7 @@
     "test:stop": "node test/stop.mjs",
     "test:mathtimer": "node test/math-timer.mjs",
     "test:language": "node test/language.mjs",
+    "test:video": "node test/video.mjs",
     "test:wrong": "node test/wrong-answer.mjs",
     "test:review": "node test/review-gate.mjs",
     "test:dictation": "node test/dictation-continue.mjs",

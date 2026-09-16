@@ -11,7 +11,7 @@
  *   7. 看图观察真的展示了 AI 画出来的图片（<img> 且 naturalWidth > 0），
  *      看图说话复用同一张图；画面文字描述默认折叠（不然等于直接给答案）
  *   8. 9 道题全做完 → 语言强化作为首页的一项待办自动打勾 + 加 20 分
- *      （顶栏任务分母同时是 5 项；少做一道都不加分，这条在 api.test 里断言）
+ *      （顶栏任务分母同时是 6 项；少做一道都不加分，这条在 api.test 里断言）
  *   9. 全程零 console error
  *
  * 为什么要用隔离实例（端口 8796 + 独立 DB + mock 大模型）：
@@ -312,9 +312,9 @@ try {
   ok("做完 9 道后任务卡显示已完成", langCard.includes("已完成") && !langCard.includes("待完成"), langCard);
   ok("任务卡上报出 9 / 9 进度", langCard.includes("已完成 9 / 9 题"), langCard);
   const cardCount = await page.locator("button.task").count();
-  ok("首页任务清单共 5 项", cardCount === 5, `${cardCount} 项`);
+  ok("首页任务清单共 6 项", cardCount === 6, `${cardCount} 项`);
   const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
-  ok("顶栏任务分母也变成 5", /\/ 5 项任务/.test(headPill), headPill);
+  ok("顶栏任务分母也变成 6", /\/ 6 项任务/.test(headPill), headPill);
   await shot("lg-07-home.png");
 
   /* ————————————————————————————— 7. 控制台 */

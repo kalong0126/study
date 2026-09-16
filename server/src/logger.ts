@@ -239,6 +239,7 @@ export const logLlm = mod("llm");
 export const logTts = mod("tts");
 export const logMark = mod("mark");
 export const logSeed = mod("seed");
+export const logVideo = mod("video");
 export const logBackup = mod("backup");
 
 /* --------------------------------------------------------------- 读取接口 */

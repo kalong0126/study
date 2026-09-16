@@ -6,11 +6,13 @@
  *   · 听写：一轮至少写完 3 个字
  *   · 阅读：计时满 15 分钟（或手动结束且已读超过 20 秒）
  *   · 语言强化：9 道题**全部**做完才算完成，加 20 分（少一道一分不给）
+ *   · 英文故事：随机抽一集，**完整看完**（实看 ≥ 90% 时长）才算完成，加 10 分
  *   · 错题：重做 `reviewTarget` 道（**不是写死的 3 道**，见下）
  *
- * 语言强化这一项和别处不一样：它的完成标准不在这里判 ——
- * `languageProgress:<date>` 里那 9 道小题的作答状态才是真相，后端每次作答后重算并回写打卡标记。
- * 本 store 只负责「把做题页新拿到的进度同步进来」（`syncLanguage`）与展示，
+ * 语言强化与英文故事这两项的完成标准都不在这里判 ——
+ * `languageProgress:<date>` 里那 9 道小题的作答状态、`videoWatch:<date>` 里的观看时长才是真相，
+ * 后端每次作答 / 每次上报进度后重算并回写打卡标记。
+ * 本 store 只负责「把页面新拿到的状态同步进来」（`syncLanguage` / `syncVideo`）与展示，
  * 这样孩子在别处（换设备 / 家长判定）做完，首页也不会漏。
  *
  * 错题复习这块有两个和别处不一样的规矩：
@@ -32,7 +34,7 @@ export interface TaskDef {
   name: string;
   desc: string;
   route: string;
-  tone: "blue" | "orange" | "purple" | "green" | "pink";
+  tone: "blue" | "orange" | "purple" | "green" | "pink" | "teal";
 }
 
 export const TASK_DEFS: TaskDef[] = [
@@ -45,6 +47,13 @@ export const TASK_DEFS: TaskDef[] = [
     desc: "9 道题全部做完可得 20 分",
     route: "/language",
     tone: "pink",
+  },
+  {
+    key: "video",
+    name: "英文故事",
+    desc: "看一集英文故事，完整看完得 10 分",
+    route: "/video",
+    tone: "teal",
   },
   { key: "review", name: "错题复习", desc: "把错题本里的错题重做一遍", route: "/wrong", tone: "green" },
 ];
@@ -86,7 +95,7 @@ interface MathLocal {
 function blankDaily(date: string): DailyState {
   return {
     date,
-    tasks: { math: false, dictation: false, reading: false, language: false, review: false },
+    tasks: { math: false, dictation: false, reading: false, language: false, video: false, review: false },
     reviewCount: 0,
     reviewTarget: null,
   };
@@ -300,6 +309,20 @@ export const useProgressStore = defineStore("progress", () => {
     } catch {
       /* 退回「待完成」失败不打扰孩子，下次作答/刷新会再对一遍 */
     }
+  }
+
+  /**
+   * 同步英文故事的打卡标记（播放页每次载入 / 每次上报播放进度后调用）。
+   *
+   * 与语言强化同样由**后端**判定（真相是 `videoWatch:<date>` 里的观看时长），
+   * 这里只把结果在本地立刻反映出来 —— 首页不用刷新就变「已完成」。
+   *
+   * 只处理「完成」这一个方向：一集看完当天就不再回退（孩子接着点「换一个」继续看，
+   * 不该把已经到手的打卡和 10 分抹掉）。
+   */
+  async function syncVideo(done: boolean): Promise<void> {
+    if (!done) return;
+    if (!isDone("video")) await completeTask("video", { silent: true });
   }
 
   /* ---------------------------------------------------------------- 积分 */
@@ -688,6 +711,7 @@ export const useProgressStore = defineStore("progress", () => {
     completeTask,
     applyDaily,
     syncLanguage,
+    syncVideo,
     languageDone,
     languageTotal,
     balance,

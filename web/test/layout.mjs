@@ -34,7 +34,7 @@ const VIEWPORTS = [
   { name: "桌面", width: 1280, height: 800 },
 ];
 
-const KID_ROUTES = ["/", "/math", "/chinese", "/story", "/language", "/wrong"];
+const KID_ROUTES = ["/", "/math", "/chinese", "/story", "/language", "/video", "/wrong"];
 
 /** 读取当前页面的布局度量 */
 async function measure(page) {
@@ -107,7 +107,7 @@ for (const vp of VIEWPORTS) {
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".kid-shell", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);
-  for (const route of ["/math", "/chinese", "/story", "/language", "/wrong", "/"]) {
+  for (const route of ["/math", "/chinese", "/story", "/language", "/video", "/wrong", "/"]) {
     await page.click(`.nav a[href="${route}"]`);
     await page.waitForTimeout(420);
     const m = await measure(page);

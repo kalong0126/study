@@ -13,6 +13,7 @@ const items = computed(() => [
   { to: "/chinese", name: "语文", icon: "chinese", badge: 0 },
   { to: "/story", name: "童话", icon: "story", badge: 0 },
   { to: "/language", name: "语言", icon: "wand", badge: 0 },
+  { to: "/video", name: "英文", icon: "video", badge: 0 },
   { to: "/wrong", name: "错题本", icon: "wrong", badge: mastery.wrongTotal },
 ]);
 </script>

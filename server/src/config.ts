@@ -95,6 +95,20 @@ const ConfigSchema = z.object({
     timeoutMs: z.number().int().min(1000).default(120000),
   }),
 
+  video: z.object({
+    enabled: z.boolean().default(true),
+    /**
+     * 视频目录。Windows 填 UNC（`\\172.10.10.14\共享\...`），
+     * Linux / NAS 填 cifs 挂载点（`/mnt/ptstation/...`）。
+     * **留空 = 功能未配置**，页面会提示家长去填，而不是报错。
+     */
+    dir: z.string().default(""),
+    /** 只放浏览器播得动的容器；mkv / avi / rmvb 会被跳过（Chrome 不支持） */
+    exts: z.array(z.string()).default([".mp4", ".m4v", ".webm", ".mov"]),
+    /** 目录里若有分季子目录，往下扫几层（1 = 只看本层） */
+    maxDepth: z.number().int().min(1).max(6).default(2),
+  }),
+
   tts: z.object({
     provider: z.enum(["edge"]).default("edge"),
     voice: z.string().default("zh-CN-XiaoyiNeural"),
@@ -180,6 +194,7 @@ function normalize(parsed: unknown): Record<string, unknown> {
     db: { ...db, sqlite: obj(db.sqlite), mysql: obj(db.mysql) },
     llm: { ...llm, timeoutMs: obj(llm.timeoutMs), temperature: obj(llm.temperature) },
     imagegen: obj(root.imagegen),
+    video: obj(root.video),
     tts: obj(root.tts),
     logging: obj(root.logging),
     backup: obj(root.backup),
@@ -224,6 +239,9 @@ export function loadConfig(force = false): AppConfig {
   cfg.server.https.keyFile = resolveFromRoot(cfg.server.https.keyFile);
   cfg.tts.cacheDir = resolveFromRoot(cfg.tts.cacheDir);
   cfg.imagegen.dir = resolveFromRoot(cfg.imagegen.dir);
+  // 视频目录可能是 UNC（\\host\share\...）或 cifs 挂载点，都是绝对路径，原样保留。
+  // 注意：它**不能进 ensureDirs** —— 那是别人的共享目录，我们只读，不该去创建它。
+  if (cfg.video.dir) cfg.video.dir = resolveFromRoot(cfg.video.dir);
   cfg.logging.dir = resolveFromRoot(cfg.logging.dir);
   cfg.backup.dir = resolveFromRoot(cfg.backup.dir);
 
@@ -335,6 +353,13 @@ export function startupWarnings(cfg: AppConfig): string[] {
           `    后果：平板上的浏览器地址栏/底栏去不掉，Service Worker 也注册不了（非安全上下文）。`,
       );
     }
+  }
+  // 英文故事配了要开、却没填目录 —— 不拦启动（孩子其它功能照用），但要说清楚
+  if (cfg.video.enabled && !cfg.video.dir) {
+    w.push(
+      "video.enabled=true 但 video.dir 为空 → 「英文」页面会提示未配置。\n" +
+        "    Windows 填 UNC 路径，NAS 上先 cifs 挂载再填挂载点；也可用环境变量 VIDEO_DIR 覆盖。",
+    );
   }
   return w;
 }

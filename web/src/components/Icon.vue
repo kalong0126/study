@@ -23,6 +23,8 @@ const ICONS: Record<string, string> = {
   gear: '<circle cx="12" cy="12" r="3.1"/><path d="M12 2.6v2M12 19.4v2M4.2 7.5l1.7 1M18.1 15.5l1.7 1M4.2 16.5l1.7-1M18.1 8.5l1.7-1"/>',
   pen: '<path d="M4 20.5h16"/><path d="M15 4.2 19.8 9 9.6 19.2 4.8 20.2l1-4.8z"/>',
   play: '<path d="M8 5.5v13l10-6.5z"/>',
+  video: '<rect x="3" y="5" width="18" height="14" rx="3.5"/><path d="M10.4 9.4v5.2l4.4-2.6z"/>',
+  pause: '<path d="M9.5 5.5v13M14.5 5.5v13"/>',
   stop: '<rect x="6.5" y="6.5" width="11" height="11" rx="2.5"/>',
   speaker: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6"/>',
   speakerLoud: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',

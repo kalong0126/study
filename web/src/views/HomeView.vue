@@ -30,6 +30,7 @@ const toneColor: Record<string, string> = {
   purple: "#8E7BEF",
   green: "#3FBF8F",
   pink: "#FF7FA0",
+  teal: "#2FA8A0",
 };
 
 const toneIcon: Record<string, string> = {
@@ -38,6 +39,7 @@ const toneIcon: Record<string, string> = {
   purple: "story",
   green: "none",
   pink: "wand",
+  teal: "video",
 };
 
 const remaining = computed(() => TASK_DEFS.length - progress.completedCount);

@@ -38,6 +38,7 @@ import { pointsRouter } from "./routes/points.js";
 import { stateRouter } from "./routes/state.js";
 import { storyRouter } from "./routes/story.js";
 import { ttsRouter } from "./routes/tts.js";
+import { videoRouter } from "./routes/video.js";
 import { seedLessons } from "./seed/index.js";
 import { scheduleDailyBackup, stopDailyBackup } from "./services/backup.js";
 import { currentChildId } from "./services/child.js";
@@ -97,6 +98,8 @@ function createApp(): express.Express {
       };
       if (res.statusCode >= 400) logHttp.warn(fields, "请求异常");
       else if (fullPath.startsWith("/api/tts")) logHttp.debug(fields, "请求");
+      // 视频流一个片子要发几十上百个 Range 片段，逐条 info 会把日志刷爆
+      else if (fullPath.startsWith("/api/video/stream")) logHttp.debug(fields, "请求");
       else logHttp.info(fields, "请求");
     });
     next();
@@ -107,6 +110,7 @@ function createApp(): express.Express {
   api.use(lessonsRouter);
   api.use(storyRouter);
   api.use(languageRouter);
+  api.use(videoRouter);
   api.use(ttsRouter);
   api.use(markRouter);
   api.use(pointsRouter);
@@ -239,6 +243,17 @@ async function main(): Promise<void> {
       key: ig.configured ? `已配置（${ig.keyFrom === "own" ? "独立" : "复用判卷 Key"}）` : "(未配置，看图题将退回文字描述)",
     },
     "文生图配置",
+  );
+
+  // 英文故事的视频目录。共享没挂上时这里只是记录配置，真正的连通性问题由页面自己报
+  // （启动时去 stat 一个 SMB 路径会拖慢启动，而且共享迟一点挂上也完全正常）
+  logSys.info(
+    {
+      enabled: cfg.video.enabled,
+      目录: cfg.video.dir || "(未配置，页面会提示家长填)",
+      格式: cfg.video.exts.join(" "),
+    },
+    "英文故事视频配置",
   );
 
   const app = createApp();

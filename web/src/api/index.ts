@@ -28,6 +28,9 @@ import {
   type StoryRow,
   type TimerState,
   type TtsStats,
+  type VideoItemInfo,
+  type VideoToday,
+  type VideoWatchInfo,
   type WrongItem,
   type WrongType,
 } from "./types";
@@ -218,6 +221,40 @@ export const api = {
 
   setTimer: (timer: TimerState) =>
     request<{ timer: TimerState }>("/state/timer", { method: "PATCH", body: JSON.stringify(timer) }),
+
+  /* -------------------------------------------------------------- 英文故事 */
+
+  /** 当天的英文故事：该放哪一集 + 看到哪儿了（同一天进来不会换片） */
+  videoToday: (date?: string) => request<VideoToday>(`/video/today${qs({ date })}`),
+
+  /** 换一个：抽一集别的（优先没看过的） */
+  videoNext: (date?: string) =>
+    request<{ date: string; item: VideoItemInfo; watch: VideoWatchInfo; daily: DailyState; balance: number }>(
+      "/video/next",
+      { method: "POST", body: JSON.stringify({ date }) },
+    ),
+
+  /**
+   * 上报播放进度。`watchedSec` 必须是**真正播放累加的秒数**（拖进度条不计），
+   * 服务端按「实看 ≥ 90% 时长」判是否算看完（看完才打卡 + 10 分）。
+   */
+  videoProgress: (body: {
+    date?: string;
+    id: string;
+    watchedSec: number;
+    durationSec: number;
+    ended: boolean;
+  }) =>
+    request<{ date: string; ignored?: boolean; watch: VideoWatchInfo; daily: DailyState; balance: number }>(
+      "/video/progress",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  /** 共享刚挂上 / 目录刚加完文件：清缓存重扫一次 */
+  videoRescan: () => request<{ total: number; problem: string; dir: string }>("/video/rescan", { method: "POST" }),
+
+  /** 直接当 <video src> 用 */
+  videoStreamUrl: (id: string) => `${BASE}/video/stream/${id}`,
 
   /* ------------------------------------------------------------------ 积分 */
 

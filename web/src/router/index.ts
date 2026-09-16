@@ -11,6 +11,7 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/LanguageView.vue"),
     meta: { title: "语言强化" },
   },
+  { path: "/video", name: "video", component: () => import("@/views/VideoView.vue"), meta: { title: "英文故事" } },
   { path: "/wrong", name: "wrong", component: () => import("@/views/WrongView.vue"), meta: { title: "错题本" } },
   { path: "/points", name: "points", component: () => import("@/views/PointsView.vue"), meta: { title: "我的积分" } },
   {

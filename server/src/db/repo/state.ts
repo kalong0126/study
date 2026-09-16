@@ -12,13 +12,15 @@ const up = (table: string, cols: string[], keys: string[]) => upsertSql(DRIVER()
 /**
  * 每日打卡任务清单。
  *
- * `language`（语言强化）与其它四项不同：它的完成标准不在本表里判，
- * 「9 道题全做完」这个真相存在 `languageProgress:<date>` 里，
- * 由 `routes/language.ts` 的 `syncLanguageTask()` 每次作答后重算并回写这里。
- * 这样做的原因：语言强化有 9 道小题，孩子可能分几次做完、家长可能中途打回一题，
- * 靠前端打勾容易和真实进度脱节；后端算准了再回写，换设备 / 刷新都不会漏。
+ * `language`（语言强化）与 `video`（英文故事）两项的完成标准不在本表里判：
+ *   · language —— 「9 道题全做完」的真相存 `languageProgress:<date>`，
+ *     由 `routes/language.ts` 的 `syncLanguageTask()` 每次作答后重算并回写这里。
+ *   · video    —— 「完整看完一集」的真相存 `videoWatch:<date>`，
+ *     由 `routes/video.ts` 的 `syncVideoTask()` 在播放进度上报后重算并回写。
+ * 这样做的原因：这两项都由孩子分多次/在别的设备上推进，靠前端打勾容易和真实进度脱节；
+ * 后端算准了再回写，换设备 / 刷新 / 前端是旧缓存都不会漏。
  */
-export const TASK_KEYS = ["math", "dictation", "reading", "language", "review"] as const;
+export const TASK_KEYS = ["math", "dictation", "reading", "language", "video", "review"] as const;
 export type TaskKey = (typeof TASK_KEYS)[number];
 
 export interface DailyState {
@@ -452,7 +454,8 @@ export async function resetToday(
     await t.run("DELETE FROM daily_progress WHERE child_id = ? AND date = ?", [childId, date]);
     await t.run("DELETE FROM math_sets WHERE child_id = ? AND date = ?", [childId, date]);
 
-    // 只清按日期生成的 KV 键，跨天键（timer / seeded_at / 系统设置 / languageRecent）一律保留
+    // 只清按日期生成的 KV 键，跨天键（timer / seeded_at / 系统设置 / languageRecent /
+    // videoWatched）一律保留
     const dailyKeys = [
       `reviewCount:${date}`,
       `reviewTarget:${date}`,
@@ -460,6 +463,7 @@ export async function resetToday(
       `language:${date}`,
       `languageProgress:${date}`,
       `languageImage:${date}`,
+      `videoWatch:${date}`,
     ];
     let kv = 0;
     for (const k of dailyKeys) {

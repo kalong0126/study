@@ -2,7 +2,7 @@
  * 后端接口的数据类型（与 server/src 的返回结构一一对应）
  */
 
-export type TaskKey = "math" | "dictation" | "reading" | "language" | "review";
+export type TaskKey = "math" | "dictation" | "reading" | "language" | "video" | "review";
 export type WrongType = "math" | "chinese";
 export type MasteryState = 0 | 1;
 
@@ -175,6 +175,51 @@ export interface LanguageToday {
 export interface TimerState {
   running: boolean;
   endAt: number;
+}
+
+/* -------------------------------------------------------------- 英文故事 */
+
+/** 目录里的一集视频 */
+export interface VideoItemInfo {
+  /** 用作播放地址的标识（服务端 base64url，前端只当字符串透传） */
+  id: string;
+  /** 展示用标题（文件名收拾干净后的样子） */
+  title: string;
+  /** 原始文件名，家长排查时更有用 */
+  name: string;
+  ext: string;
+  sizeMB: number;
+}
+
+/** 当天这一集的观看记录 */
+export interface VideoWatchInfo {
+  itemId: string;
+  title: string;
+  /** 实看秒数（只有真正在播放时累加，拖进度条不算） */
+  watchedSec: number;
+  durationSec: number;
+  /** 今天是否已经完整看完过一集 */
+  complete: boolean;
+  completeTitle: string;
+  hasItem: boolean;
+}
+
+/** 英文故事页面的初始状态 */
+export interface VideoToday {
+  date: string;
+  /** 配置里关掉了整个功能 */
+  enabled: boolean;
+  /** 目录读不了的原因（共享没挂上 / 路径写错 / 没权限）；正常为空串 */
+  problem?: string;
+  /** 目录里可播的总集数 */
+  total?: number;
+  /** 还没看过的集数（抽片优先抽这些） */
+  unwatched?: number;
+  /** 现在该放哪一集；目录空了 / 读不到时为 null */
+  item?: VideoItemInfo | null;
+  watch?: VideoWatchInfo | null;
+  daily: DailyState;
+  balance: number;
 }
 
 /** 一条积分兑换记录（孩子用积分换的奖励，家长线下兑现） */
