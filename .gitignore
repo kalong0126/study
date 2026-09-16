@@ -22,6 +22,8 @@ server/certs/
 # 测试残留
 web/test/shots/
 *.log
+# 临时脚本/命令输出（根目录下的 _xxx.txt，如测试与 typecheck 回显）
+/_*.txt
 
 # 编辑器 / 系统
 .DS_Store
