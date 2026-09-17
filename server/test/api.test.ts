@@ -527,6 +527,21 @@ async function main(): Promise<void> {
     ok("L17 出题时把主题与参数发给了模型", lcalls.calls[0]?.prompt.includes("本次训练参数") === true, lcalls.calls[0]?.prompt.slice(0, 80));
     eq("L18 出题用的是 story 用途的模型", lcalls.calls[0]?.model, "mock-story");
 
+    // 出题必须「点名」本次要练的病句错误类型 / 排序依据，并明确禁止照抄文档示例。
+    // 背景：文档每种题型只配了一个示例，模型会照着改几个词就交上来 —— 实测连续几天
+    // 都是「喝 + 固体食物」那类病句（「弟弟喝了一个月饼。」= 把「我喝了一块蛋糕。」换词），
+    // 第 5 题的原句也一字不差抄了文档里的「我很开心。」。
+    const langPrompt1 = lcalls.calls[0]?.prompt ?? "";
+    const pinnedErr1 = /errorType 必须\*\*恰好\*\*是 "([A-Z_]+)"/.exec(langPrompt1)?.[1] ?? "";
+    const pinnedOrd1 = /orderType 必须\*\*恰好\*\*是 "([A-Z_]+)"/.exec(langPrompt1)?.[1] ?? "";
+    ok("L18b 出题时点名了本次病句的错误类型", !!pinnedErr1, pinnedErr1 || langPrompt1.slice(-160));
+    ok("L18c 出题时点名了本次排序依据", !!pinnedOrd1, pinnedOrd1);
+    ok(
+      "L18d 明确禁止照抄文档示例（点名了「喝 + 食物」那类）",
+      langPrompt1.includes("禁止原样或换词照抄") && langPrompt1.includes("我喝了一块蛋糕"),
+      langPrompt1.slice(0, 60),
+    );
+
     // 幂等：当天已有题目时不重复出题、不重复花钱
     await resetMock();
     const lg2 = await api("POST", "/api/language/generate", {});
@@ -596,6 +611,16 @@ async function main(): Promise<void> {
     const tasksL = (todayL.json.daily as { tasks: Record<string, boolean> }).tasks;
     eq("L30b 换一套题 → 语言强化的打卡标记退回「待完成」", tasksL.language, false);
     eq("L30c 换一套题后 /api/state 的语言进度归零", (todayL.json.counts as { done: number }).done, 0);
+
+    // 换一套题时，点名的那两项**必须换掉** —— 否则「轮换」等于没轮换，明天还是同一种病句。
+    // 轮换状态存在 languageRecent 里；mock 每次固定回 ACTION_OBJECT_ERROR / TIME，
+    // 我们同时记「指定的」和「实际的」，所以下一次的指定值一定不等于上一次。
+    lcalls = await mockCalls();
+    const langPrompt2 = lcalls.calls[0]?.prompt ?? "";
+    const pinnedErr2 = /errorType 必须\*\*恰好\*\*是 "([A-Z_]+)"/.exec(langPrompt2)?.[1] ?? "";
+    const pinnedOrd2 = /orderType 必须\*\*恰好\*\*是 "([A-Z_]+)"/.exec(langPrompt2)?.[1] ?? "";
+    ok("L28b 换一套题时病句错误类型轮换了", !!pinnedErr2 && pinnedErr2 !== pinnedErr1, `${pinnedErr1} → ${pinnedErr2}`);
+    ok("L28c 换一套题时排序依据轮换了", !!pinnedOrd2 && pinnedOrd2 !== pinnedOrd1, `${pinnedOrd1} → ${pinnedOrd2}`);
 
     // 模型少返题：重试一次仍失败 → 502 + kind=parse
     await resetMock();

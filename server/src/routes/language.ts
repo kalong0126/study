@@ -24,9 +24,12 @@ import { chat, LlmError } from "../services/llm.js";
 import { logLlm } from "../logger.js";
 import {
   LANGUAGE_SYSTEM,
+  LANGUAGE_ERROR_TYPES,
+  LANGUAGE_ORDER_TYPES,
   buildLanguagePrompt,
   buildLanguageRetryPrompt,
   parseLanguageSet,
+  pickRotating,
   pickTheme,
   type LanguageSet,
 } from "../services/prompts/languagePrompt.js";
@@ -54,11 +57,23 @@ interface LanguageRecent {
   themes: string[];
   words: string[];
   scenes: string[];
+  /**
+   * 最近用过的病句错误类型（`LANGUAGE_ERROR_TYPES` 的 type）。
+   * 文档「题型4」只给了一个示例，模型会一直照抄那一个 —— 所以由我们指定本次用哪种、
+   * 并在这里记住用过的，跨天轮换。
+   */
+  errorTypes: string[];
+  /** 最近用过的排序依据（`LANGUAGE_ORDER_TYPES` 的 type），同上 */
+  orderTypes: string[];
 }
 
 const RECENT_THEMES_MAX = 20;
 const RECENT_WORDS_MAX = 40;
 const RECENT_SCENES_MAX = 10;
+/** 7 种错误类型只回避最近 4 种，保证每次至少有 3 种可选 */
+const RECENT_ERROR_TYPES_MAX = 4;
+/** 4 种排序依据回避最近 2 种 */
+const RECENT_ORDER_TYPES_MAX = 2;
 
 function normDate(v: unknown): string {
   const s = bStr(v).trim();
@@ -142,18 +157,42 @@ async function readRecent(childId: number): Promise<LanguageRecent> {
     themes: Array.isArray(r?.themes) ? (r?.themes ?? []).filter((x): x is string => typeof x === "string") : [],
     words: Array.isArray(r?.words) ? (r?.words ?? []).filter((x): x is string => typeof x === "string") : [],
     scenes: Array.isArray(r?.scenes) ? (r?.scenes ?? []).filter((x): x is string => typeof x === "string") : [],
+    errorTypes: Array.isArray(r?.errorTypes)
+      ? (r?.errorTypes ?? []).filter((x): x is string => typeof x === "string")
+      : [],
+    orderTypes: Array.isArray(r?.orderTypes)
+      ? (r?.orderTypes ?? []).filter((x): x is string => typeof x === "string")
+      : [],
   };
 }
 
-/** 把新的一套题并入「最近用过」清单（旧的留在尾部，超出上限丢弃） */
-async function pushRecent(childId: number, set: LanguageSet): Promise<void> {
+/**
+ * 把新的一套题并入「最近用过」清单（旧的留在尾部，超出上限丢弃）。
+ *
+ * 病句类型 / 排序依据记的是**我们就本次请求指定的那个**（`pinned`）**加上模型实际给出的那个**：
+ *   · 记指定的 → 保证「请求」本身在轮换（模型听话时，孩子的题就跟着变）；
+ *   · 记实际的 → 模型没听话、给了别的类型时，下次也会把那种避开。
+ */
+async function pushRecent(
+  childId: number,
+  set: LanguageSet,
+  pinned: { errorType?: string; orderType?: string } = {},
+): Promise<void> {
   const prev = await readRecent(childId);
   const words = set.questions.flatMap((q) => [q.word, ...q.keywords]).filter(Boolean);
   const scene = set.questions[6]?.imagePrompt ?? "";
+  const errTypes = [pinned.errorType ?? "", set.questions[3]?.errorType ?? ""]
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+  const ordTypes = [pinned.orderType ?? "", set.questions[5]?.orderType ?? ""]
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
   const next: LanguageRecent = {
     themes: [set.theme, ...prev.themes.filter((t) => t !== set.theme)].slice(0, RECENT_THEMES_MAX),
     words: Array.from(new Set([...words, ...prev.words])).slice(0, RECENT_WORDS_MAX),
     scenes: [scene, ...prev.scenes.filter((s) => s !== scene)].filter(Boolean).slice(0, RECENT_SCENES_MAX),
+    errorTypes: Array.from(new Set([...errTypes, ...prev.errorTypes])).slice(0, RECENT_ERROR_TYPES_MAX),
+    orderTypes: Array.from(new Set([...ordTypes, ...prev.orderTypes])).slice(0, RECENT_ORDER_TYPES_MAX),
   };
   await kvSet(childId, "languageRecent", next);
 }
@@ -164,10 +203,28 @@ async function generateSet(
   date: string,
   difficulty: number,
   theme: string,
-): Promise<{ set: LanguageSet; ms: number; model: string }> {
+): Promise<{
+  set: LanguageSet;
+  ms: number;
+  model: string;
+  /** 本次指定的病句错误类型 / 排序依据（写日志与轮换状态用） */
+  correctionErrorType: string;
+  orderType: string;
+}> {
   const cfg = loadConfig();
   const provider = resolveLlm(cfg, "story");
   const recent = await readRecent(childId);
+
+  // 病句错误类型、排序依据由我们指定并跨天轮换 —— 见 languagePrompt.ts 里
+  // LANGUAGE_ERROR_TYPES 的注释：让模型自己挑，它会一直照抄文档里那个唯一的示例。
+  const correctionErrorType = pickRotating(
+    LANGUAGE_ERROR_TYPES.map((t) => t.type),
+    recent.errorTypes,
+  );
+  const orderType = pickRotating(
+    LANGUAGE_ORDER_TYPES.map((t) => t.type),
+    recent.orderTypes,
+  );
 
   const messages = [
     { role: "system" as const, content: LANGUAGE_SYSTEM },
@@ -179,6 +236,8 @@ async function generateSet(
         weakAbilities: [],
         recentWords: recent.words.slice(0, 30),
         recentScenes: recent.scenes.slice(0, 6),
+        correctionErrorType,
+        orderType,
       }),
     },
   ];
@@ -214,7 +273,7 @@ async function generateSet(
 
     try {
       const set = parseLanguageSet(result.text, { date, model: result.model, ms: result.ms, difficulty, theme });
-      return { set, ms: result.ms, model: result.model };
+      return { set, ms: result.ms, model: result.model, correctionErrorType, orderType };
     } catch (e) {
       reason = e instanceof Error ? e.message : String(e);
       lastErr = e;
@@ -478,11 +537,19 @@ languageRouter.post(
     await kvSet(childId, setKey(date), out.set);
     // 换一套题 = 之前的作答作废 → 打卡标记也要跟着退回「待完成」（已发的 20 分不追回）
     await kvSet(childId, progKey(date), {});
-    await pushRecent(childId, out.set);
+    await pushRecent(childId, out.set, { errorType: out.correctionErrorType, orderType: out.orderType });
     const sync = await syncLanguageTask(childId, date, { set: out.set, progress: {} });
 
     logLlm.info(
-      { date, theme: out.set.theme, questions: out.set.questions.length, ms: out.ms, model: out.model },
+      {
+        date,
+        theme: out.set.theme,
+        questions: out.set.questions.length,
+        病句类型: out.correctionErrorType,
+        排序依据: out.orderType,
+        ms: out.ms,
+        model: out.model,
+      },
       "语言强化出题完成",
     );
     ok(res, {

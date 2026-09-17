@@ -920,6 +920,35 @@ JSON 结构固定如下：
 
 完成以上检查后，再输出最终 JSON。`;
 
+/* ------------------------------------------------------------ 枚举：病句错误类型 / 排序依据 */
+
+/**
+ * 病句的 7 种错误类型（文档「题型4 病句修改」里列的那 7 个）。
+ *
+ * **为什么要在这里枚举 + 由我们指定本次用哪一种**：
+ * 文档在这一节只给了一个示例（`我喝了一块蛋糕。` / ACTION_OBJECT_ERROR），
+ * 模型会死死咬住它 —— 实测生成出来的是「弟弟喝了一个月饼。」，
+ * 就是把示例换了个人物和食物（我→弟弟、一块蛋糕→一个月饼）。
+ * 所以错误类型不能再让模型自己挑，交由 `pickRotating()` 跨天轮换后写进 user 消息。
+ */
+export const LANGUAGE_ERROR_TYPES = [
+  { type: "MISSING_COMPONENT", name: "缺少成分" },
+  { type: "WORD_MISMATCH", name: "词语搭配不当" },
+  { type: "WORD_ORDER", name: "语序错误" },
+  { type: "REPETITION", name: "重复啰嗦" },
+  { type: "LOGIC_ERROR", name: "前后不合理" },
+  { type: "QUANTIFIER_ERROR", name: "量词使用错误" },
+  { type: "ACTION_OBJECT_ERROR", name: "动作与对象搭配错误" },
+] as const;
+
+/** 排序依据的 4 种类型（同上：文档列了 4 种，模型只会用第一个 TIME） */
+export const LANGUAGE_ORDER_TYPES = [
+  { type: "TIME", name: "时间顺序" },
+  { type: "EVENT", name: "事情发展顺序" },
+  { type: "ACTION", name: "动作顺序" },
+  { type: "SPACE", name: "空间顺序" },
+] as const;
+
 /* ------------------------------------------------------------ 主题池 */
 
 /**
@@ -977,6 +1006,20 @@ export function pickTheme(recentThemes: string[] = []): string {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+/**
+ * 从候选枚举里挑一个**最近没用过的**，全都用过时退回全量随机。
+ *
+ * 用在「病句错误类型」「排序依据」这两个**必须跨天轮换**的字段上：
+ * 交给模型自己挑的结果是永远挑文档里那个（也是唯一的）示例 —— 见
+ * LANGUAGE_ERROR_TYPES 的注释。轮换状态存在 `languageRecent` 里的。
+ */
+export function pickRotating(all: readonly string[], recent: readonly string[] = []): string {
+  const used = new Set(recent);
+  const fresh = all.filter((x) => !used.has(x));
+  const pool = fresh.length ? fresh : all;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 /* ------------------------------------------------------------ 出题请求 */
 
 export interface LanguagePromptParams {
@@ -985,6 +1028,15 @@ export interface LanguagePromptParams {
   weakAbilities?: string[];
   recentWords?: string[];
   recentScenes?: string[];
+  /** 本次指定的病句错误类型（取 LANGUAGE_ERROR_TYPES 的 type）；不传则只要求「别老用同一个」 */
+  correctionErrorType?: string;
+  /** 本次指定的排序依据（取 LANGUAGE_ORDER_TYPES 的 type）；不传则只要求「别老用 TIME」 */
+  orderType?: string;
+}
+
+/** 枚举值 → 中文名（找不到就原样回显，别因为拼错把整句话吞掉） */
+function enumName(list: readonly { type: string; name: string }[], type: string): string {
+  return list.find((t) => t.type === type)?.name ?? type;
 }
 
 /**
@@ -996,6 +1048,11 @@ export interface LanguagePromptParams {
  *   · 第 6 题的 sentences 是乱序还是正序、answer 是下标还是整句
  *   · 第 7/8 题的参考答案怎么和观察问题一一对应
  * 所以在 user 消息里把这几个字段钉死（不覆盖任何出题原则，只是把格式写成程序可解析的）。
+ *
+ * 第 8～10 条是**反照抄**：文档每种题型只配了一个示例，模型会照着示例改几个词就交上来
+ * —— 实测病句连着几天都是「喝 + 固体食物」那一类，第 5 题的原句也一字不差地
+ * 抄了文档里的「我很开心。」。示例本身没错，所以不动系统提示词（家长原文禁改写），
+ * 只在 user 消息里明确「示例只说明格式」+ 指定本次的错误类型 / 排序依据。
  */
 export function buildLanguagePrompt(p: LanguagePromptParams): string {
   const params = {
@@ -1005,6 +1062,9 @@ export function buildLanguagePrompt(p: LanguagePromptParams): string {
     recentWords: p.recentWords ?? [],
     recentScenes: p.recentScenes ?? [],
   };
+
+  const errType = p.correctionErrorType ?? "";
+  const ordType = p.orderType ?? "";
 
   return [
     "本次训练参数（请严格使用，不要替换主题）：",
@@ -1018,6 +1078,18 @@ export function buildLanguagePrompt(p: LanguagePromptParams): string {
     "5. 第 8 题 image_speaking：必须复用第 7 题的同一个场景（basedOnQuestionId 固定为 7），不要再编一个新场景。",
     "6. 每一题的 answer 都不能为空字符串；开放题 answerType 用 \"reference\"，客观题（第 2、第 6 题）用 \"standard\"。",
     "7. 不要和 recentWords、recentScenes 重复；同一套题里的人物、地点、动作也要有变化。",
+    // ---- 以下 3 条是这次为了治「老是同一道题」加的 ----
+    "8. ⚠️ 上面系统提示词里的**示例句只用来说明格式，一律禁止原样或换词照抄**。特别点名这几处：",
+    "   · 第 4 题不许再写「我喝了一块蛋糕」这种「喝 + 固体食物」的搭配错误；换成别的人物、别的食物写一句同款（例如「弟弟喝了一个月饼」）也算照抄，同样不许；",
+    "   · 第 3 题不要再用「小狗跑。」当基础句，第 5 题不要再用「我很开心。」当原句；",
+    "   · 第 1、2 题不要再用「嫩绿」「温暖的阳光」当答案，第 4 题的 hint 也不要再写「蛋糕应该用哪个动作」。",
+    "   每一题都必须结合本次主题重新创作，字面上不能和上面这些示例句重复。",
+    errType
+      ? `9. 本次第 4 题 sentence_correction：errorType 必须**恰好**是 "${errType}"（${enumName(LANGUAGE_ERROR_TYPES, errType)}），不要换成别的错误类型。`
+      : "9. 本次第 4 题 sentence_correction：errorType 在 7 种错误类型里换着用，不要总是 ACTION_OBJECT_ERROR。",
+    ordType
+      ? `10. 本次第 6 题 sentence_order：orderType 必须**恰好**是 "${ordType}"（${enumName(LANGUAGE_ORDER_TYPES, ordType)}），不要换成别的依据。`
+      : "10. 本次第 6 题 sentence_order：orderType 不要总是 TIME，四种依据换着用。",
   ].join("\n");
 }
 
@@ -1106,22 +1178,13 @@ export interface LanguageSet {
   ms: number;
 }
 
-const ERROR_TYPE_NAMES: Record<string, string> = {
-  MISSING_COMPONENT: "缺少成分",
-  WORD_MISMATCH: "词语搭配不当",
-  WORD_ORDER: "语序错误",
-  REPETITION: "重复啰嗦",
-  LOGIC_ERROR: "前后不合理",
-  QUANTIFIER_ERROR: "量词使用错误",
-  ACTION_OBJECT_ERROR: "动作与对象搭配错误",
-};
+const ERROR_TYPE_NAMES: Record<string, string> = Object.fromEntries(
+  LANGUAGE_ERROR_TYPES.map((t) => [t.type, t.name]),
+);
 
-const ORDER_TYPE_NAMES: Record<string, string> = {
-  TIME: "时间顺序",
-  EVENT: "事情发展顺序",
-  ACTION: "动作顺序",
-  SPACE: "空间顺序",
-};
+const ORDER_TYPE_NAMES: Record<string, string> = Object.fromEntries(
+  LANGUAGE_ORDER_TYPES.map((t) => [t.type, t.name]),
+);
 
 /* -------- 取值小工具：模型字段时有时无、类型也飘，统一在这里兜住 -------- */
 
