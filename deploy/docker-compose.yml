@@ -66,6 +66,16 @@ services:
       # —— 其它 ——
       # HTTPS：默认关（内网 HTTP 也能用，只是平板装不成应用）。开了要配 certs 挂载，见文件头
       HTTPS_ENABLED: ${HTTPS_ENABLED:-false}
+      # —— 访问鉴权（端口一旦上公网就必须开，见文件头「外网访问」一节）——
+      # 口令别写进这里，放 .env（.env 不进 git）。留空则用 config.yaml 里的默认值 ——
+      # 而那个默认值是写在仓库里的，上公网前务必换成自己的。
+      CHILD_PIN: ${CHILD_PIN:-}
+      PARENT_PIN: ${PARENT_PIN:-}
+      # ⚠️ Docker 下这一项**必须填**，否则容器里分不清「家里」和「公网」
+      #    （来源地址恒为网桥网关），结果是家里每次打开也要输口令。
+      #    逗号分隔，IPv4 和家里那个 IPv6 /64 都要写。
+      #    例：AUTH_LAN_CIDRS=172.10.10.0/24,2408:8352:a13:2cb1::/64
+      AUTH_LAN_CIDRS: ${AUTH_LAN_CIDRS:-}
       TZ: Asia/Shanghai
       # 英文故事视频目录：**容器内**路径，固定挂在 /app/server/video（见下面 volumes）。
       # 宿主机上的真实路径由 .env 的 VIDEO_DIR_HOST 决定 —— 所以 config.yaml 里的

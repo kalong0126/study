@@ -16,6 +16,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "../src/config.js";
 import { inCidr, isPrivateAddress, localSubnets } from "../src/services/net.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -384,7 +385,78 @@ async function main(): Promise<void> {
     await sleep(800);
   }
 
-  console.log("\n" + "=".repeat(60));
+  // 两个实例都退出了再跑：它会改 CONFIG_PATH / AUTH_LAN_CIDRS
+  configGroup();
+
+  /* --------------------------------------------------- H. 配置解析（容器靠 env 传） */
+/**
+ * 为什么单独测这一组：容器部署时 lanCidrs 只能从环境变量来（env 里塞不进数组），
+ * 必须确认「逗号分隔的字符串」也能变成 string[]。
+ *
+ * 这一条曾经静默失效过 —— 写错了不会报任何错，只会让「家里每次打开都要输口令」，
+ * 而这种症状很容易被当成「IP 判定有问题」，很难往配置解析上想。
+ *
+ * 放在所有子进程都退出之后跑：它会临时改 CONFIG_PATH / AUTH_LAN_CIDRS，
+ * 而这些环境变量会被 spawn 出去的实例继承。
+ */
+function configGroup(): void {
+  group("H. 配置解析（lanCidrs 的两种写法）");
+  const file = path.join(SERVER_ROOT, "config", "config.authtest.cfg.yaml");
+  const yaml = (cidrs: string): string => `server:
+  port: 8899
+  host: 127.0.0.1
+  corsOrigins: []
+  auth:
+    enabled: true
+    childPin: "12345678"
+    lanCidrs: ${cidrs}
+db:
+  driver: sqlite
+  sqlite: { file: ./data/_authtest_cfg.db }
+llm:
+  baseUrl: http://127.0.0.1:9/v1
+  apiKey: sk-test
+  timeoutMs: { story: 2000, mark: 2000, suggest: 2000 }
+logging:
+  level: warn
+  dir: ./logs/_authtest
+backup:
+  enabled: false
+`;
+
+  const oldPath = process.env.CONFIG_PATH;
+  const oldCidrs = process.env.AUTH_LAN_CIDRS;
+  const read = (cidrs: string, envValue?: string): string[] => {
+    fs.writeFileSync(file, yaml(cidrs), "utf8");
+    if (envValue === undefined) delete process.env.AUTH_LAN_CIDRS;
+    else process.env.AUTH_LAN_CIDRS = envValue;
+    return loadConfig(true).server.auth.lanCidrs;
+  };
+
+  try {
+    process.env.CONFIG_PATH = file;
+    eq("H1 环境变量为空 → 空数组（不是空字符串）", read(`"\${AUTH_LAN_CIDRS:-}"`, ""), []);
+    eq(
+      "H2 逗号分隔的字符串 → 切成两项（容器里就是这么传的）",
+      read(`"\${AUTH_LAN_CIDRS:-}"`, "172.10.10.0/24,2408:8352:a13:2cb1::/64"),
+      ["172.10.10.0/24", "2408:8352:a13:2cb1::/64"],
+    );
+    eq("H3 空格分隔也认", read(`"\${AUTH_LAN_CIDRS:-}"`, "10.0.0.0/8 192.168.0.0/16"), ["10.0.0.0/8", "192.168.0.0/16"]);
+    eq("H4 config.yaml 里写数组仍然可用（原有写法不能坏）", read('["10.0.0.0/8"]', ""), ["10.0.0.0/8"]);
+  } finally {
+    if (oldPath === undefined) delete process.env.CONFIG_PATH;
+    else process.env.CONFIG_PATH = oldPath;
+    if (oldCidrs === undefined) delete process.env.AUTH_LAN_CIDRS;
+    else process.env.AUTH_LAN_CIDRS = oldCidrs;
+    try {
+      fs.unlinkSync(file);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+console.log("\n" + "=".repeat(60));
   console.log(`总计 ${pass + failures.length} 项，通过 ${pass} 项，失败 ${failures.length} 项`);
   if (failures.length) {
     console.log("\n失败清单：");
@@ -400,6 +472,7 @@ function cleanup(): void {
   for (const f of [
     CONFIG_A,
     CONFIG_B,
+    path.join(SERVER_ROOT, "config", "config.authtest.cfg.yaml"),
     DB_A,
     `${DB_A}-wal`,
     `${DB_A}-shm`,

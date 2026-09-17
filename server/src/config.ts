@@ -51,8 +51,16 @@ const ConfigSchema = z.object({
        *   2. **跑在容器里时只认这个列表** —— Docker bridge 下容器看到的来源地址
        *      往往是网桥网关（172.18.0.1），而它恰好在 RFC1918 内，会被误判成内网。
        *      不用 host 网络的话，就在这里显式写出你要信任的网段（不写 = 一律按公网处理）。
+       *
+       * 两种写法都收：数组（["10.0.0.0/8"]）或逗号/空白分隔的字符串（"10.0.0.0/8,192.168.0.0/16"）。
+       * 后者是给环境变量用的 —— env 里塞不进数组，容器里只能 AUTH_LAN_CIDRS=a,b。
        */
-      lanCidrs: z.array(z.string()).default([]),
+      lanCidrs: z
+        .union([z.array(z.string()), z.string()])
+        .transform((v) =>
+          (Array.isArray(v) ? v : v.split(/[\s,;]+/)).map((s) => s.trim()).filter(Boolean),
+        )
+        .default([]),
       /**
        * 把内网请求也当公网处理（默认关）。
        * 用途：家长在家里验证「公网那套锁到底生效了没有」，以及自动化测试。
