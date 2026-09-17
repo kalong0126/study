@@ -19,7 +19,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { AppConfig } from "../config.js";
 import { kvGet, kvSet } from "../db/repo/state.js";
 import { logAuth } from "../logger.js";
-import { inCidr, inContainer, isPrivateAddress, localSubnets } from "./net.js";
+import { inCidr, inContainer, isOwnGateway, isPrivateAddress, localSubnets } from "./net.js";
 
 export type Role = "child" | "parent";
 
@@ -352,6 +352,14 @@ function deny(res: Response, status: number, error: string, kind: string): void 
  * 配置在启动时取一次快照：auth 相关的改动需要重启才生效。
  * 这既符合 config.yaml 一直以来的约定，也避免请求打到「改了一半」的配置上。
  */
+/**
+ * 「来源地址被 Docker 改写」这条诊断只报一次。
+ *
+ * 它命中时说明用户正在踩 bridge 网络这个坑（见 net.ts 的 isOwnGateway）：
+ * 每个请求都报一遍会把日志刷满，报一次就够定位了。
+ */
+let bridgeHintLogged = false;
+
 export function createGuard(cfg: AppConfig): (req: Request, res: Response, next: NextFunction) => Promise<void> {
   const auth = cfg.server.auth;
   return async function guard(req, res, next) {
@@ -375,6 +383,20 @@ export function createGuard(cfg: AppConfig): (req: Request, res: Response, next:
     if (!exposed) {
       next();
       return;
+    }
+
+    // 诊断：来源地址是「本机所在网段的网关」→ 真实客户端 IP 已被 Docker 改写。
+    // 这就是「家里也要输口令、家长后台全 403」的根因（公网 IPv6 走 userland
+    // docker-proxy 时必然如此），一行日志省掉之后半小时的排查。只报一次。
+    if (!bridgeHintLogged && inContainer() && isOwnGateway(ip)) {
+      bridgeHintLogged = true;
+      logAuth.warn(
+        { ip },
+        "来源地址是容器自己网段的网关 → 客户端真实 IP 已被 Docker 改写（公网 IPv6 走 userland " +
+          "docker-proxy 时必然如此）。若这是家里的设备，它会被当成公网：孩子端要输口令、" +
+          "家长后台全 403。把 deploy/docker-compose.yml 的 app 改成 network_mode: host 即可" +
+          "（见那里的注释）。",
+      );
     }
 
     const session = await verifySession(readToken(req));

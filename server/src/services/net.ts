@@ -147,6 +147,56 @@ export function localSubnets(): string[] {
 }
 
 /**
+ * 这个地址是不是「本机某个网段的网关位」（网段内第一个可用地址）？
+ *
+ * 用途只有一个：**识别 Docker 把来源地址改写成了网桥网关**。
+ *
+ * bridge 网络下，只要请求不是从宿主机同一个二层进来的，容器看到的 remoteAddress
+ * 就是本 compose 网段的网关 —— 典型例子是公网 IPv6：Docker 默认 bridge **不做
+ * IPv6 NAT**，IPv6 那半边由 userland 的 docker-proxy 转发，实测容器看到的是
+ * 172.22.0.1。它既不在 RFC1918（172.16–172.31）里、也不在用户配的信任网段里，
+ * 于是「家里」被当成公网：孩子端要输口令、家长接口全 403。
+ *
+ * 真实客户端不会是网关自己（网关做 SNAT 的访客网络除外，那种本来也该按公网算），
+ * 所以命中它基本可以断定来源 IP 已经丢了 —— 该换 host 网络。
+ *
+ * ⚠️ 只是**诊断**用（打一行日志），不参与放行判断：把它当白名单就等于把
+ *    「公网免口令」的洞重新开出来。
+ */
+export function isOwnGateway(raw?: string): boolean {
+  if (!raw) return false;
+  const target = bare(raw);
+  const t4 = ipv4ToInt(target);
+  const t6 = ipv6ToBigInt(target);
+  if (t4 === null && t6 === null) return false;
+
+  for (const infos of Object.values(os.networkInterfaces())) {
+    for (const info of infos ?? []) {
+      if (info.internal || !info.cidr) continue;
+      const slash = info.cidr.lastIndexOf("/");
+      if (slash < 0) continue;
+      const bits = Number(info.cidr.slice(slash + 1));
+      if (!Number.isInteger(bits)) continue;
+      if (!inCidr(target, info.cidr)) continue;
+
+      if (t4 !== null) {
+        const self4 = ipv4ToInt(bare(info.address));
+        if (self4 === null || bits < 0 || bits > 32) continue;
+        const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+        if ((((self4 & mask) >>> 0) + 1) >>> 0 === t4) return true;
+        continue;
+      }
+
+      const self6 = ipv6ToBigInt(bare(info.address));
+      if (self6 === null || bits < 0 || bits > 128) continue;
+      const shift = BigInt(128 - bits);
+      if (((self6 >> shift) << shift) + 1n === t6) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 是不是跑在容器里？
  *
  * 这件事必须知道，因为**容器里判断来源地址这一套基本不可用**：Docker 的

@@ -16,6 +16,9 @@
 #
 # 浏览器访问：http://<服务器内网IP>:8788
 #
+# ⚠️ app 用的是 **host 网络**（见下面 network_mode 的说明），不是 bridge。这一条
+#    直接决定「家里免不免口令、家长后台能不能用」，别随手改回 bridge。
+#
 # 想让平板「添加到主屏幕」后没有浏览器地址栏 / 底栏（装成独立应用）：
 #   1. 生成证书（mkcert 自签），放成 server/certs/{cert.pem,key.pem,rootCA.crt}
 #      · 这台机器是 Windows、且服务就跑在它上面 → 仓库根跑 scripts/https-setup.ps1
@@ -46,6 +49,11 @@
 #        · 改了 config.yaml → docker compose up -d --build（不 rebuild 等于白改）
 #      容器里生效的永远是镜像里那份 config.yaml；宿主机上改了不同步 / 不重建，
 #      现象就是「口令明明配了却一直说不对」。启动日志会写明口令「几位、来自哪里」。
+#
+#   ⚠️ 用 bridge 网络时，AUTH_LAN_CIDRS 里的 IPv6 段**永远匹配不上**：公网访问走 IPv6，
+#      而 Docker 默认 bridge 不做 IPv6 NAT，那半边是 userland docker-proxy 转发的，
+#      容器看到的来源地址会变成 compose 网段的网关（实测 172.22.0.1）→ 家里被当成公网。
+#      所以这个 compose 默认用 host 网络（见 network_mode: host 那段）。
 # =============================================================================
 
 services:
@@ -57,14 +65,28 @@ services:
     image: grade2-app:1.0
     container_name: grade2-app
     restart: unless-stopped
+    # ---------------------------------------------------------------- 网络
+    # **必须用 host 网络**。不是为了省事，而是 bridge 模式下鉴权判不出「家里」：
+    #   · 公网访问走 IPv6（域名只有 AAAA），而 Docker 默认 bridge **不做 IPv6 NAT**，
+    #     IPv6 那半边由 userland 的 docker-proxy 转发 —— 容器看到的来源地址会变成
+    #     **本 compose 网段的网关**（实测 172.22.0.1），真实客户端 IP 直接丢了；
+    #   · 于是 AUTH_LAN_CIDRS 里那个 IPv6 /64 永远匹配不上，家里也被当成公网：
+    #     孩子端每次要输口令，家长后台 /api/admin/* 全部 403（就是「接口没反应」），
+    #     而家长口令在「公网」是直接拒登的 → 家里根本进不去管理页。
+    #   · host 模式下 IPv6 直达容器、来源地址保留 → 家里免口令、管理页正常；
+    #     公网仍然要孩子口令、家长接口仍 403（判定看的是地址，跟网络模式无关）。
+    # 代价：没有端口映射了 —— APP_PORT 就是实际访问端口（下面 environment 里那行）；
+    #       host 模式下也不能同时写 ports（两者冲突，Docker 会直接报错）。
+    network_mode: host
     environment:
       # —— 数据库：固定 sqlite，单文件落在 app-data 卷里，无需任何数据库服务 ——
       DB_DRIVER: sqlite
-      # —— 端口：容器内固定 8788，**故意**不跟 .env 的 APP_PORT 走 ——
-      # .env 的 APP_PORT 只决定「宿主机映射到哪个端口」（见下面 ports 的 ${APP_PORT}）。
-      # 这里钉死是因为服务端自己也会读 APP_PORT：一旦 .env 里改了它，容器内监听端口
-      # 就会和 ports 的映射对不上（宿主机 8788 → 容器 9000 之类），页面直接打不开。
-      APP_PORT: 8788
+      # —— 端口：host 网络下这一项就是**实际对外端口**（没有「映射」这一层了）——
+      # 服务端自己读 APP_PORT 决定监听地址，所以改 .env 的 APP_PORT = 换访问端口。
+      # ⚠️ 别再像以前那样「容器内钉死 8788、靠 ports 映射外部端口」——host 模式下
+      #    没有 ports 可用，.env 里写了 9000 而这里钉着 8788，就会出现
+      #    「页面打不开，容器日志显示在听 8788」这种对不上的情况。
+      APP_PORT: ${APP_PORT:-8788}
       # —— 大模型（全部透传，.env 里写了哪个就生效哪个）——
       LLM_API_KEY: ${LLM_API_KEY:?请在 .env 里设置 LLM_API_KEY}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -95,9 +117,6 @@ services:
       # 宿主机上的真实路径由 .env 的 VIDEO_DIR_HOST 决定 —— 所以 config.yaml 里的
       # video.dir 默认值（UNC 路径）在 Docker 下会被这一行覆盖掉，不用去改配置。
       VIDEO_DIR: /app/server/video
-    ports:
-      # 只绑内网网段也行，例如 "192.168.1.10:8788:8788"
-      - "${APP_PORT:-8788}:8788"
     volumes:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
@@ -136,11 +155,12 @@ services:
       # 开了 HTTPS 之后服务**只监听 https**（http / https 二选一，不是双监听），
       # 所以健康检查必须跟着换协议，否则容器永远 unhealthy（应用本身是好的，纯误报）。
       # 证书是自签的 → rejectUnauthorized:false；只探本机回环，不涉及外部。
+      # 端口取 APP_PORT（host 网络下它可能被 .env 改过），别再写死 8788。
       test:
         - CMD
         - node
         - -e
-        - "const s=process.env.HTTPS_ENABLED==='true';const m=s?require('https'):require('http');const r=m.request({host:'127.0.0.1',port:8788,path:'/api/health',rejectUnauthorized:false},res=>process.exit(res.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end();"
+        - "const s=process.env.HTTPS_ENABLED==='true';const m=s?require('https'):require('http');const r=m.request({host:'127.0.0.1',port:Number(process.env.APP_PORT||8788),path:'/api/health',rejectUnauthorized:false},res=>process.exit(res.statusCode===200?0:1));r.on('error',()=>process.exit(1));r.end();"
       interval: 30s
       timeout: 5s
       retries: 3
@@ -158,6 +178,11 @@ services:
     profiles: ["proxy"]
     depends_on:
       - app
+    # app 在 host 网络上 → 它不在本 compose 的网桥里，服务名 `app` **解析不到**。
+    # 所以 nginx 走宿主机的 8788（也就是 app 实际监听的端口），
+    # nginx.conf 里的 upstream 已相应改成 host.docker.internal:8788。
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${HTTP_PORT:-8080}:80"
     volumes:

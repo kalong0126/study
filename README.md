@@ -260,7 +260,7 @@ DB_DRIVER=sqlite           # sqlite（默认，零运维）| mysql
 页面顶栏有日志入口（诊断抽屉），能看到后端实时日志。
 
 ```bash
-# 后端集成测试（123 条断言，含真实 Edge TTS）
+# 后端集成测试（257 条断言，含真实 Edge TTS）
 cd server && npm test
 
 # 真实浏览器冒烟测试（需先起后端）
@@ -276,10 +276,11 @@ cd web && node test/smoke.mjs http://127.0.0.1:8788
 | 故事生成超时 | 换国内厂商接口，或调大 `llm.timeoutMs.story` |
 | 点了朗读没声音 | 检查日志里的 TTS 段；浏览器策略要求首次交互后才能出声，点一下页面即可 |
 | 改完 config.yaml 不生效 | 需要重启服务。容器里：`docker compose restart app` |
+| 在家里也要输口令、家长后台接口全 403 | 容器看到的来源地址被 Docker 改写了（公网 IPv6 走 userland docker-proxy 时必然如此）。先看接口日志里的 `ip` 字段：若是 `172.22.0.1` 这种**网桥网关**而不是你家的地址，就说明来源 IP 丢了 —— `deploy/docker-compose.yml` 的 app 必须用 `network_mode: host`（默认已是），且 `AUTH_LAN_CIDRS` 要覆盖你家的 IPv4 段和 IPv6 /64 |
+| 换了公信证书后，用内网 IP 访问反而报警 | 证书里只有域名。内网也改用域名访问（公信 CA 不给私有 IP 签证书） |
 
 ## 十、后续可做
 
 - 多孩共用（数据库已有 `children` 表，接口目前固定用默认孩子）
 - 生字描红字帖导出 PDF
 - 口算错题的相似题强化训练
-- PIN 登录（`config.yaml` 里 `server.auth` 已预留开关）

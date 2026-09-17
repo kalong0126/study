@@ -17,7 +17,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig, valueSource } from "../src/config.js";
-import { inCidr, isPrivateAddress, localSubnets } from "../src/services/net.js";
+import { inCidr, isOwnGateway, isPrivateAddress, localSubnets } from "../src/services/net.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SERVER_ROOT = path.resolve(HERE, "..");
@@ -481,6 +481,30 @@ backup:
       if (oldPin === undefined) delete process.env.CHILD_PIN;
       else process.env.CHILD_PIN = oldPin;
     }
+
+    /* ---------------------------------------------------------------- J */
+    // 「来源地址是不是被 Docker 改写成网桥网关」—— 这是家里也要输口令 / 家长后台
+    // 全 403 的根因（公网 IPv6 走 userland docker-proxy）。地址从本机网卡**现算**，
+    // 不写死，否则换台机器跑就失败。
+    group("J. 网桥网关识别（诊断用，不参与放行）");
+    const v4nets = localSubnets().filter((n) => !n.includes(":") && Number(n.split("/")[1]) <= 30);
+    const pick = v4nets[0];
+    if (pick) {
+      const [addr, bitsStr] = pick.split("/");
+      const bits = Number(bitsStr);
+      const p = addr.split(".").map(Number);
+      const selfInt = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+      const mask = (0xffffffff << (32 - bits)) >>> 0;
+      const gw = (((selfInt & mask) >>> 0) + 1) >>> 0;
+      const gwStr = `${gw >>> 24}.${(gw >>> 16) & 255}.${(gw >>> 8) & 255}.${gw & 255}`;
+      eq(`J1 ${pick} 的网关位 ${gwStr} → 认出来（容器里看到的正是这个地址）`, isOwnGateway(gwStr), true);
+      eq("J2 双栈监听下的 ::ffff: 形态也认（Node 就是这么报的）", isOwnGateway(`::ffff:${gwStr}`), true);
+      eq("J3 本机自己的地址不是网关位（别把真实客户端误判成网关）", isOwnGateway(addr), false);
+    } else {
+      ok("J1–J3 跳过：本机没有可用的 IPv4 网段", true);
+    }
+    eq("J4 无关地址 → false", isOwnGateway("198.51.100.9"), false);
+    eq("J5 空地址 → false（拿不到地址时不当成网关）", isOwnGateway(undefined), false);
   } finally {
     if (oldPath === undefined) delete process.env.CONFIG_PATH;
     else process.env.CONFIG_PATH = oldPath;
