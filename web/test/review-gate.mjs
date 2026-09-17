@@ -149,10 +149,10 @@ async function reloadWrong() {
 /** 错题本卡片右上角那个「重新挑战 x / y」的进度胶囊（别撞上顶栏的今日进度） */
 const reviewPill = () => page.locator("main.wrap .card .stat-pill").first();
 
-/** 首页「错题复习」任务卡上的文字（题干 + 说明 + 状态） */
+/** 首页「错题修理站」那座岛上的文字（岛名 + 状态 + 提示） */
 async function reviewCardText() {
   await gotoNav("今日");
-  return squash(await page.locator("button.task", { hasText: "错题复习" }).first().innerText());
+  return squash(await page.locator("button.isle", { hasText: "错题修理站" }).first().innerText());
 }
 
 /** 轮询直到 fn() 返回真值 */
@@ -226,7 +226,7 @@ try {
   ok("页面上出现「先做完口算和听写」提示条", (await page.locator(".wb-lock").count()) === 1);
   ok("输入框是禁用的", await page.locator(".wb-item input.m-in").first().isDisabled());
   const cardClosed = await reviewCardText();
-  ok("首页任务卡提示先做前置任务", cardClosed.includes("先完成口算和听写"), cardClosed);
+  ok("首页错题修理站提示先做前置任务", cardClosed.includes("先做口算和听写"), cardClosed);
   await page.goto(`${BASE}/wrong`, { waitUntil: "networkidle" });
   await page.waitForSelector(".wb-item", { timeout: 15000 });
   await page.screenshot({ path: path.join(shotDir, "review-locked.png"), fullPage: true });

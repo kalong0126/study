@@ -239,10 +239,10 @@ try {
   ok("口算页上显示「用时」", /用时/.test(timerBox), timerBox.slice(0, 70));
 
   /* ————————————————————————————— 5. 首页显示用时 */
-  step("5. 首页「每日口算」显示用时");
+  step("5. 首页「口算岛」显示用时");
   await gotoNav("今日");
-  const mathCard = (await page.locator("button.task").first().innerText()).replace(/\s+/g, " ");
-  ok("首页任务卡上出现「用时」", /用时/.test(mathCard), mathCard);
+  const mathCard = (await page.locator("button.isle").first().innerText()).replace(/\s+/g, " ");
+  ok("首页口算岛上出现「用时」", /用时/.test(mathCard), mathCard);
   const homeSec = parseDuration(mathCard);
   ok(
     "首页用时与口算页计时一致",

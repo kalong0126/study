@@ -96,25 +96,212 @@ a { color: var(--blue-d); }
 .fade-leave-active { display: none; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
-/* ---------- 任务列表 ---------- */
-.task { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: #FAFCFF; border: 1.5px solid var(--line2); margin-bottom: 10px; cursor: pointer; transition: .2s; min-height: 56px; width: 100%; text-align: left; font-family: inherit; }
-.task:hover { background: #F4FAFF; border-color: #DDEDFA; transform: translateX(2px); }
-.task.pending { border-left: 5px solid #FFB74D; background: #FFFCF5; }
-.task.done { opacity: .72; background: #F6FDF9; border-left: 5px solid var(--green-d); }
-.task .t-ico { width: 38px; height: 38px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid var(--line); }
-.task .t-ico svg { width: 20px; height: 20px; }
-/* 标题行（名称 + 状态胶囊 + 已完成绿勾）/ 说明行，各占一行。
-   两个都是 <span>，不给 display:block 就会挤成一行（"语文听写选一篇课文…"）。
-   状态胶囊放在标题行右侧而不是卡片最右：手机上（390px）胶囊会吃掉 60 多 px，
-   说明文字只剩十几个字的宽度，「计时满 15 分钟」会被切成「…15 分 / 钟」。
-   挪上去之后说明独占整行，孤字换行就没了；桌面端视觉几乎不变。 */
-.task .t-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.task .t-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.task .t-name { display: block; font-weight: 700; font-size: 15.5px; line-height: 1.25; letter-spacing: .2px; }
-.task .t-desc { display: block; font-size: 12.5px; color: var(--ink3); line-height: 1.4; overflow-wrap: break-word; text-wrap: pretty; }
-.task .t-chip { flex: none; margin-left: auto; font-size: 12px; font-weight: 800; padding: 4px 11px; border-radius: 999px; background: #FFF1D9; color: #C97F00; }
-.task.done .t-chip { background: #E4F9EE; color: #2E9C72; }
-.task .t-check { width: 20px; height: 20px; flex: none; }
+/* ---------- 首页 · 学习小岛地图 ----------
+   六座岛串成一条虚线航线，完成一座才解锁下一座。奖励（岛上的 +N、终点的宝箱）
+   直接钉在进度的位置上，不另开一块「积分区」。
+   定位用的是百分比刻度：left 按关数等分、top 由 --dy 错落；
+   底下的 SVG 航线用的是同一套刻度（x=(i+.5)×100、y=50+dy），
+   所以尺子只有一把 —— 岛屿挪了，航线一定跟着挪，不会从岛边上擦过去。 */
+.isle-card { overflow: hidden; }
+.isle-hd { align-items: flex-start; margin-bottom: 12px; }
+.isle-cheer {
+  position: relative; margin-left: auto; align-self: center;
+  background: #fff; border: 1.5px solid #FFE3B0; border-radius: 14px;
+  padding: 6px 13px; font-size: 12.5px; font-weight: 800; color: #C97F00;
+  white-space: nowrap; box-shadow: 0 3px 10px rgba(232, 168, 0, .14);
+}
+.isle-cheer::before {
+  content: ""; position: absolute; left: -6px; top: 50%; margin-top: -5px;
+  width: 10px; height: 10px; background: #fff;
+  border-left: 1.5px solid #FFE3B0; border-bottom: 1.5px solid #FFE3B0;
+  transform: rotate(45deg); border-radius: 0 0 0 3px;
+}
+
+.isle-map {
+  position: relative; height: 284px;
+  border-radius: 18px; overflow: hidden;
+  background: linear-gradient(180deg, #EAF6FF 0%, #E1F2FD 46%, #D2EAFA 100%);
+}
+
+/* 云：静态装饰，只给天空一点层次。刻意不做飘动 —— 全页只留三处动效，都很轻 */
+.isle-cloud { position: absolute; width: 92px; fill: #fff; opacity: .8; }
+.isle-cloud.c1 { left: 2%; top: 3%; }
+.isle-cloud.c2 { right: 4%; top: 1%; width: 72px; }
+
+/* 海面：全页唯一在「动」的装饰，而且慢到 27 秒才走一个来回 */
+.isle-sea { position: absolute; left: -3%; bottom: 0; width: 106%; height: 52%; animation: seaSway 27s ease-in-out infinite alternate; }
+.isle-sea path { fill: #C4E6FA; }
+@keyframes seaSway { from { transform: translateX(0); } to { transform: translateX(2.6%); } }
+
+/* 航线虚线：viewBox 与岛屿定位同一套刻度，preserveAspectRatio=none 让它随容器拉伸 */
+.isle-road { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.isle-road path {
+  fill: none; stroke: #6FAEDC; stroke-width: 3.2;
+  stroke-dasharray: 4 6; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: .95;
+}
+
+.isle {
+  position: absolute;
+  left: calc((var(--i) + 0.5) * (100% / 6));
+  top: calc(50% + var(--dy));
+  transform: translate(-50%, -50%);
+  width: calc(100% / 6 - 6px);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 0; border: none; background: transparent;
+  font-family: inherit; cursor: pointer;
+}
+.isle:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 16px; }
+
+.isle-art { position: relative; width: 100%; max-width: 144px; aspect-ratio: 120 / 76; }
+.isle-land { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.isle-ico {
+  position: absolute; left: 50%; top: 6%;
+  width: 50px; height: 50px; margin-left: -25px;
+  border-radius: 16px; background: #fff;
+  box-shadow: 0 4px 13px rgba(90, 140, 190, .24);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--c);
+}
+.isle-ico svg { width: 26px; height: 26px; }
+
+/* 通关能拿几分 —— 钉在岛座右上角，让「做完 → 得分」在同一处说完 */
+.isle-star {
+  position: absolute; right: -2px; top: -4px;
+  background: linear-gradient(135deg, #FFE066, #FFC93C);
+  border: 1.5px solid #EFB62C; border-radius: 999px;
+  padding: 1px 7px; font-size: 11px; font-weight: 900; color: #7A5200;
+  box-shadow: 0 3px 8px rgba(232, 168, 0, .30);
+}
+
+.isle-mark { position: absolute; right: 0; bottom: 6%; }
+.isle-mark.ok { width: 25px; height: 25px; }
+.isle-mark.ok svg { width: 25px; height: 25px; display: block; filter: drop-shadow(0 2px 5px rgba(46, 156, 114, .4)); }
+.isle-mark.lock {
+  width: 25px; height: 25px; border-radius: 999px;
+  background: #F1F5FA; border: 1.5px solid #DFE8F2; color: #9AAABC;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(120, 160, 205, .2);
+}
+
+.isle-tag {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-width: 74px; max-width: 100%; padding: 4px 11px;
+  background: #fff; border: 1.5px solid rgba(230, 238, 247, .9); border-radius: 13px;
+  box-shadow: 0 3px 10px rgba(120, 160, 205, .14);
+}
+.isle-tag b { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.3; letter-spacing: .2px; text-align: center; }
+/* 允许折成两行：「先完成口算和听写，再来复习错题」这类提示放不进一格岛宽，硬挤会溢出去 */
+.isle-tag i { font-size: 11px; font-style: normal; font-weight: 700; color: var(--ink3); line-height: 1.4; text-align: center; overflow-wrap: break-word; }
+
+.isle-go {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 4px 11px 4px 14px; border-radius: 999px;
+  background: linear-gradient(135deg, #7FC5F0, #55ABE3);
+  color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: .5px;
+  box-shadow: 0 4px 12px rgba(85, 171, 227, .40);
+}
+/* 错题修理站（不占呼吸圈的「工具站」）：也能点，但按钮比主线的「出发」弱一档 */
+.isle-go.soft { background: #fff; color: var(--blue-d); border: 1.5px solid #CFE5F7; box-shadow: 0 3px 9px rgba(120, 160, 205, .16); }
+.isle-flag { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 800; color: #2E9C72; }
+.isle-wait { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+
+/* 「当前这一关」的呼吸圈：0.9→1.08、2.8 秒一个来回 —— 够看见，不抢戏。
+   位置要罩住**草地那一圈**（草地椭圆在地图上大约占 y 44%–86%），不是整个岛座盒子：
+   套在盒子上会往上飘到图标泡两侧，露出来像个歪掉的光环。
+   另外这里用 inset 的百分比，不用 margin 负值 —— CSS 里垂直方向的 margin 百分比是按
+   **包含块宽度**算的，套到 120:76 的扁盒子上必然偏。 */
+.isle.current .isle-art::before {
+  content: ""; position: absolute;
+  left: 5%; right: 5%; top: 44%; bottom: 2%;
+  border-radius: 50%; border: 2.5px solid rgba(255, 196, 60, .62);
+  animation: isleBreath 2.8s ease-in-out infinite;
+}
+@keyframes isleBreath {
+  0%, 100% { transform: scale(.9); opacity: .30; }
+  50% { transform: scale(1.08); opacity: .8; }
+}
+
+.isle.locked { cursor: default; }
+.isle.locked .isle-art { filter: grayscale(.62) opacity(.66); }
+.isle.locked .isle-tag { background: #F8FBFE; border-color: #EDF3F9; box-shadow: none; }
+.isle.locked .isle-tag b { color: var(--ink3); }
+
+/* 航线进度：今天完成几关 + 每关一个编号节点 + 终点宝箱（奖励与进度绑在一处） */
+.isle-track { display: flex; align-items: center; gap: 14px; }
+.tk-count { display: flex; align-items: baseline; gap: 5px; flex: none; }
+.tk-count .tk-lbl { font-size: 14px; font-weight: 800; color: var(--ink2); }
+.tk-count b { font-size: 30px; font-weight: 900; color: var(--blue-d); line-height: 1; font-variant-numeric: tabular-nums; }
+.tk-count .tk-tot { font-size: 15px; font-weight: 800; color: var(--ink3); }
+.isle-track.full .tk-count b { color: #C97F00; }
+
+.tk-dots { flex: 1; min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; margin: 0; padding: 0; list-style: none; }
+.tk-dots li { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.tk-dots li::before {
+  content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px;
+  background: repeating-linear-gradient(90deg, #DAE6F2 0 5px, transparent 5px 10px);
+}
+.tk-dots li:first-child::before { display: none; }
+.tk-dots li.done::before, .tk-dots li.current::before { background: repeating-linear-gradient(90deg, #A5DCC2 0 5px, transparent 5px 10px); }
+.tk-dot {
+  width: 26px; height: 26px; border-radius: 999px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: #E7EEF7; color: #8A9CAE; font-size: 12.5px; font-weight: 900;
+  transition: background .25s, box-shadow .25s;
+}
+.tk-dots li.done .tk-dot { background: #7FDCB8; color: #fff; }
+.tk-dots li.current .tk-dot { background: linear-gradient(135deg, #8ECDF5, #55ABE3); color: #fff; box-shadow: 0 0 0 4px rgba(142, 205, 245, .22); }
+.tk-name { font-size: 11.5px; font-weight: 700; color: var(--ink3); white-space: nowrap; }
+.tk-dots li.done .tk-name { color: #2E9C72; }
+.tk-dots li.current .tk-name { color: var(--blue-d); font-weight: 800; }
+
+.tk-chest {
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 9px 13px; border-radius: 16px;
+  background: #F4F8FC; border: 1.5px solid #E6EEF7; color: #A9B8C7;
+}
+.tk-chest-tip { font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+.tk-chest.on {
+  background: linear-gradient(135deg, #FFF5D6, #FFE49E);
+  border-color: #F1C85F; color: #B8860B;
+  box-shadow: 0 6px 18px rgba(232, 168, 0, .30);
+  animation: chestFloat 3.4s ease-in-out infinite;
+}
+@keyframes chestFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+/* 窄屏（平板竖屏 / 手机）：横排六座岛挤不下 —— 改成竖向路线，
+   左边一列岛、右边文字，航线 SVG 与海面一起收起（竖排里它们只会添乱）。 */
+@media (max-width: 899px) {
+  .isle-cheer { display: none; }
+  .isle-map {
+    height: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+    background: linear-gradient(180deg, #EAF6FF, #DCF0FC);
+  }
+  .isle-sea, .isle-road { display: none; }
+  .isle {
+    position: static; transform: none; width: 100%;
+    flex-direction: row; align-items: center; gap: 12px; text-align: left;
+    padding: 8px 12px; border-radius: 16px; background: rgba(255, 255, 255, .74);
+  }
+  .isle.locked { background: rgba(255, 255, 255, .5); }
+  .isle.current { background: #fff; box-shadow: 0 4px 14px rgba(120, 160, 205, .16); }
+  .isle-art { width: 74px; max-width: 74px; flex: none; }
+  .isle-ico { width: 34px; height: 34px; margin-left: -17px; border-radius: 11px; top: 4%; }
+  .isle-ico svg { width: 19px; height: 19px; }
+  .isle-star { right: -6px; top: -6px; padding: 0 6px; font-size: 10px; }
+  .isle-mark.ok, .isle-mark.lock { width: 20px; height: 20px; }
+  .isle-mark.ok svg { width: 20px; height: 20px; }
+  .isle.current .isle-art::before { left: 2%; right: 2%; top: 40%; bottom: 0; }
+  .isle-tag { flex: 1; min-width: 0; align-items: flex-start; gap: 0; padding: 0; background: transparent; border: none; box-shadow: none; text-align: left; }
+  .isle-tag b { font-size: 15px; }
+  .isle-tag i { font-size: 12px; }
+  .isle-go, .isle-flag, .isle-wait { flex: none; }
+  .tk-dots { display: none; }
+  .isle-track { justify-content: space-between; }
+}
+
 
 /* ---------- 按钮 ---------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 18px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; color: var(--ink); font-size: 15px; font-weight: 700; cursor: pointer; transition: .2s; text-decoration: none; }

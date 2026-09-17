@@ -12,22 +12,103 @@
  *   回调 → isLeaving 卡在 true → 新视图不挂载，URL 变了但页面全白，必须手刷。
  *   修复：RouterView 外包一层带 key 的单根 div。
  *
+ * 默认起隔离实例（端口 8798 + 独立 DB）：首页那张小岛地图是「闯过一关才解锁下一关」的，
+ * 要跑遍所有页面就得先把今日六项置为完成 —— 这种事绝不能做在孩子的真实库上。
+ * 传了 baseUrl 就用外部服务（此时解锁那一步会改那份库，自己掂量）。
+ *
  * 用法：node web/test/nav.mjs [baseUrl]
  */
 import { createRequire } from "node:module";
-import { mkdirSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/node_modules/playwright-core");
 
-const BASE = process.argv[2] ?? "http://127.0.0.1:8788";
 // 截图目录按「脚本自身位置」推仓库根，不能用 cwd —— `npm run nav` 时 cwd 是 web/，
 // 用 cwd 会把截图错写到 web/web/test/shots。
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUT = path.join(REPO, "web", "test", "shots");
 mkdirSync(OUT, { recursive: true });
+
+/* --------------------------------------------------- 隔离实例（默认走这条） */
+
+const SERVER = path.join(REPO, "server");
+const PORT = 8798;
+const EXTERNAL = process.argv[2];
+const BASE = EXTERNAL ?? `http://127.0.0.1:${PORT}`;
+const TEST_CONFIG = path.join(SERVER, "config", "config.islenav.yaml");
+const TEST_DB = path.join(SERVER, "data", "_islenav.db");
+const NODE = "C:/Users/kalon/.workbuddy/binaries/node/versions/22.22.2-3/node.exe";
+
+const TEST_CONFIG_YAML = `server:
+  port: ${PORT}
+  host: 127.0.0.1
+  corsOrigins: []
+  auth: { enabled: false }
+db:
+  driver: sqlite
+  sqlite: { file: ./data/_islenav.db }
+llm:
+  baseUrl: https://api.deepseek.com
+  apiKey: test-key-not-used
+  storyModel: deepseek-chat
+  markModel: deepseek-chat
+  suggestModel: deepseek-chat
+  timeoutMs: { story: 60000, mark: 90000, suggest: 45000 }
+  retries: 0
+  temperature: { story: 0.9, mark: 0, suggest: 0.5 }
+tts:
+  provider: edge
+  voice: zh-CN-XiaoyiNeural
+  rate: "-12%"
+  cacheDir: ./data/_islenav_tts
+backup:
+  enabled: false
+  dir: ./data/_islenav_backup
+`;
+
+let isolatedServer = null;
+
+async function startIsolated() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  writeFileSync(TEST_CONFIG, TEST_CONFIG_YAML, "utf8");
+  for (const f of [TEST_DB, `${TEST_DB}-wal`, `${TEST_DB}-shm`]) {
+    if (existsSync(f)) unlinkSync(f);
+  }
+  isolatedServer = spawn(NODE, ["node_modules/tsx/dist/cli.mjs", "src/index.ts"], {
+    cwd: SERVER,
+    env: { ...process.env, CONFIG_PATH: TEST_CONFIG, FORCE_COLOR: "0" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const t0 = Date.now();
+  while (Date.now() - t0 < 60000) {
+    try {
+      if ((await fetch(`${BASE}/api/health`)).ok) return true;
+    } catch {
+      /* 还没起来 */
+    }
+    await sleep(600);
+  }
+  return false;
+}
+
+function stopIsolated() {
+  try {
+    isolatedServer?.kill();
+  } catch {
+    /* 忽略 */
+  }
+  for (const f of [TEST_CONFIG, TEST_DB, `${TEST_DB}-wal`, `${TEST_DB}-shm`]) {
+    try {
+      if (existsSync(f)) unlinkSync(f);
+    } catch {
+      /* 忽略 */
+    }
+  }
+}
 
 const problems = [];
 let stepNo = 0;
@@ -42,7 +123,7 @@ function fail(m) {
 
 /** 每条路由的「内容确实渲染了」判据 */
 const ROUTES = [
-  { path: "/", name: "今日", nav: "今日", sel: ".task", min: 1, what: "任务卡片" },
+  { path: "/", name: "今日", nav: "今日", sel: ".isle", min: 1, what: "小岛节点" },
   { path: "/math", name: "口算", nav: "口算", sel: ".m-row", eq: 20, what: "口算题行" },
   { path: "/chinese", name: "语文", nav: "语文", sel: ".story-text", min: 1, what: "课文原文" },
   { path: "/story", name: "童话", nav: "童话", sel: ".card", min: 1, what: "卡片" },
@@ -50,6 +131,20 @@ const ROUTES = [
   { path: "/video", name: "英文", nav: "英文", sel: ".card", min: 1, what: "卡片" },
   { path: "/wrong", name: "错题本", nav: "错题本", sel: ".wb-tabs", min: 1, what: "分区标签" },
 ];
+
+// 起隔离实例（传了 baseUrl 就直接用外部服务）
+if (!EXTERNAL) {
+  step("准备隔离实例（端口 8798，独立 DB，不碰孩子的数据）");
+  const healthy = await startIsolated();
+  healthy ? pass("隔离实例已就绪") : fail("隔离实例没起来，看 server/logs/app-*.log");
+  if (!healthy) {
+    stopIsolated();
+    process.exit(1);
+  }
+  process.on("exit", () => {
+    if (!EXTERNAL) stopIsolated();
+  });
+}
 
 const browser = await chromium.launch({
   executablePath: "C:/Users/kalon/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe",
@@ -95,6 +190,26 @@ async function assertRoute(r, label) {
   }
 }
 
+// ————————————————————————————— 0. 前置：把今日六项任务置为已完成（全部解锁）
+// 首页那张小岛地图是「闯过一关才解锁下一关」的，未解锁的路由会被守卫弹回首页。
+// 这份测试的职责是「跑遍所有页面、都不白屏」，不是验证解锁本身（那由 isle-map.mjs 负责），
+// 所以先让每一关都开着。错题修理站本就不参与顺序锁，置不置它都进得去。
+//
+// 注意：这个状态会被后续访问**打回去** —— 进 /video 页会上报一次播放进度，
+// 没看完一集后端就把「英文故事」改回未完成（这是对的：换了一集没看完，任务本来就没做完）。
+// 所以下面每一轮点小岛之前都要重新置一遍 + 整页重载，否则会莫名卡在「英文小屋」上。
+step("前置：今日六项任务置为已完成（全部解锁，便于跑遍所有页面）");
+{
+  const r = await fetch(`${BASE}/api/state/daily`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      tasks: { math: true, dictation: true, review: true, reading: true, language: true, video: true },
+    }),
+  });
+  r.ok ? pass("六项任务已置为完成") : fail(`置为完成失败：HTTP ${r.status}`);
+}
+
 // ————————————————————————————— 1. 首页整页加载（基线）
 step("整页加载首页（基线）");
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
@@ -130,47 +245,63 @@ for (const r of ROUTES.slice(1)) {
     : fail(`「${r.nav}」→ 今日：白屏（childCount=${st.childCount}）`);
 }
 
-// ————————————————————————————— 4. 首页任务卡片（孩子端唯一的入口）
-step("首页任务卡片 → 各功能页（应用内点击）");
+// ————————————————————————————— 4. 首页小岛地图（孩子端唯一的入口）
+step("首页小岛地图 → 各功能页（应用内点击）");
 await page.locator("nav.nav a", { hasText: "今日" }).first().click();
 await page.waitForTimeout(1100);
 {
-  // 任务清单共 6 项：口算 / 听写 / 童话 / 语言强化 / 英文故事 / 错题复习。
-  // 语言强化与英文故事以前只在底部导航里有，现在也是首页的一项待办
-  // （9 道全做完 +20 分 / 完整看完一集 +10 分）。
-  const cards = await page.locator("button.task").allInnerTexts();
-  const names = ["每日口算", "语文听写", "童话故事", "语言强化", "英文故事", "错题复习"];
+  // 地图上共 6 座岛，按闯关顺序排：口算岛 / 听写屋 / 错题修理站 / 故事树 / 语言练习 / 英文小屋。
+  // 顺序即解锁顺序（错题修理站除外，它是随时能去的工具站），英文小屋刻意排在最后。
+  const cards = await page.locator("button.isle").allInnerTexts();
+  const names = ["口算岛", "听写屋", "错题修理站", "故事树", "语言练习", "英文小屋"];
   const missing = names.filter((n) => !cards.some((c) => c.includes(n)));
   cards.length === 6 && missing.length === 0
-    ? pass(`首页任务清单 6 项：${names.join(" / ")}`)
-    : fail(`首页任务卡 ${cards.length} 项，缺 ${JSON.stringify(missing)}`);
+    ? pass(`首页小岛地图 6 座：${names.join(" / ")}`)
+    : fail(`首页小岛 ${cards.length} 座，缺 ${JSON.stringify(missing)}`);
   const header = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
   /\/ 6 项任务/.test(header)
     ? pass("顶栏分母跟着变成 6 项")
     : fail(`顶栏任务分母不对：${header}`);
 }
 const shortcuts = [
-  { card: "每日口算", path: "/math", sel: ".m-row", min: 20 },
-  { card: "语文听写", path: "/chinese", sel: ".story-text", min: 1 },
-  { card: "童话故事", path: "/story", sel: ".card", min: 1 },
-  { card: "语言强化", path: "/language", sel: ".lg-empty, .lg-grid", min: 1 },
-  { card: "英文故事", path: "/video", sel: ".card", min: 1 },
-  { card: "错题复习", path: "/wrong", sel: ".wb-tabs", min: 1 },
+  { isle: "口算岛", path: "/math", sel: ".m-row", min: 20 },
+  { isle: "听写屋", path: "/chinese", sel: ".story-text", min: 1 },
+  { isle: "错题修理站", path: "/wrong", sel: ".wb-tabs", min: 1 },
+  { isle: "故事树", path: "/story", sel: ".card", min: 1 },
+  { isle: "语言练习", path: "/language", sel: ".lg-empty, .lg-grid", min: 1 },
+  { isle: "英文小屋", path: "/video", sel: ".card", min: 1 },
 ];
+/** 把今日六项置为完成（见上面前置那段的说明） */
+async function unlockAll() {
+  const r = await fetch(`${BASE}/api/state/daily`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      tasks: { math: true, dictation: true, review: true, reading: true, language: true, video: true },
+    }),
+  });
+  return r.ok;
+}
+
 for (const s of shortcuts) {
-  await page.locator("nav.nav a", { hasText: "今日" }).first().click();
-  await page.waitForTimeout(1100);
-  const card = page.locator("button.task", { hasText: s.card }).first();
+  // 每一轮都从头来一遍：上一轮进的页面可能把某一项打回未完成（/video、/language 都会），
+  // 那后面几座岛就被锁上了。整页重载是为了让 store 重新拉一次服务端状态。
+  await unlockAll();
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  await page.waitForSelector("button.isle", { timeout: 20000 });
+  await page.waitForTimeout(700);
+  const card = page.locator("button.isle", { hasText: s.isle }).first();
   if (!(await card.count())) {
-    fail(`回首页后找不到任务卡「${s.card}」`);
+    fail(`回首页后找不到小岛「${s.isle}」`);
     continue;
   }
+  const cls = await card.getAttribute("class");
   await card.click();
   await page.waitForTimeout(1500);
   const st = await viewState();
   st.path === s.path && st.childCount >= 1
-    ? pass(`任务卡「${s.card}」→ ${s.path}`)
-    : fail(`任务卡「${s.card}」→ ${st.path}（期望 ${s.path}，childCount=${st.childCount}）`);
+    ? pass(`小岛「${s.isle}」→ ${s.path}`)
+    : fail(`小岛「${s.isle}」→ ${st.path}（期望 ${s.path}，childCount=${st.childCount}，岛状态=${cls}）`);
   const n = await page.locator(s.sel).count();
   n >= s.min ? pass(`  ${s.sel} = ${n}`) : fail(`  ${s.sel} = ${n}（太少，期望 ≥${s.min}）`);
 }

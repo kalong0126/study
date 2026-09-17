@@ -304,15 +304,14 @@ try {
   const pts = await (await fetch(`${BASE}/api/points`)).json();
   ok("9 道全做完 → 加 20 分", pts.balance === 20, `balance=${pts.balance}`);
 
-  // 首页：语言强化现在是清单里的一项待办，做完要自动打勾
+  // 首页：语言练习现在是地图上的一座岛，做完要自动变成「已完成 / 已通关」
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
-  const langCard = (await page.locator("button.task", { hasText: "语言强化" }).first().innerText()).replace(/\s+/g, " ");
-  ok("首页清单里有「语言强化」这一项", langCard.includes("语言强化"), langCard);
-  ok("做完 9 道后任务卡显示已完成", langCard.includes("已完成") && !langCard.includes("待完成"), langCard);
-  ok("任务卡上报出 9 / 9 进度", langCard.includes("已完成 9 / 9 题"), langCard);
-  const cardCount = await page.locator("button.task").count();
-  ok("首页任务清单共 6 项", cardCount === 6, `${cardCount} 项`);
+  const langCard = (await page.locator("button.isle", { hasText: "语言练习" }).first().innerText()).replace(/\s+/g, " ");
+  ok("首页地图上有「语言练习」这一座", langCard.includes("语言练习"), langCard);
+  ok("做完 9 道后显示已完成 / 已通关", langCard.includes("已完成") && langCard.includes("已通关"), langCard);
+  const cardCount = await page.locator("button.isle").count();
+  ok("首页小岛地图共 6 座", cardCount === 6, `${cardCount} 座`);
   const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
   ok("顶栏任务分母也变成 6", /\/ 6 项任务/.test(headPill), headPill);
   await shot("lg-07-home.png");

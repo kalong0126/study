@@ -60,6 +60,9 @@ const ICONS: Record<string, string> = {
   back: '<path d="M19 12H6M11.5 6l-6 6 6 6"/>',
   save: '<path d="M5 4.5h11L19.5 8v11.5H5z"/><path d="M8.5 4.5v5h7v-5M8.5 19.5v-5.5h7v5.5"/>',
   gift: '<rect x="4" y="10.5" width="16" height="9.5" rx="1.5"/><path d="M4 7.5h16v3H4zM12 7.5V20"/><path d="M12 7.5c-1.8-2.8-5-2.5-5 0s2 1.8 5 0zM12 7.5c1.8-2.8 5-2.5 5 0s-2 1.8-5 0z"/>',
+  lock: '<rect x="4.5" y="10.5" width="15" height="9.5" rx="3"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/><path d="M12 14.6v1.8"/>',
+  chest: '<rect x="3.6" y="10.2" width="16.8" height="9.8" rx="2"/><path d="M3.6 10.2V7.6A3.6 3.6 0 0 1 7.2 4h9.6a3.6 3.6 0 0 1 3.6 3.6v2.6"/><path d="M3.6 11.4h16.8"/><path d="M10.4 10.2h3.2v4.4h-3.2z"/>',
+  flag: '<path d="M6 20.6V3.4"/><path d="M6 4.6h11.2l-2 3.9 2 3.9H6z"/>',
 };
 
 const inner = computed(() => ICONS[props.name] ?? "");

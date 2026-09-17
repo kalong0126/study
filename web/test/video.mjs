@@ -361,15 +361,15 @@ try {
   ok("换片不重复发分", pts2.balance === 10, `balance=${pts2.balance}`);
   await shot("vd-04-next.png");
 
-  /* ————————————————————————————— 8. 首页那一项待办 */
-  step("8. 首页「英文故事」待办已打勾");
+  /* ————————————————————————————— 8. 首页那一座岛 */
+  step("8. 首页「英文小屋」已通关");
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
-  const card = (await page.locator("button.task", { hasText: "英文故事" }).first().innerText()).replace(/\s+/g, " ");
-  ok("首页清单里有「英文故事」这一项", card.includes("英文故事"), card);
-  ok("做完后任务卡显示已完成", card.includes("已完成") && !card.includes("待完成"), card);
-  const cardCount = await page.locator("button.task").count();
-  ok("首页任务清单共 6 项", cardCount === 6, `${cardCount} 项`);
+  const card = (await page.locator("button.isle", { hasText: "英文小屋" }).first().innerText()).replace(/\s+/g, " ");
+  ok("首页地图上有「英文小屋」这一座", card.includes("英文小屋"), card);
+  ok("做完后显示已完成 / 已通关", card.includes("已完成") && card.includes("已通关"), card);
+  const cardCount = await page.locator("button.isle").count();
+  ok("首页小岛地图共 6 座", cardCount === 6, `${cardCount} 座`);
   const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");
   ok("顶栏任务分母是 6 项", /\/ 6 项任务/.test(headPill), headPill);
   await shot("vd-05-home.png");

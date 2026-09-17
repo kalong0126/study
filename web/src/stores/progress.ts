@@ -31,32 +31,101 @@ import { lsGet, lsSet, randInt, shuffle, todayStr } from "@/utils/local";
 
 export interface TaskDef {
   key: TaskKey;
+  /** 首页小岛地图上的岛名（也用于「完成」提示），家长和孩子都认这个叫法 */
   name: string;
   desc: string;
   route: string;
-  tone: "blue" | "orange" | "purple" | "green" | "pink" | "teal";
+  /** 岛上的图标名（Icon.vue 的键） */
+  icon: string;
+  /** 这一关的主色：岛屿草地上的图标、进度胶囊、已完成的旗子都用它 */
+  color: string;
+  /** 做完这一关能拿几分（0 = 不发分，只清错题）。仅用于展示，真正的发分在后端 */
+  reward: number;
+  /** 还没产生真实进度时，岛标签下写的短说明 */
+  hint: string;
 }
 
+/**
+ * 六关的顺序 = 首页地图从左到右的顺序，**也决定解锁顺序**：
+ * 第 N 关只有在第 1..N-1 关全部完成后才解锁（见 isUnlocked）。
+ *
+ * 两条排法上的讲究：
+ *   · **错题修理站紧跟在口算、听写后面**。错题就是这两关做错时攒下的，
+ *     刚做完口算想立刻订正却被告知「先去读 15 分钟故事」，孩子只会把错题扔到明天。
+ *     顺带一个好消息：它排第 3 位，解锁条件正好等于原有的错题开闸条件
+ *     （`REVIEW_GATE` = 口算 + 听写），两套规则天然一致，不需要各让一步。
+ *   · **英文小屋（video）刻意排在最后**：它是「看一集动画」，六项里最省力，
+ *     放末位当奖励 —— 前面五关啃完，正好痛快看一集收尾。
+ *
+ * 顺序只影响孩子端的展示与解锁；后端只按 `TASK_KEYS.every()` 判全勤，与顺序无关。
+ */
 export const TASK_DEFS: TaskDef[] = [
-  { key: "math", name: "每日口算", desc: "20 道题全部作答", route: "/math", tone: "blue" },
-  { key: "dictation", name: "语文听写", desc: "选一篇课文，完成一轮听写", route: "/chinese", tone: "orange" },
-  { key: "reading", name: "童话故事", desc: "读一篇注音童话，计时满 15 分钟", route: "/story", tone: "purple" },
+  {
+    key: "math",
+    name: "口算岛",
+    desc: "20 道题全部作答",
+    route: "/math",
+    icon: "math",
+    color: "#4FA3DC",
+    reward: 10,
+    hint: "20 道题",
+  },
+  {
+    key: "dictation",
+    name: "听写屋",
+    desc: "选一篇课文，完成一轮听写",
+    route: "/chinese",
+    icon: "chinese",
+    color: "#E8834E",
+    reward: 10,
+    hint: "完成一轮",
+  },
+  {
+    key: "review",
+    name: "错题修理站",
+    desc: "把错题本里的错题重做一遍",
+    route: "/wrong",
+    icon: "wrong",
+    color: "#3FBF8F",
+    reward: 0,
+    hint: "重做错题",
+  },
+  {
+    key: "reading",
+    name: "故事树",
+    desc: "读一篇注音童话，计时满 15 分钟",
+    route: "/story",
+    icon: "story",
+    color: "#8E7BEF",
+    reward: 20,
+    hint: "读满 15 分钟",
+  },
   {
     key: "language",
-    name: "语言强化",
+    name: "语言练习",
     desc: "9 道题全部做完可得 20 分",
     route: "/language",
-    tone: "pink",
+    icon: "wand",
+    color: "#FF7FA0",
+    reward: 20,
+    hint: "9 道题",
   },
   {
     key: "video",
-    name: "英文故事",
+    name: "英文小屋",
     desc: "看一集英文故事，完整看完得 10 分",
     route: "/video",
-    tone: "teal",
+    icon: "video",
+    color: "#2FA8A0",
+    reward: 10,
+    hint: "看一集",
   },
-  { key: "review", name: "错题复习", desc: "把错题本里的错题重做一遍", route: "/wrong", tone: "green" },
 ];
+
+/** 路由路径 → 任务。关卡顺序锁要在导航前把「孩子点的是哪一关」认出来 */
+export const ROUTE_TASK: Record<string, TaskKey> = Object.fromEntries(
+  TASK_DEFS.map((d) => [d.route, d.key]),
+) as Record<string, TaskKey>;
 
 /** 错题复习一轮最多重做几道（与服务端 REVIEW_MAX 保持一致） */
 export const REVIEW_MAX = 3;
@@ -161,6 +230,15 @@ export const useProgressStore = defineStore("progress", () => {
   const mathSet = ref<MathSetState | null>(null);
   const mathBusy = ref(false);
 
+  /**
+   * 服务端那份当日状态是否已经拿到手。
+   *
+   * 只有它才能回答「现在能进哪一关」—— 在拿到之前，本地 daily 是一张全 false 的
+   * 空白表，照它判定会把已经做完的关也当成没做（把做过口算的孩子挡在听写屋外面）。
+   * 所以路由守卫在 loaded 之前一律放行（fail-open）。
+   */
+  const loaded = ref(false);
+
   /** 积分余额（跨天累计钱包）与最近的兑换记录 */
   const balance = ref(0);
   const redemptions = ref<Redemption[]>([]);
@@ -205,6 +283,7 @@ export const useProgressStore = defineStore("progress", () => {
     pauseMathTimer();
     date.value = s.date;
     daily.value = s.daily ?? blankDaily(s.date);
+    loaded.value = true;
     mathSet.value = s.mathSet;
     mathElapsedMs.value = Math.max(0, Number(s.mathElapsedMs) || 0);
     balance.value = Math.max(0, Number(s.balance) || 0);
@@ -238,6 +317,63 @@ export const useProgressStore = defineStore("progress", () => {
   function isDone(key: TaskKey): boolean {
     return !!daily.value.tasks[key];
   }
+
+  /* ------------------------------------------------ 关卡顺序（小岛地图） */
+
+  /**
+   * 参与顺序锁的关卡。
+   *
+   * **错题修理站不在里面** —— 它是「随时能去的工具站」，不是一条要按顺序走的关卡：
+   *   · 错题本该是想看就看的东西。孩子做口算错了 2 道，正想翻开来看看，
+   *     却被挡回去「先读完 15 分钟故事」，那这本错题从此就没人翻第二遍。
+   *   · 它自己那一层闸更合适：`REVIEW_GATE`（口算 + 听写做完才允许**重做**，随时可以**看**），
+   *     WrongView 页内的 `.wb-lock` 提示条就是干这个的。
+   *   · 如果这里也硬拦，「只看不改」那套提示与禁用输入的逻辑就永远走不到 —— 变成死代码。
+   *
+   * 所以地图上它排在口算、听写后面（修错题要趁热），但不参与「做过才解锁下一座」。
+   */
+  const LOCK_CHAIN = TASK_DEFS.filter((d) => d.key !== "review");
+
+  /**
+   * 当前这一关 = 链上第一个还没完成的任务；链走完了就等于链长（此时地图上不该再有锁）。
+   *
+   * 首页地图和导航守卫都要回答「现在能进哪一关」，所以只在这里算一次 ——
+   * 两处各写一遍「哪一关是当前关」，迟早会算出不一样的结果（一处说能进、一处说锁着）。
+   */
+  const chainIndex = computed(() => {
+    const i = LOCK_CHAIN.findIndex((d) => !daily.value.tasks[d.key]);
+    return i === -1 ? LOCK_CHAIN.length : i;
+  });
+
+  function indexOfTask(key: TaskKey): number {
+    return TASK_DEFS.findIndex((d) => d.key === key);
+  }
+
+  /**
+   * 当前这一关（小岛地图上要打「出发」+ 呼吸圈的那一座）在 TASK_DEFS 里的下标。
+   * 链走完时返回关数（越界 → 地图上谁都不是当前关）。
+   */
+  const currentIndex = computed(() => {
+    const key = LOCK_CHAIN[chainIndex.value]?.key;
+    return key === undefined ? TASK_DEFS.length : indexOfTask(key);
+  });
+
+  /**
+   * 这一关能不能进。
+   *   · 错题修理站永远可以进（工具站，闸在它自己页面里）
+   *   · 其余按链上的先后：前面的都完成了才轮到它，已完成的关永远可以回去重做
+   */
+  function isUnlocked(key: TaskKey): boolean {
+    if (key === "review") return true;
+    const i = LOCK_CHAIN.findIndex((d) => d.key === key);
+    return i === -1 ? true : i <= chainIndex.value;
+  }
+
+  /**
+   * 被挡住时该点名的那一关。链上顺序只有一条，所以任何被锁的任务前面挡着的都是同一关
+   * （当前这一关）—— 说「先闯过故事树」比「先完成前面的任务」有用得多。
+   */
+  const currentTaskName = computed(() => LOCK_CHAIN[chainIndex.value]?.name ?? "");
 
   /** 完成一项任务。返回 true 表示「这一步刚好凑满全部任务」 */
   async function completeTask(key: TaskKey, opts: { silent?: boolean } = {}): Promise<boolean> {
@@ -276,7 +412,10 @@ export const useProgressStore = defineStore("progress", () => {
    * 否则首页会拿着上一份旧状态，出现「页面里写着 9/9 完成、首页还显示待完成」。
    */
   function applyDaily(d: DailyState | null | undefined, newBalance?: number): void {
-    if (d) daily.value = d;
+    if (d) {
+      daily.value = d;
+      loaded.value = true;
+    }
     if (typeof newBalance === "number") balance.value = Math.max(0, newBalance);
   }
 
@@ -698,6 +837,7 @@ export const useProgressStore = defineStore("progress", () => {
   return {
     date,
     daily,
+    loaded,
     mathSet,
     mathBusy,
     answers,
@@ -708,6 +848,10 @@ export const useProgressStore = defineStore("progress", () => {
     completedCount,
     allDone,
     isDone,
+    currentIndex,
+    indexOfTask,
+    isUnlocked,
+    currentTaskName,
     completeTask,
     applyDaily,
     syncLanguage,
