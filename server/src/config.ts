@@ -12,6 +12,8 @@ import YAML from "yaml";
 import { z } from "zod";
 import { loadDotEnv, dotEnvCandidates, dotEnvSummary } from "./env.js";
 import { SERVER_ROOT } from "./paths.js";
+// net.ts 是零依赖的纯工具（只用 node 内置），从配置层引它不会成环
+import { inContainer } from "./services/net.js";
 
 export { SERVER_ROOT, REPO_ROOT } from "./paths.js";
 
@@ -33,6 +35,30 @@ const ConfigSchema = z.object({
       childPin: z.string().default(""),
       parentPin: z.string().default(""),
       sessionDays: z.number().int().min(1).default(30),
+      /**
+       * 内网免口令（默认开）。
+       * 开着时，来自内网的请求等同「家长级」，行为与加固之前完全一致；
+       * 只有公网请求才要口令，且公网拿不到家长权限。
+       * 家里常有外人来、或者想连内网也管住，就关掉它（那内网也要先登录）。
+       */
+      lanBypass: z.boolean().default(true),
+      /**
+       * 额外信任的网段（CIDR 列表），例如 ["172.10.10.0/24"]。
+       *
+       * 需要它的两个理由：
+       *   1. **不是所有家庭内网都在 RFC1918 里** —— 172.16–172.31 才是私有的，
+       *      如果家里是 172.10.x.x 这种段，光靠协议判定会把它当公网，每次打开都要输口令；
+       *   2. **跑在容器里时只认这个列表** —— Docker bridge 下容器看到的来源地址
+       *      往往是网桥网关（172.18.0.1），而它恰好在 RFC1918 内，会被误判成内网。
+       *      不用 host 网络的话，就在这里显式写出你要信任的网段（不写 = 一律按公网处理）。
+       */
+      lanCidrs: z.array(z.string()).default([]),
+      /**
+       * 把内网请求也当公网处理（默认关）。
+       * 用途：家长在家里验证「公网那套锁到底生效了没有」，以及自动化测试。
+       * ⚠️ 打开后内网也要输口令，忘了口令会把自己关在外面。
+       */
+      forcePublic: z.boolean().default(false),
     }),
   }),
 
@@ -360,6 +386,40 @@ export function startupWarnings(cfg: AppConfig): string[] {
       "video.enabled=true 但 video.dir 为空 → 「英文」页面会提示未配置。\n" +
         "    Windows 填 UNC 路径，NAS 上先 cifs 挂载再填挂载点；也可用环境变量 VIDEO_DIR 覆盖。",
     );
+  }
+
+  // 鉴权：一旦端口暴露到公网，口令就是唯一那道门，太弱等于没门
+  const a = cfg.server.auth;
+  if (a.enabled) {
+    if (!a.childPin) {
+      w.push(
+        "server.auth.enabled=true 但 childPin 为空 → 公网**没有任何人能登录**（内网仍然照常可用）。\n" +
+          "    修法：在 config.yaml 里填 childPin，或设环境变量 CHILD_PIN。",
+      );
+    } else if (a.childPin.length < 6 || /^(\d)\1*$/.test(a.childPin) || /^(1234|4321|8888|6666|1111|0000|123456|12345678)$/.test(a.childPin)) {
+      w.push(
+        `server.auth.childPin 太弱（长度 ${a.childPin.length}）→ 公网暴露时很容易被试出来。\n` +
+          "    建议改成 8 位随机数字，例如在浏览器控制台跑 String(Math.floor(Math.random()*1e8)).padStart(8,'0')。",
+      );
+    }
+    if (a.childPin && a.parentPin && a.childPin === a.parentPin) {
+      w.push("server.auth 的 childPin 与 parentPin 相同 → 建议分开，否则家长口令泄露 = 家里那道门也没了。");
+    }
+    if (a.forcePublic) {
+      w.push(
+        "server.auth.forcePublic=true：内网请求也会被当作公网 → 浏览器里必须输口令才能用。\n" +
+          "    这是「验证公网规则是否生效」的开关，确认完记得改回 false。",
+      );
+    }
+    // 容器里判断来源地址那一套基本不可用，必须说清楚，否则用户会以为 lanBypass 生效了
+    if (inContainer()) {
+      w.push(
+        "检测到服务跑在容器里：容器看到的来源地址可能只是 Docker 网桥（172.18.0.1 之类），" +
+          "所以**只认 auth.lanCidrs 里显式写出的网段**，不再按「地址像不像内网」判断。\n" +
+          '    想在家里免输口令：填 auth.lanCidrs，例如 ["172.10.10.0/24"]；\n' +
+          "    或者改用 network_mode: host（既能看到真实来源地址，IPv6 也才可能直达容器）。",
+      );
+    }
   }
   return w;
 }

@@ -33,9 +33,23 @@ import {
   type VideoWatchInfo,
   type WrongItem,
   type WrongType,
+  type AuthStatus,
+  type LoginResult,
 } from "./types";
 
 const BASE = "/api";
+
+/**
+ * 会话失效时的回调（例如 30 天到期、或家长把会话全清了）。
+ *
+ * 用回调而不是让每个调用点自己判：同一个 401 会出现在十几个 catch 里，
+ * 散着处理必然漏掉几个，表现就是「有的页面白屏、有的页面只报个错」。
+ */
+let onAuthRequired: (() => void) | null = null;
+
+export function setAuthRequiredHandler(fn: (() => void) | null): void {
+  onAuthRequired = fn;
+}
 
 interface Envelope {
   ok?: boolean;
@@ -78,6 +92,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const data = (await res.json()) as Envelope;
   if (!res.ok || data.ok === false) {
+    // 只认「需要登录」这一种 401；403（家长功能仅限内网）不该把孩子端锁掉
+    if (res.status === 401 && data.kind === "auth.required") onAuthRequired?.();
     throw new ApiError(data.error || `请求失败（HTTP ${res.status}）`, res.status, data.kind ?? "", data.detail ?? null);
   }
   return data as unknown as T;
@@ -96,6 +112,15 @@ const qs = (params: Record<string, string | number | undefined>): string => {
 
 export const api = {
   health: () => request<HealthInfo>("/health"),
+
+  /* ------------------------------------------------------------------ 登录 */
+
+  /** 启动时问一句「这一步要不要先输口令」。未启用鉴权、或人在内网时 authed 直接就是 true */
+  authMe: () => request<AuthStatus>("/auth/me"),
+
+  authLogin: (pin: string) => request<LoginResult>("/auth/login", { method: "POST", body: JSON.stringify({ pin }) }),
+
+  authLogout: () => request<{ cleared: boolean }>("/auth/logout", { method: "POST" }),
 
   listLessons: () => request<{ lessons: Lesson[] }>("/lessons").then((r) => r.lessons),
 

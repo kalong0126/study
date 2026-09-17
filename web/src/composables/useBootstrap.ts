@@ -14,10 +14,12 @@ import { useStoryStore } from "@/stores/story";
 import { useUiStore } from "@/stores/ui";
 import { lsGet, lsSet, todayStr } from "@/utils/local";
 
-export type BootState = "loading" | "ready" | "error";
+export type BootState = "loading" | "ready" | "error" | "locked";
 
 export const bootState = ref<BootState>("loading");
 export const bootError = ref("");
+/** 口令门上的说明文案（解释为什么突然要输口令） */
+export const lockHint = ref("");
 
 export async function bootstrap(): Promise<void> {
   const content = useContentStore();
@@ -28,8 +30,17 @@ export async function bootstrap(): Promise<void> {
 
   bootState.value = "loading";
   bootError.value = "";
+  lockHint.value = "";
 
   try {
+    // 先问一句「要不要口令」—— 必须排在拉数据之前，否则后面每个接口都白跑一趟 401
+    const me = await api.authMe();
+    if (me.enabled && !me.authed) {
+      lockHint.value = "在外网使用需要先输入口令（问家长要）";
+      bootState.value = "locked";
+      return;
+    }
+
     const [snap] = await Promise.all([api.listState(todayStr(), 30), content.load(true)]);
 
     mastery.snapshot(snap.mastery, snap.wrong);

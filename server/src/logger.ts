@@ -241,6 +241,7 @@ export const logMark = mod("mark");
 export const logSeed = mod("seed");
 export const logVideo = mod("video");
 export const logBackup = mod("backup");
+export const logAuth = mod("auth");
 
 /* --------------------------------------------------------------- 读取接口 */
 export function getRecentLogs(limit = 100, level?: string): LogRecord[] {

@@ -27,6 +27,7 @@ import { closeDb, initDb } from "./db/index.js";
 import { kvGet } from "./db/repo/state.js";
 import { logHttp, logSys } from "./logger.js";
 import { adminRouter } from "./routes/admin.js";
+import { authRouter } from "./routes/auth.js";
 import { backupRouter } from "./routes/backup.js";
 import { diagRouter } from "./routes/diag.js";
 import { fail } from "./routes/helpers.js";
@@ -40,6 +41,7 @@ import { storyRouter } from "./routes/story.js";
 import { ttsRouter } from "./routes/tts.js";
 import { videoRouter } from "./routes/video.js";
 import { seedLessons } from "./seed/index.js";
+import { createGuard } from "./services/auth.js";
 import { scheduleDailyBackup, stopDailyBackup } from "./services/backup.js";
 import { currentChildId } from "./services/child.js";
 import { failStaleTasks } from "./services/mark.js";
@@ -55,9 +57,16 @@ function localAddresses(port: number, scheme: "http" | "https"): string[] {
   for (const name of Object.keys(ifaces)) {
     if (VIRTUAL.test(name)) continue;
     for (const info of ifaces[name] ?? []) {
-      if (info.family !== "IPv4" || info.internal) continue;
-      if (info.address.startsWith("169.254.")) continue; // APIPA，无效地址
-      out.push(`${scheme}://${info.address}:${port}`);
+      if (info.internal) continue;
+      if (info.family === "IPv4") {
+        if (info.address.startsWith("169.254.")) continue; // APIPA，无效地址
+        out.push(`${scheme}://${info.address}:${port}`);
+      } else if (info.family === "IPv6") {
+        // 只报「出门能路由」的全局地址：fe80:: 是链路本地、fc/fd 是 ULA，都到不了公网。
+        // 做 DDNS 时注意这种隐私扩展地址会定期变，别把带临时标记的那个填进去。
+        if (/^(fe80|f[cd])/i.test(info.address)) continue;
+        out.push(`${scheme}://[${info.address}]:${port}`);
+      }
     }
   }
   return out;
@@ -106,7 +115,18 @@ function createApp(): express.Express {
   });
 
   const api = express.Router();
+
+  // ① 健康检查 + 登录：必须排在鉴权网关**之前**。
+  //    前端的启动流程就是靠 /auth/me 判断「这一步要不要先弹口令框」。
   api.use(healthRouter);
+  api.use(authRouter);
+
+  // ② 鉴权网关：公网（来源地址不在内网）只放孩子端 ——
+  //    内容后台 / 备份恢复 / 运行诊断 / 预生成音频一律拒；内网默认照旧不受影响。
+  //    具体哪些路径算「家长专属」集中在 services/auth.ts 的 isParentOnly()。
+  api.use(createGuard(cfg));
+
+  // ③ 业务接口
   api.use(lessonsRouter);
   api.use(storyRouter);
   api.use(languageRouter);
@@ -256,6 +276,24 @@ async function main(): Promise<void> {
     "英文故事视频配置",
   );
 
+  // 鉴权：只打状态，绝不打口令本身
+  if (cfg.server.auth.enabled) {
+    logSys.info(
+      {
+        内网免口令: cfg.server.auth.lanBypass,
+        公网策略: cfg.server.auth.forcePublic ? "全部按公网处理（forcePublic）" : "按来源地址区分",
+        会话天数: cfg.server.auth.sessionDays,
+        孩子口令: cfg.server.auth.childPin ? `已设置（${cfg.server.auth.childPin.length} 位）` : "(未设置 → 公网将无人能登录)",
+        家长口令: cfg.server.auth.parentPin ? "已设置（仅内网可用）" : "(未设置)",
+      },
+      "访问鉴权已开启",
+    );
+  } else {
+    logSys.warn(
+      "访问鉴权未开启（server.auth.enabled=false）→ 能连上这个端口就能读写全部数据。只建议在纯内网使用。",
+    );
+  }
+
   const app = createApp();
 
   // HTTPS：安卓 Chrome 只有在安全上下文里才会把网页装成应用（WebAPK，没有地址栏和底栏），
@@ -271,8 +309,20 @@ async function main(): Promise<void> {
     ? https.createServer({ cert: tls.cert ?? undefined, key: tls.key ?? undefined }, app)
     : http.createServer(app);
 
-  server.listen(cfg.server.port, cfg.server.host, () => {
-    logSys.info({ port: cfg.server.port, host: cfg.server.host, scheme }, "服务已就绪");
+  // "::" = 双栈，IPv4 与 IPv6 一起收 —— 这是「公网 IPv6 直连」的前提。
+  // 显式写 ipv6Only:false 是不赌系统默认值：某些平台上 "::" 默认只收 IPv6，
+  // 那样内网的 IPv4 设备（平板、电脑）会突然全部连不上。
+  const host = cfg.server.host;
+  const listenOpts: { port: number; host: string; ipv6Only?: boolean } =
+    host === "::" || host === ""
+      ? { port: cfg.server.port, host: "::", ipv6Only: false }
+      : { port: cfg.server.port, host };
+
+  server.listen(listenOpts, () => {
+    logSys.info(
+      { port: cfg.server.port, host, scheme, stack: listenOpts.ipv6Only === false ? "IPv4+IPv6（双栈）" : "IPv4" },
+      "服务已就绪",
+    );
     for (const addr of localAddresses(cfg.server.port, scheme)) {
       logSys.info({ 访问地址: addr }, "平板 / 电脑可用这个地址打开");
     }

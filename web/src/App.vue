@@ -11,12 +11,14 @@
  */
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
+import { setAuthRequiredHandler } from "@/api";
 import AppHeader from "@/components/AppHeader.vue";
 import AppNav from "@/components/AppNav.vue";
 import DiagDrawer from "@/components/DiagDrawer.vue";
 import FxLayer from "@/components/FxLayer.vue";
+import LockGate from "@/components/LockGate.vue";
 import { unlockAudioPlayback } from "@/composables/useAudio";
-import { bindDayRollover, bootstrap, bootError, bootState } from "@/composables/useBootstrap";
+import { bindDayRollover, bootstrap, bootError, bootState, lockHint } from "@/composables/useBootstrap";
 import { useUiStore } from "@/stores/ui";
 
 const route = useRoute();
@@ -31,6 +33,12 @@ function onFirstGesture(): void {
 }
 
 onMounted(() => {
+  // 会话中途失效（30 天到期 / 家长清了所有会话）时立刻退回口令界面。
+  // 各个页面自己的 catch 只管得住自己那一块，光靠它们会变成
+  // 「有的页面白屏、有的只弹个错」这种各不相同的坏状态。
+  setAuthRequiredHandler(() => {
+    if (bootState.value !== "locked") bootState.value = "locked";
+  });
   bindDayRollover();
   void bootstrap();
   // iOS / Android 都要求音频解锁发生在真实的用户手势里
@@ -39,14 +47,19 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  setAuthRequiredHandler(null);
   window.removeEventListener("pointerdown", onFirstGesture);
   window.removeEventListener("keydown", onFirstGesture);
 });
 </script>
 
 <template>
+  <!-- 公网未登录：整屏只留口令门。
+       导航点了也会被 401 挡回来，摆在那儿只会让人以为「网站坏了」。 -->
+  <LockGate v-if="bootState === 'locked'" :hint="lockHint" @unlocked="bootstrap()" />
+
   <!-- 家长内容后台：独立版式（普通文档流，允许整页滚动） -->
-  <RouterView v-if="isAdmin" />
+  <RouterView v-else-if="isAdmin" />
 
   <!-- 孩子端：固定视口外壳（顶栏 / 内容区 / 底栏，仅内容区滚动） -->
   <template v-else>

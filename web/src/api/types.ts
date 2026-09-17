@@ -6,6 +6,42 @@ export type TaskKey = "math" | "dictation" | "reading" | "language" | "video" | 
 export type WrongType = "math" | "chinese";
 export type MasteryState = 0 | 1;
 
+/* -------------------------------------------------------------- 访问鉴权 */
+
+/**
+ * 访问鉴权状态（GET /api/auth/me）。
+ *
+ * 三个字段配合起来才说得清「现在能不能用」：
+ *   · enabled=false              → 后端没开鉴权，怎么都放行
+ *   · enabled=true, authed=true  → 要么人在内网（自动家长级），要么已登录
+ *   · enabled=true, authed=false → 公网且没登录，前端要弹口令框
+ */
+export interface AuthStatus {
+  enabled: boolean;
+  authed: boolean;
+  /** 已登录时的角色；内网未登录时会直接给 "parent"（内网 = 家长级权限） */
+  role: "child" | "parent" | "";
+  /** 本次请求是否来自家庭内网 */
+  lan: boolean;
+  /** 本次请求是否被当作公网处理（= 公网那套规则已生效） */
+  exposed: boolean;
+  /** 登录成功时才有 */
+  expiresAt?: number;
+}
+
+/**
+ * 登录 / 未启用鉴权时的返回（POST /api/auth/login）。
+ *
+ * 刻意不复用 AuthStatus：这一趟的语义就是「现在已通过」，后端不会回 lan/exposed。
+ * 硬套 AuthStatus 会让调用方以为 r.lan 存在，是个会骗人的类型。
+ */
+export interface LoginResult {
+  enabled: boolean;
+  authed: boolean;
+  role: "child" | "parent";
+  expiresAt?: number;
+}
+
 export interface LessonChar {
   id?: number;
   ch: string;
