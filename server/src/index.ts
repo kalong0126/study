@@ -19,8 +19,10 @@ import {
   maskKey,
   resolveAllLlm,
   resolveHttps,
+  resolvedConfigPath,
   setLlmRuntimeOverride,
   startupWarnings,
+  valueSource,
 } from "./config.js";
 import { dotEnvCandidates, dotEnvSummary } from "./env.js";
 import { closeDb, initDb } from "./db/index.js";
@@ -191,7 +193,7 @@ async function main(): Promise<void> {
     {
       node: process.version,
       platform: `${process.platform}/${process.arch}`,
-      config: path.join(SERVER_ROOT, "config", "config.yaml"),
+      config: resolvedConfigPath(),
     },
     "正在启动 二年级快乐学习台 后端",
   );
@@ -276,15 +278,24 @@ async function main(): Promise<void> {
     "英文故事视频配置",
   );
 
-  // 鉴权：只打状态，绝不打口令本身
+  // 鉴权：只打状态，绝不打口令本身。
+  // 「来自 ...」这一项是**故意**加的：容器里生效的是打进镜像的那份 config.yaml，
+  // 「在 .env 里配了口令却登不上」几乎都是它没被读到（或镜像里的那份是旧版）。
   if (cfg.server.auth.enabled) {
     logSys.info(
       {
         内网免口令: cfg.server.auth.lanBypass,
+        信任网段: cfg.server.auth.lanCidrs.length
+          ? cfg.server.auth.lanCidrs.join(" ")
+          : "(未配置 → 容器里一律按公网处理，家里也要输口令；非容器则自动按本机网段)",
         公网策略: cfg.server.auth.forcePublic ? "全部按公网处理（forcePublic）" : "按来源地址区分",
         会话天数: cfg.server.auth.sessionDays,
-        孩子口令: cfg.server.auth.childPin ? `已设置（${cfg.server.auth.childPin.length} 位）` : "(未设置 → 公网将无人能登录)",
-        家长口令: cfg.server.auth.parentPin ? "已设置（仅内网可用）" : "(未设置)",
+        孩子口令: cfg.server.auth.childPin
+          ? `已设置（${cfg.server.auth.childPin.length} 位，来自 ${valueSource("CHILD_PIN")}）`
+          : "(未设置 → 公网将无人能登录)",
+        家长口令: cfg.server.auth.parentPin
+          ? `已设置（仅内网可用，来自 ${valueSource("PARENT_PIN")}）`
+          : "(未设置)",
       },
       "访问鉴权已开启",
     );

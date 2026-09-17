@@ -214,6 +214,19 @@ function nullToEmpty(v: unknown): unknown {
 }
 
 /**
+ * YAML 里长成数字的字符串必须加引号，否则会被解析成 number。
+ *
+ * 为什么专门兜这一下：`childPin: ${CHILD_PIN:-84644229}` 遇上 `CHILD_PIN=20181101`
+ * 会变成 `childPin: 20181101` —— YAML 给出数字，`z.string()` 报
+ * "expected string, received number"，**整个服务起不来**（不是"口令不对"，
+ * 是连页面都打不开）。config.yaml 里已经把引号写在 `${}` 外面了，这里再兜一层，
+ * 把「起不来」降级成「照常能用」。
+ */
+function digitToString(v: unknown): unknown {
+  return typeof v === "number" && Number.isFinite(v) ? String(v) : v;
+}
+
+/**
  * 把缺失的分组补成 {}，让组内字段的 default 能生效。
  * 不这样做的话，yaml 里少写一个 `tts:` 整段就会校验失败——
  * 而「少写一段就用默认值」才是符合直觉的行为。
@@ -223,8 +236,10 @@ function normalize(parsed: unknown): Record<string, unknown> {
   const server = obj(root.server);
   const db = obj(root.db);
   const llm = obj(root.llm);
+  const auth = obj(server.auth);
+  for (const k of ["childPin", "parentPin"] as const) auth[k] = digitToString(auth[k]);
   return {
-    server: { ...server, https: obj(server.https), auth: obj(server.auth) },
+    server: { ...server, https: obj(server.https), auth },
     db: { ...db, sqlite: obj(db.sqlite), mysql: obj(db.mysql) },
     llm: { ...llm, timeoutMs: obj(llm.timeoutMs), temperature: obj(llm.temperature) },
     imagegen: obj(root.imagegen),
@@ -235,7 +250,30 @@ function normalize(parsed: unknown): Record<string, unknown> {
   };
 }
 
+/**
+ * 这个值最终是从哪儿来的？
+ *
+ * 启动日志用它区分「环境变量 / .env」和「config.yaml 默认值」——
+ * 「明明在 .env 里配了口令却登不上」几乎都是后者：容器里生效的是**打进镜像的那份
+ * config.yaml**，宿主机上改了不同步、改完不 `--build` 也不会生效。
+ */
+export function valueSource(name: string): "环境变量/.env" | "config.yaml 默认值" {
+  const v = process.env[name];
+  return v !== undefined && v !== "" ? "环境变量/.env" : "config.yaml 默认值";
+}
+
 let cached: AppConfig | null = null;
+
+/**
+ * 实际生效的配置文件路径。
+ * 供启动日志展示 —— 跑测试 / 起隔离实例时是 CONFIG_PATH 指定的那份，
+ * 日志里如果还打默认路径，就会让人对着错的文件排查（「我明明改了它」）。
+ */
+export function resolvedConfigPath(): string {
+  return process.env.CONFIG_PATH
+    ? path.resolve(process.env.CONFIG_PATH)
+    : path.join(SERVER_ROOT, "config", "config.yaml");
+}
 
 export function loadConfig(force = false): AppConfig {
   if (cached && !force) return cached;
@@ -243,9 +281,7 @@ export function loadConfig(force = false): AppConfig {
   // 必须先读 .env，再插值——否则 ${LLM_API_KEY} 拿到的是空
   loadDotEnv(force);
 
-  const configPath = process.env.CONFIG_PATH
-    ? path.resolve(process.env.CONFIG_PATH)
-    : path.join(SERVER_ROOT, "config", "config.yaml");
+  const configPath = resolvedConfigPath();
 
   if (!fs.existsSync(configPath)) {
     throw new Error(`找不到配置文件：${configPath}`);
@@ -406,8 +442,11 @@ export function startupWarnings(cfg: AppConfig): string[] {
       );
     } else if (a.childPin.length < 6 || /^(\d)\1*$/.test(a.childPin) || /^(1234|4321|8888|6666|1111|0000|123456|12345678)$/.test(a.childPin)) {
       w.push(
-        `server.auth.childPin 太弱（长度 ${a.childPin.length}）→ 公网暴露时很容易被试出来。\n` +
-          "    建议改成 8 位随机数字，例如在浏览器控制台跑 String(Math.floor(Math.random()*1e8)).padStart(8,'0')。",
+        `server.auth.childPin 太弱（长度 ${a.childPin.length}，来自 ${valueSource("CHILD_PIN")}）→ 公网暴露时很容易被试出来。\n` +
+          "    建议改成 8 位随机数字，例如在浏览器控制台跑 String(Math.floor(Math.random()*1e8)).padStart(8,'0')。\n" +
+          '    注意：口令门满 8 位才自动提交，短口令要按「进入」。\n' +
+          "    如果这不是你设的口令 → 生效的是**打进镜像的那份 config.yaml**：\n" +
+          "    容器里读的是 /app/server/config/config.yaml，改完必须 docker compose up -d --build 重建。",
       );
     }
     if (a.childPin && a.parentPin && a.childPin === a.parentPin) {

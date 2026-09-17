@@ -37,6 +37,15 @@
 #     VIDEO_DIR_HOST=/vol02/1000-0-bfb475f2        # 例：fnOS 上挂好的共享挂载点
 #   改完 docker compose up -d（不用 --build）。容器内固定挂成 /app/server/video，
 #   config.yaml 的 video.dir 不用动（会被环境变量 VIDEO_DIR 覆盖）。
+#
+# 访问鉴权（端口要上公网就必须配，见 .env.example「访问鉴权」一节）：
+#   CHILD_PIN / PARENT_PIN / AUTH_LAN_CIDRS 写在 deploy/.env 里，compose 透传进容器。
+#   ⚠️ 这几个值是在 server/config/config.yaml 里被 ${CHILD_PIN} 之类**引用**的，而
+#      config.yaml 是 **COPY 进镜像**的。所以：
+#        · 只改 .env        → docker compose up -d
+#        · 改了 config.yaml → docker compose up -d --build（不 rebuild 等于白改）
+#      容器里生效的永远是镜像里那份 config.yaml；宿主机上改了不同步 / 不重建，
+#      现象就是「口令明明配了却一直说不对」。启动日志会写明口令「几位、来自哪里」。
 # =============================================================================
 
 services:
@@ -51,6 +60,11 @@ services:
     environment:
       # —— 数据库：固定 sqlite，单文件落在 app-data 卷里，无需任何数据库服务 ——
       DB_DRIVER: sqlite
+      # —— 端口：容器内固定 8788，**故意**不跟 .env 的 APP_PORT 走 ——
+      # .env 的 APP_PORT 只决定「宿主机映射到哪个端口」（见下面 ports 的 ${APP_PORT}）。
+      # 这里钉死是因为服务端自己也会读 APP_PORT：一旦 .env 里改了它，容器内监听端口
+      # 就会和 ports 的映射对不上（宿主机 8788 → 容器 9000 之类），页面直接打不开。
+      APP_PORT: 8788
       # —— 大模型（全部透传，.env 里写了哪个就生效哪个）——
       LLM_API_KEY: ${LLM_API_KEY:?请在 .env 里设置 LLM_API_KEY}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
@@ -88,6 +102,15 @@ services:
       # 数据（数据库 / 语音缓存 / 备份）与日志，务必映射出来
       - app-data:/app/server/data
       - app-logs:/app/server/logs
+      # deploy/ 整个目录（只读）：**为了容器自己能读到 deploy/.env**。
+      # 镜像里没有 deploy/，所以服务端启动时找不到 .env（日志会写
+      # 「没有可用的 .env，查找过=/app/server/.env、/app/.env、/app/deploy/.env」），
+      # 只能靠 compose 的 ${...} 插值把变量传进去 —— 而部分 NAS 的 Docker 面板
+      # 并不在仓库目录里跑 compose，插值拿不到 .env，口令 / AUTH_LAN_CIDRS 就全落空，
+      # 表现是「口令明明配了却说不对」。
+      # 挂进来之后 /app/deploy/.env 就在服务端自己的查找路径里，两条路都通。
+      # ⚠️ 已存在的环境变量优先，所以上面 environment 里写死的仍然说了算。
+      - .:/app/deploy:ro
       # 证书（HTTPS 用）。默认就挂上：HTTPS_ENABLED=false 时用不到，挂个空目录也没副作用。
       # ⚠️ 起容器前先在宿主机上 mkdir -p server/certs —— 目录不存在时 Docker 会自己建一个
       #    **空目录**（Linux 上属主 root），现象是「明明拷了证书，容器里却是空的」。

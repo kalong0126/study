@@ -16,7 +16,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, valueSource } from "../src/config.js";
 import { inCidr, isPrivateAddress, localSubnets } from "../src/services/net.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -402,13 +402,13 @@ async function main(): Promise<void> {
 function configGroup(): void {
   group("H. 配置解析（lanCidrs 的两种写法）");
   const file = path.join(SERVER_ROOT, "config", "config.authtest.cfg.yaml");
-  const yaml = (cidrs: string): string => `server:
+  const yaml = (cidrs: string, pinLine = '    childPin: "12345678"'): string => `server:
   port: 8899
   host: 127.0.0.1
   corsOrigins: []
   auth:
     enabled: true
-    childPin: "12345678"
+${pinLine}
     lanCidrs: ${cidrs}
 db:
   driver: sqlite
@@ -443,6 +443,44 @@ backup:
     );
     eq("H3 空格分隔也认", read(`"\${AUTH_LAN_CIDRS:-}"`, "10.0.0.0/8 192.168.0.0/16"), ["10.0.0.0/8", "192.168.0.0/16"]);
     eq("H4 config.yaml 里写数组仍然可用（原有写法不能坏）", read('["10.0.0.0/8"]', ""), ["10.0.0.0/8"]);
+
+    /* ---- I：PIN 的引号位置（真实事故） --------------------------------------
+     * 插值是「把值原样贴进 YAML 文本」，所以 `childPin: ${CHILD_PIN:-"84644229"}`
+     * 遇上 8 位纯数字的环境变量会变成 YAML **数字** → z.string() 校验失败 →
+     * **服务根本起不来**（报 expected string, received number）。
+     * 引号写在 ${} 外面 —— `"${CHILD_PIN:-84644229}"` —— 才两头都对。
+     * 环境变量用 ""（而不是 delete）表示「没配」：与 interpolate 的判据一致，
+     * 也不受本机 deploy/.env 影响。
+     */
+    group("I. 配置解析（PIN：引号必须在 \${} 外面）");
+    const OUTSIDE = '    childPin: "${CHILD_PIN:-84644229}"'; // 正确
+    const INSIDE = '    childPin: ${CHILD_PIN:-"84644229"}'; //  事故写法
+    const oldPin = process.env.CHILD_PIN;
+    const readPin = (pinLine: string, envValue: string): string => {
+      fs.writeFileSync(file, yaml('"${AUTH_LAN_CIDRS:-}"', pinLine), "utf8");
+      process.env.CHILD_PIN = envValue;
+      try {
+        return loadConfig(true).server.auth.childPin;
+      } catch (e) {
+        return `ERR ${(e as Error).message.replace(/\s+/g, " ").slice(0, 50)}`;
+      }
+    };
+    try {
+      eq("I1 正确写法 + 环境变量是 8 位数字 → 原样拿到", readPin(OUTSIDE, "20181101"), "20181101");
+      eq("I2 正确写法 + 没配环境变量 → 用默认值", readPin(OUTSIDE, ""), "84644229");
+      eq("I3 事故写法 + 8 位数字也不能让服务起不来（兜底转字符串）", readPin(INSIDE, "20181101"), "20181101");
+      eq("I4 事故写法 + 没配环境变量 → 默认值（默认值本来就带引号）", readPin(INSIDE, ""), "84644229");
+      eq("I5 前导 0 只能靠引号保住（YAML 数字会把 00112233 吃掉）", readPin('    childPin: "${CHILD_PIN:-00112233}"', ""), "00112233");
+      eq("I6 连引号都没写、裸数字也兜得回来", readPin("    childPin: 20181101", ""), "20181101");
+      eq("I7 兜底不碰正常字符串", readPin('    childPin: "test-pin"', ""), "test-pin");
+      process.env.CHILD_PIN = "20181101";
+      eq("I8 来源判定：配了就是环境变量/.env", valueSource("CHILD_PIN"), "环境变量/.env");
+      process.env.CHILD_PIN = "";
+      eq("I9 来源判定：空值算 config.yaml 默认值（启动日志靠它定位「口令没读进去」）", valueSource("CHILD_PIN"), "config.yaml 默认值");
+    } finally {
+      if (oldPin === undefined) delete process.env.CHILD_PIN;
+      else process.env.CHILD_PIN = oldPin;
+    }
   } finally {
     if (oldPath === undefined) delete process.env.CONFIG_PATH;
     else process.env.CONFIG_PATH = oldPath;
