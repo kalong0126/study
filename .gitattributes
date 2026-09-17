@@ -1,0 +1,36 @@
+# =============================================================================
+# 行尾策略 —— 只为了保住一件事：**shell 脚本在 Linux 侧必须是 LF**
+# -----------------------------------------------------------------------------
+# 本机 core.autocrlf=true（Windows）。没有这份文件时：
+#   · git blob 里确实是 LF（提交时会归一化），所以 NAS 上 clone/pull 不受影响；
+#   · 但**工作区**会被 checkout 成 CRLF，而 Docker 构建用的是工作区的文件 →
+#     CRLF 的 .sh 进容器后报 `\r: command not found`，
+#     shebang 变成 `#!/bin/bash\r` 时报 `bad interpreter`。这类故障很难联想到行尾。
+# 写死 eol=lf 之后，工作区也永远是 LF，Windows 上改完直接 build 也安全。
+#
+# 与「.ps1 必须 UTF-8 with BOM」是同一条教训的两个方向：不写清楚，迟早各踩一次。
+# =============================================================================
+
+# shell 脚本与容器构建文件：永远 LF
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+docker-compose.yml text eol=lf
+
+# 二进制/证书类：禁止任何行尾转换（团队里最容易踩的是 PNG 被 autocrlf 改坏）
+*.png       -text
+*.ico       -text
+*.jpg       -text
+*.jpeg      -text
+*.gif       -text
+*.webp      -text
+*.svg       -text
+*.wav       -text
+*.mp3       -text
+*.mp4       -text
+*.pdf       -text
+*.zip       -text
+*.pem       -text
+*.key       -text
+*.crt       -text
+*.pfx       -text
+*.db        -text
