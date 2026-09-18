@@ -117,29 +117,28 @@ a { color: var(--blue-d); }
   transform: rotate(45deg); border-radius: 0 0 0 3px;
 }
 
+/* 背景是一张 3.56:1 的软萌 3D 海洋场景图（太阳、远岛、灯塔、帆船、沙滩都画在图里），
+   容器比例与图一致（地图最大宽 1012 / 高 284 ≈ 3.56），最宽的桌面窗口几乎不裁切；
+   窗口变窄时 cover 从两侧等量收一点，装饰物都预先收在中央安全区内。
+   底色取海面主色兜住图片加载前的一瞬间，不能用白色（会闪白块）。 */
 .isle-map {
   position: relative; height: 284px;
   border-radius: 18px; overflow: hidden;
-  background: linear-gradient(180deg, #EAF6FF 0%, #E1F2FD 46%, #D2EAFA 100%);
+  background-color: #A9DCF6;
+  background-image: url("../assets/isle-bg.jpg");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
 }
 
-/* 云：静态装饰，只给天空一点层次。刻意不做飘动 —— 全页只留三处动效，都很轻 */
-.isle-cloud { position: absolute; width: 92px; fill: #fff; opacity: .8; }
-.isle-cloud.c1 { left: 2%; top: 3%; }
-.isle-cloud.c2 { right: 4%; top: 1%; width: 72px; }
-
-/* 海面：全页唯一在「动」的装饰，而且慢到 27 秒才走一个来回 */
-.isle-sea { position: absolute; left: -3%; bottom: 0; width: 106%; height: 52%; animation: seaSway 27s ease-in-out infinite alternate; }
-.isle-sea path { fill: #C4E6FA; }
-@keyframes seaSway { from { transform: translateX(0); } to { transform: translateX(2.6%); } }
-
-/* 航线虚线：viewBox 与岛屿定位同一套刻度，preserveAspectRatio=none 让它随容器拉伸 */
+/* 航线虚线：viewBox 与岛屿定位同一套刻度，preserveAspectRatio=none 让它随容器拉伸。
+   颜色比背景海面深一档，保证在彩色海面图上仍然看得清。 */
 .isle-road { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .isle-road path {
-  fill: none; stroke: #6FAEDC; stroke-width: 3.2;
+  fill: none; stroke: #4F96D2; stroke-width: 3.2;
   stroke-dasharray: 4 6; stroke-linecap: round;
   vector-effect: non-scaling-stroke;
-  opacity: .95;
+  opacity: .9;
 }
 
 .isle {
@@ -154,18 +153,11 @@ a { color: var(--blue-d); }
 }
 .isle:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 16px; }
 
-.isle-art { position: relative; width: 100%; max-width: 144px; aspect-ratio: 120 / 76; }
-.isle-land { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-.isle-ico {
-  position: absolute; left: 50%; top: 6%;
-  width: 50px; height: 50px; margin-left: -25px;
-  border-radius: 16px; background: #fff;
-  box-shadow: 0 4px 13px rgba(90, 140, 190, .24);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--c);
+.isle-art { position: relative; width: 100%; max-width: 140px; aspect-ratio: 360 / 330; }
+.isle-obj {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; user-select: none; -webkit-user-drag: none;
 }
-.isle-ico svg { width: 26px; height: 26px; }
 
 /* 通关能拿几分 —— 钉在岛座右上角，让「做完 → 得分」在同一处说完 */
 .isle-star {
@@ -206,16 +198,16 @@ a { color: var(--blue-d); }
 /* 错题修理站（不占呼吸圈的「工具站」）：也能点，但按钮比主线的「出发」弱一档 */
 .isle-go.soft { background: #fff; color: var(--blue-d); border: 1.5px solid #CFE5F7; box-shadow: 0 3px 9px rgba(120, 160, 205, .16); }
 .isle-flag { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 800; color: #2E9C72; }
-.isle-wait { font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+/* 未解锁那一关的落点提示：小锁 + 「待解锁」，不写成句子（孩子扫一眼就知道还锁着） */
+.isle-wait { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; font-weight: 700; color: var(--ink3); }
+.isle-wait svg { width: 12px; height: 12px; flex: none; }
 
 /* 「当前这一关」的呼吸圈：0.9→1.08、2.8 秒一个来回 —— 够看见，不抢戏。
-   位置要罩住**草地那一圈**（草地椭圆在地图上大约占 y 44%–86%），不是整个岛座盒子：
-   套在盒子上会往上飘到图标泡两侧，露出来像个歪掉的光环。
-   另外这里用 inset 的百分比，不用 margin 负值 —— CSS 里垂直方向的 margin 百分比是按
-   **包含块宽度**算的，套到 120:76 的扁盒子上必然偏。 */
+   位置罩住 3D 素材的草皮岛座那一圈（素材画布 360×330，草皮大约在 y 50%–94%），
+   不往上套到房子/树冠，否则像个歪掉的光环。 */
 .isle.current .isle-art::before {
   content: ""; position: absolute;
-  left: 5%; right: 5%; top: 44%; bottom: 2%;
+  left: 6%; right: 6%; top: 50%; bottom: 3%;
   border-radius: 50%; border: 2.5px solid rgba(255, 196, 60, .62);
   animation: isleBreath 2.8s ease-in-out infinite;
 }
@@ -225,7 +217,8 @@ a { color: var(--blue-d); }
 }
 
 .isle.locked { cursor: default; }
-.isle.locked .isle-art { filter: grayscale(.62) opacity(.66); }
+/* 3D 素材细节多，灰度压太重会像坏掉的灰片；轻去色 + 微降透明度，既保留可爱度又看得出「还没开门」 */
+.isle.locked .isle-art { filter: grayscale(.32) opacity(.82); }
 .isle.locked .isle-tag { background: #F8FBFE; border-color: #EDF3F9; box-shadow: none; }
 .isle.locked .isle-tag b { color: var(--ink3); }
 
@@ -272,14 +265,15 @@ a { color: var(--blue-d); }
 @keyframes chestFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
 /* 窄屏（平板竖屏 / 手机）：横排六座岛挤不下 —— 改成竖向路线，
-   左边一列岛、右边文字，航线 SVG 与海面一起收起（竖排里它们只会添乱）。 */
+   左边一列岛、右边文字；横排航线 SVG 收起，海洋背景图也换回浅蓝渐变
+   （竖排地图高度是撑开的，固定比例的横幅图 cover 进来只会被放得巨大）。 */
 @media (max-width: 899px) {
   .isle-cheer { display: none; }
   .isle-map {
     height: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
     background: linear-gradient(180deg, #EAF6FF, #DCF0FC);
   }
-  .isle-sea, .isle-road { display: none; }
+  .isle-road { display: none; }
   .isle {
     position: static; transform: none; width: 100%;
     flex-direction: row; align-items: center; gap: 12px; text-align: left;
@@ -287,13 +281,11 @@ a { color: var(--blue-d); }
   }
   .isle.locked { background: rgba(255, 255, 255, .5); }
   .isle.current { background: #fff; box-shadow: 0 4px 14px rgba(120, 160, 205, .16); }
-  .isle-art { width: 74px; max-width: 74px; flex: none; }
-  .isle-ico { width: 34px; height: 34px; margin-left: -17px; border-radius: 11px; top: 4%; }
-  .isle-ico svg { width: 19px; height: 19px; }
+  .isle-art { width: 78px; max-width: 78px; flex: none; }
   .isle-star { right: -6px; top: -6px; padding: 0 6px; font-size: 10px; }
   .isle-mark.ok, .isle-mark.lock { width: 20px; height: 20px; }
   .isle-mark.ok svg { width: 20px; height: 20px; }
-  .isle.current .isle-art::before { left: 2%; right: 2%; top: 40%; bottom: 0; }
+  .isle.current .isle-art::before { left: 3%; right: 3%; top: 50%; bottom: 2%; }
   .isle-tag { flex: 1; min-width: 0; align-items: flex-start; gap: 0; padding: 0; background: transparent; border: none; box-shadow: none; text-align: left; }
   .isle-tag b { font-size: 15px; }
   .isle-tag i { font-size: 12px; }

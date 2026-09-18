@@ -10,8 +10,10 @@
  * 首页负责「画出来 + 点的时候拦一下」，底部导航和地址栏由路由守卫拦同一套判断，
  * 两处各写一遍一定会算出不一样的结果。
  *
- * 动画刻意压到最低：只有「当前这一关」的呼吸光圈、海面的极慢横移、通关后的宝箱浮动。
- * 三处的幅度都很小、周期都在 2.5 秒以上 —— 这是导航页，不是动画页。
+ * 动画刻意压到最低：只有「当前这一关」的呼吸光圈、通关后的宝箱浮动。
+ * 幅度都很小、周期都在 2.5 秒以上 —— 这是导航页，不是动画页。
+ * 天空、远岛、灯塔、海面、帆船、沙滩是一整张静态背景图（macaron.css 里的 isle-bg），
+ * 不放动态装饰，避免和闯关路线抢注意力。
  *
  * 这一页是**孩子端**，只保留孩子会用、爱点的东西。
  * 家长的东西（内容后台、数据备份、运行诊断）一律不在这里出现：
@@ -21,6 +23,12 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "@/components/Icon.vue";
+import isleMath from "@/assets/islands/math.png";
+import isleDictation from "@/assets/islands/dictation.png";
+import isleReview from "@/assets/islands/review.png";
+import isleReading from "@/assets/islands/reading.png";
+import isleLanguage from "@/assets/islands/language.png";
+import isleVideo from "@/assets/islands/video.png";
 import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
 import { TASK_DEFS, useProgressStore, type TaskDef } from "@/stores/progress";
@@ -34,6 +42,20 @@ const mastery = useMasteryStore();
 const content = useContentStore();
 const story = useStoryStore();
 const ui = useUiStore();
+
+/**
+ * 六座功能岛的 3D 单体素材（软萌黏土风、透明底 PNG，水线已在出图时对齐）：
+ * 口算=书本+计算器、听写=字牌小屋、错题=扳手工具屋、故事=大树托书、语言=信纸铅笔、英文=ABC 小屋。
+ * 走 Vite 打包成 hash 资源，PWA 按 hash 更新缓存。
+ */
+const ISLE_ART: Record<TaskKey, string> = {
+  math: isleMath,
+  dictation: isleDictation,
+  review: isleReview,
+  reading: isleReading,
+  language: isleLanguage,
+  video: isleVideo,
+};
 
 /**
  * 六座岛的垂直错落（相对地图高度的百分比），走出一个「一高一低」的节奏。
@@ -180,20 +202,10 @@ const stats = computed(() => [
       <span class="isle-cheer">加油！你一定可以的！</span>
     </div>
 
-    <!-- 地图：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线 -->
+    <!-- 地图：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
+         天空、远岛、灯塔、海面、帆船、沙滩都画在 isle-bg 背景图里（见 macaron.css），
+         这里只保留随进度走的虚线航线和六座可点的岛。 -->
     <div class="isle-map">
-      <!-- 云：静态装饰，给天空一点层次。刻意不做飘动 —— 全页只留三处动效，且都很轻 -->
-      <svg class="isle-cloud c1" viewBox="0 0 120 48" aria-hidden="true">
-        <ellipse cx="46" cy="32" rx="42" ry="15" /><ellipse cx="78" cy="34" rx="28" ry="12" /><ellipse cx="28" cy="36" rx="24" ry="10" />
-      </svg>
-      <svg class="isle-cloud c2" viewBox="0 0 120 48" aria-hidden="true">
-        <ellipse cx="46" cy="32" rx="42" ry="15" /><ellipse cx="78" cy="34" rx="28" ry="12" /><ellipse cx="28" cy="36" rx="24" ry="10" />
-      </svg>
-
-      <svg class="isle-sea" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
-        <path d="M0 60 C 60 53, 120 66, 180 60 C 250 52, 300 67, 370 60 C 440 52, 500 66, 600 58 L600 100 L0 100 Z" />
-      </svg>
-
       <svg class="isle-road" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
         <path :d="roadPath" />
       </svg>
@@ -213,15 +225,9 @@ const stats = computed(() => [
         @click="go(it)"
       >
         <span class="isle-art">
-          <!-- 岛座：草皮盖住更窄的土坡，露出一圈土色，做出「浮在海上的小岛」 -->
-          <svg class="isle-land" viewBox="0 0 120 76" aria-hidden="true">
-            <ellipse cx="60" cy="63" rx="46" ry="13" fill="#D9B98B" />
-            <ellipse cx="60" cy="54" rx="52" ry="17" fill="#8FCF85" />
-            <ellipse cx="60" cy="49" rx="44" ry="12" fill="#A8E29A" opacity=".9" />
-            <ellipse cx="46" cy="46" rx="13" ry="4.4" fill="#FFFFFF" opacity=".42" />
-          </svg>
-
-          <span class="isle-ico"><Icon :name="it.icon" :size="24" :stroke="2" /></span>
+          <!-- 整座功能岛是一张透明底 3D 素材（岛座+功能物体一体，水面投影已烤进 PNG），
+               锁关灰度、当前关注吸圈、奖励星标、通关绿勾都叠在这一层上。 -->
+          <img class="isle-obj" :src="ISLE_ART[it.key]" alt="" draggable="false" />
 
           <span v-if="it.reward > 0" class="isle-star" :title="`完成可得 ${it.reward} 分`">
             +{{ it.reward }}
@@ -254,7 +260,7 @@ const stats = computed(() => [
           {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
         </span>
         <span v-else-if="it.state === 'done'" class="isle-flag"><Icon name="check" :size="13" :stroke="3.2" />已通关</span>
-        <span v-else class="isle-wait">做完前一关才开门</span>
+        <span v-else class="isle-wait"><Icon name="lock" :size="12" :stroke="2.4" />待解锁</span>
       </button>
     </div>
   </section>

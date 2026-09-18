@@ -196,10 +196,45 @@ try {
       "锁着的岛写的是「这一关要做什么」，不是「还没解锁」",
       lockedTexts.length === 4 &&
         !lockedTexts.some((t) => t.includes("还没解锁")) &&
-        lockedTexts.every((t) => t.includes("做完前一关才开门")),
+        lockedTexts.every((t) => t.includes("待解锁")),
       lockedTexts.join(" | ").replace(/\s+/g, " ").slice(0, 180),
     );
-    ok("锁着的岛写着「做完前一关才开门」", texts.includes("做完前一关才开门"));
+    ok("锁着的岛写着「待解锁」", texts.includes("待解锁"), texts.slice(0, 120));
+    // 「待解锁」要跟着一把小锁出现：只看图标对不识字的孩子是没用的，
+    // 只看文字又丢了地图上一眼可见的「锁」的信号。
+    // 断言图形条数（而不是只看 <svg> 存在）—— 图标名写错时 Icon 会渲染一个空 svg，
+    // count() 照样是 1，这种「假通过」必须堵掉。
+    const lockGlyph = await page.locator(".isle-wait svg rect, .isle-wait svg path").count();
+    ok("「待解锁」前面挂着一把小锁", lockGlyph >= 3, `锁图形 ${lockGlyph} 条`);
+    // 注意别断言 display === "inline-flex"：`.isle` 是 flex 容器，
+    // 它的 flex item 会被 CSS blockify —— inline-flex 计算出来就是 flex。
+    // 真正要守的是「图标和文字并排一行」（flex 容器 + 单行高度），
+    // 堆成两行时 .isle-wait 的高度会翻倍。
+    const waitStyle = await page
+      .locator(".isle-wait")
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        const svg = el.querySelector("svg");
+        const r = el.getBoundingClientRect();
+        const sr = svg ? svg.getBoundingClientRect() : null;
+        return {
+          display: s.display,
+          gap: s.gap,
+          svgW: svg ? getComputedStyle(svg).width : "",
+          h: Math.round(r.height),
+          // 小锁必须在文字左边，而不是被挤到上一格去
+          lockBeforeText: sr ? sr.left < r.left + r.width / 2 : false,
+        };
+      });
+    ok(
+      "锁和「待解锁」并排一行，锁在前、尺寸 12px",
+      /flex$/.test(waitStyle.display) &&
+        waitStyle.svgW === "12px" &&
+        waitStyle.lockBeforeText &&
+        waitStyle.h < 20,
+      JSON.stringify(waitStyle),
+    );
   }
   {
     // 留一张「开局」的图：这是绝大多数时候孩子看到的样子，比通关图更值得对照
