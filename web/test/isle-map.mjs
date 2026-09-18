@@ -171,6 +171,38 @@ try {
     const d = await page.locator(".isle-road path").first().getAttribute("d");
     ok("航线连了 6 个点（5 段曲线）", ((d || "").match(/ C /g) || []).length === 5, String(d).slice(0, 60));
     ok("每座岛都挂着通关奖励", (await page.locator(".isle-star").count()) === 5, "错题修理站不发分，所以是 5");
+
+    // 底色仍是那张 3.56:1 的 3D 蓝色海洋场景图（天空/远岛/灯塔/帆船/沙滩都画在图里），
+    // 兜底底色取海面主色 —— 图没加载出来的一瞬间也不能闪白块
+    const mapBg = await page.locator(".isle-map").evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { img: s.backgroundImage, color: s.backgroundColor };
+    });
+    ok(
+      "地图铺着蓝色海洋背景图（含兜底海色）",
+      /url\(/.test(mapBg.img) && /isle-bg/.test(mapBg.img) && mapBg.color === "rgb(169, 220, 246)",
+      JSON.stringify(mapBg).slice(0, 160),
+    );
+    const roadStroke = await page
+      .locator(".isle-road path")
+      .evaluate((el) => getComputedStyle(el).stroke);
+    ok("航线是深一档的蓝色虚线（在海面图上看得清）", roadStroke === "rgb(79, 150, 210)", roadStroke);
+    // 淡黄是暖色，暖色背景上必须确认文字对比度还够（WCAG AA：正常字号 4.5:1）
+    const contrast = await page.locator(".isle-tag b").first().evaluate((el) => {
+      const rgb = (c) => (c.match(/\d+/g) || []).slice(0, 3).map(Number);
+      const lum = ([r, g, b]) => {
+        const f = (v) => {
+          const x = v / 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const fg = lum(rgb(getComputedStyle(el).color));
+      const bg = lum(rgb(getComputedStyle(el.parentElement).backgroundColor));
+      const [hi, lo] = fg > bg ? [fg, bg] : [bg, fg];
+      return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+    });
+    ok("岛名对比度 ≥ 4.5:1（WCAG AA）", contrast >= 4.5, `${contrast}:1`);
   }
 
   /* ————————————————————————————— 2. 开局：只有第一关能走 */
@@ -179,7 +211,15 @@ try {
     ok("口算岛是当前关", (await page.locator(".isle.current").count()) === 1);
     ok("后面四关是锁着的", (await page.locator(".isle.locked").count()) === 4, `${await page.locator(".isle.locked").count()} 座`);
     ok("错题修理站不上锁（工具站）", (await page.locator(".isle.open").count()) === 1);
-    ok("锁着的岛上画着锁", (await page.locator(".isle.locked .isle-mark.lock").count()) === 4);
+
+    // 未解锁的岛保持全彩、也不在岛角再挂一把锁：整座岛看起来和能点的一模一样，
+    // 「还锁着」全靠岛名下面那颗胶囊说 —— 这是刻意的（去色会让六座岛像坏了一半）
+    const dim = await page
+      .locator(".isle.locked .isle-art")
+      .first()
+      .evaluate((el) => getComputedStyle(el).filter);
+    ok("未解锁的岛不置灰（保持全彩）", dim === "none", dim);
+    ok("岛角不再挂锁角标", (await page.locator(".isle-mark.lock").count()) === 0);
 
     // 呼吸圈：幅度小、周期 2.8 秒，是导航页里唯一强调「下一步」的动效
     const anim = await page
@@ -187,25 +227,30 @@ try {
       .evaluate((el) => getComputedStyle(el, "::before").animationName);
     ok("当前这一关带呼吸圈", anim === "isleBreath", String(anim));
 
-    const texts = (await isleTexts()).join(" | ");
-    ok("第一关写着可做的事（20 道题）", /20 道题|0\s*\/\s*20/.test(texts), texts.slice(0, 80));
-    // 锁着的岛写「这一关要做什么」（各关的短说明或真实进度），不写「还没解锁」——
-    // 后者只是把右边的锁图标又说了一遍，白占一行
-    const lockedTexts = await page.locator("button.isle.locked").allInnerTexts();
-    ok(
-      "锁着的岛写的是「这一关要做什么」，不是「还没解锁」",
-      lockedTexts.length === 4 &&
-        !lockedTexts.some((t) => t.includes("还没解锁")) &&
-        lockedTexts.every((t) => t.includes("待解锁")),
-      lockedTexts.join(" | ").replace(/\s+/g, " ").slice(0, 180),
+    // 岛名下面不再有第二行：以前那行写的是「0 / 20」「用时 1:32」「先做口算和听写」……
+    // 六座岛挤在 1/6 格宽里，这行字一折行就把整条地图的基线拉得参差不齐。
+    // 断言标签纯文本正好等于岛名（多一个字都算第二行回来了）。
+    const tagTexts = (await page.locator("button.isle .isle-tag").allInnerTexts()).map((t) =>
+      t.replace(/\s+/g, ""),
     );
-    ok("锁着的岛写着「待解锁」", texts.includes("待解锁"), texts.slice(0, 120));
+    ok(
+      "每座岛只写岛名，岛下没有第二行",
+      JSON.stringify(tagTexts) === JSON.stringify(ISLE_NAMES),
+      tagTexts.join(" | "),
+    );
+
+    const waits = (await page.locator(".isle-wait").allInnerTexts()).map((t) => t.replace(/\s+/g, ""));
+    ok(
+      "四座锁着的岛都写着「待解锁」",
+      waits.length === 4 && waits.every((t) => t === "待解锁"),
+      waits.join(" | "),
+    );
     // 「待解锁」要跟着一把小锁出现：只看图标对不识字的孩子是没用的，
     // 只看文字又丢了地图上一眼可见的「锁」的信号。
     // 断言图形条数（而不是只看 <svg> 存在）—— 图标名写错时 Icon 会渲染一个空 svg，
     // count() 照样是 1，这种「假通过」必须堵掉。
     const lockGlyph = await page.locator(".isle-wait svg rect, .isle-wait svg path").count();
-    ok("「待解锁」前面挂着一把小锁", lockGlyph >= 3, `锁图形 ${lockGlyph} 条`);
+    ok("「待解锁」前面挂着一把小锁", lockGlyph >= 12, `锁图形 ${lockGlyph} 条（4 颗胶囊）`);
     // 注意别断言 display === "inline-flex"：`.isle` 是 flex 容器，
     // 它的 flex item 会被 CSS blockify —— inline-flex 计算出来就是 flex。
     // 真正要守的是「图标和文字并排一行」（flex 容器 + 单行高度），
@@ -223,17 +268,36 @@ try {
           gap: s.gap,
           svgW: svg ? getComputedStyle(svg).width : "",
           h: Math.round(r.height),
+          radius: s.borderTopLeftRadius,
+          bg: s.backgroundColor,
           // 小锁必须在文字左边，而不是被挤到上一格去
           lockBeforeText: sr ? sr.left < r.left + r.width / 2 : false,
         };
       });
     ok(
-      "锁和「待解锁」并排一行，锁在前、尺寸 12px",
+      "锁和「待解锁」并排一行，锁在前、尺寸 13px",
       /flex$/.test(waitStyle.display) &&
-        waitStyle.svgW === "12px" &&
+        waitStyle.svgW === "13px" &&
         waitStyle.lockBeforeText &&
-        waitStyle.h < 20,
+        // 单行 26px（padding 4+4 + 1.5×2 描边 + 一行字）；图标掉到第二行会到 45px 以上
+        waitStyle.h <= 30,
       JSON.stringify(waitStyle),
+    );
+    // 形状与「出发」一致：白底 + 全圆角胶囊。孩子扫一排按钮时，
+    // 位置和形状固定、只有颜色不同，比三种不同排版好认。
+    ok(
+      "「待解锁」是白色圆角胶囊（与「出发」同形状）",
+      waitStyle.radius === "999px" && waitStyle.bg === "rgb(255, 255, 255)",
+      `radius=${waitStyle.radius}, bg=${waitStyle.bg}`,
+    );
+    const goBox = await page
+      .locator(".isle-go")
+      .first()
+      .evaluate((el) => ({ h: Math.round(el.getBoundingClientRect().height), r: getComputedStyle(el).borderTopLeftRadius }));
+    ok(
+      "「待解锁」与「出发」高度一致",
+      Math.abs(goBox.h - waitStyle.h) <= 1 && goBox.r === "999px",
+      `出发 ${goBox.h}px / 待解锁 ${waitStyle.h}px`,
     );
   }
   {
@@ -331,6 +395,17 @@ try {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     ok("窄屏没有横向溢出", overflows <= 1, `溢出 ${overflows}px`);
+    // 竖排卡片里岛名与状态胶囊必须在同一行（岛名不再有第二行小字，卡片只剩这两块）
+    const rowDelta = await page
+      .locator("button.isle")
+      .first()
+      .evaluate((el) => {
+        const tag = el.querySelector(".isle-tag").getBoundingClientRect();
+        const btn = el.querySelector(".isle-wait, .isle-go, .isle-flag").getBoundingClientRect();
+        return Math.abs(tag.top + tag.height / 2 - (btn.top + btn.height / 2));
+      });
+    ok("窄屏下岛名与状态胶囊同一行", rowDelta < 12, `中心差 ${Math.round(rowDelta)}px`);
+    await page.screenshot({ path: path.join(REPO, "web", "test", "shots", "isle-map-narrow.png"), fullPage: true });
     await page.setViewportSize({ width: 1200, height: 900 });
     await page.waitForTimeout(400);
   }

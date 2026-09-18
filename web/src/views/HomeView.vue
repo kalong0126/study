@@ -12,8 +12,8 @@
  *
  * 动画刻意压到最低：只有「当前这一关」的呼吸光圈、通关后的宝箱浮动。
  * 幅度都很小、周期都在 2.5 秒以上 —— 这是导航页，不是动画页。
- * 天空、远岛、灯塔、海面、帆船、沙滩是一整张静态背景图（macaron.css 里的 isle-bg），
- * 不放动态装饰，避免和闯关路线抢注意力。
+ * 地图背景仍是那一整张静态海洋图（macaron.css 里的 isle-bg），不放动态装饰，
+ * 避免和闯关路线抢注意力。
  *
  * 这一页是**孩子端**，只保留孩子会用、爱点的东西。
  * 家长的东西（内容后台、数据备份、运行诊断）一律不在这里出现：
@@ -73,51 +73,30 @@ type IsleState = "done" | "current" | "open" | "locked";
 interface Isle extends TaskDef {
   i: number;
   state: IsleState;
-  /** 标签下面那一行小字：做完写「已完成」、没解锁写「还没解锁」、轮到它时写真实进度 */
-  sub: string;
-}
-
-/** 轮到这一关时，标签下写的真实进度；没有可展示的进度就退回该关的短说明 */
-function liveProgress(key: TaskKey, fallback: string): string {
-  if (key === "math") {
-    // 做完就报用时（口算页停表那一刻时间就定死了），没做完就报题数
-    if (progress.mathDone && progress.mathElapsedSec > 0) return `用时 ${progress.mathElapsedText}`;
-    return `${progress.mathAnswered} / ${progress.mathTotal}`;
-  }
-  if (key === "language") {
-    // 后端算的 9 道题进度。没题集（total 为 0）时别写「0 / 0」，退回默认说明。
-    return progress.languageTotal > 0 ? `${progress.languageDone} / ${progress.languageTotal}` : fallback;
-  }
-  return fallback;
 }
 
 /**
- * 错题修理站岛上的短提示。
+ * 读屏时的这一关状态。
  *
- * 不复用 `reviewText`：那句「先完成口算和听写，再来复习错题」有 16 个字，
- * 在 1/6 的岛宽里要折成三行，把整座岛撑得比邻居高一截，视觉上全乱。
- * 这里只留最要紧的几个字（完整说明在 WrongView 页里还有一份）。
+ * 地图上岛名下面不再挂第二行小字（进度、用时、「先做口算和听写」……），
+ * 状态只剩「出发 / 待解锁 / 已通关」三种可见表达，其余靠这里补出来 ——
+ * 盲用读屏的孩子也得知道这一关是能进还是锁着。
  */
-function reviewShort(): string {
-  if (progress.reviewCount > 0) return `已完成 ${progress.reviewCount} / ${progress.reviewTotal} 道`;
-  if (progress.isDone("review")) return "错题本是空的";
-  if (!progress.canReview) return "先做口算和听写";
-  return `0 / ${progress.reviewTotal} 道`;
-}
+const STATE_LABEL: Record<IsleState, string> = {
+  done: "已通关",
+  current: "现在这一关",
+  open: "随时可去",
+  locked: "待解锁",
+};
 
 /**
- * 岛标签下面那一行小字。
+ * 岛上只挂岛名，不再挂第二行。
  *
- * 口算有点特殊：做完之后这一行要报**用时**（孩子看得见自己变快了），
- * 所以它不走「做完就写已完成」那条通用规则 —— 通用规则会让用时永远没机会露脸。
+ * 以前每座岛名下面还跟一行小字（`0 / 20`、`用时 1:32`、`先做口算和听写`……）：
+ * 六座岛挤在 1/6 的宽度里，这行字要么被折成两行把岛撑高，要么在窄屏上把标签推成三行，
+ * 整条航线看着高低不齐。而这些数字点进去就写在页面上，地图的职责只有一件 ——
+ * 「下一步去哪」。进度由下方的进度带负责（今天完成 X / 6 + 号码节点 + 宝箱）。
  */
-function isleSub(d: TaskDef, state: IsleState): string {
-  if (d.key === "review") return reviewShort();
-  if (d.key === "math") return liveProgress("math", d.hint);
-  if (state === "done") return "已完成";
-  return liveProgress(d.key, d.hint);
-}
-
 const isles = computed<Isle[]>(() =>
   TASK_DEFS.map((d, i) => {
     const done = progress.isDone(d.key);
@@ -129,7 +108,7 @@ const isles = computed<Isle[]>(() =>
         : i === progress.currentIndex
           ? "current"
           : "locked";
-    return { ...d, i, state, sub: isleSub(d, state) };
+    return { ...d, i, state };
   }),
 );
 
@@ -203,8 +182,7 @@ const stats = computed(() => [
     </div>
 
     <!-- 地图：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
-         天空、远岛、灯塔、海面、帆船、沙滩都画在 isle-bg 背景图里（见 macaron.css），
-         这里只保留随进度走的虚线航线和六座可点的岛。 -->
+         背景是静态海洋图，这里只有随进度走的虚线航线和六座可点的岛。 -->
     <div class="isle-map">
       <svg class="isle-road" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
         <path :d="roadPath" />
@@ -219,14 +197,15 @@ const stats = computed(() => [
         :style="{ '--i': it.i, '--dy': `${ISLE_DY[it.i]}%`, '--c': it.color }"
         :aria-label="
           it.state === 'locked'
-            ? `${it.name}：还没解锁，先闯过「${progress.currentTaskName}」`
-            : `${it.name}：${it.sub}`
+            ? `${it.name}：待解锁，先闯过「${progress.currentTaskName}」`
+            : `${it.name}：${STATE_LABEL[it.state]}`
         "
         @click="go(it)"
       >
         <span class="isle-art">
           <!-- 整座功能岛是一张透明底 3D 素材（岛座+功能物体一体，水面投影已烤进 PNG），
-               锁关灰度、当前关注吸圈、奖励星标、通关绿勾都叠在这一层上。 -->
+               当前关注吸圈、奖励星标、通关绿勾都叠在这一层上。
+               未解锁的岛**不做灰度**：整座岛还是全彩的，只在岛名下面换成「🔒 待解锁」胶囊。 -->
           <img class="isle-obj" :src="ISLE_ART[it.key]" alt="" draggable="false" />
 
           <span v-if="it.reward > 0" class="isle-star" :title="`完成可得 ${it.reward} 分`">
@@ -246,15 +225,9 @@ const stats = computed(() => [
               />
             </svg>
           </span>
-          <span v-else-if="it.state === 'locked'" class="isle-mark lock" aria-hidden="true">
-            <Icon name="lock" :size="14" :stroke="2.4" />
-          </span>
         </span>
 
-        <span class="isle-tag">
-          <b>{{ it.name }}</b>
-          <i>{{ it.sub }}</i>
-        </span>
+        <span class="isle-tag"><b>{{ it.name }}</b></span>
 
         <span v-if="it.state === 'current' || it.state === 'open'" class="isle-go" :class="{ soft: it.state === 'open' }">
           {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
