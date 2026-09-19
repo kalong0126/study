@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 把一份**本地**字体文件（.ttf / .otf）切成 unicode-range 分片 + 生成 @font-face CSS。
-用来做「全站统一圆体」这类需求：字库大（方正粗圆简体 2.85MB / 8106 字形），
+用来做「全站统一圆体」这类需求：字库大（方正准圆简体 2.88MB / 8106 字形），
 整包丢给浏览器太重，切片后浏览器只下载页面真正命中的那几片。
 
 用法（默认参数就是本项目当前这一版）：
@@ -34,7 +34,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from fontTools.ttLib import TTFont
 
 REPO = Path(__file__).resolve().parent.parent
-DEF_SRC = REPO / "方正粗圆简体.ttf"
+DEF_SRC = REPO / "方正准圆简体.ttf"
 
 
 def fmt_ranges(codepoints):
@@ -56,14 +56,14 @@ def fmt_ranges(codepoints):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=str(DEF_SRC), help="本地字体文件（.ttf/.otf）")
-    ap.add_argument("--slug", default="fzcuyuan", help="产出目录与 CSS 文件名后缀")
-    ap.add_argument("--family", default="方正粗圆简体", help="@font-face 的 family 名")
-    ap.add_argument("--local-names", default="方正粗圆简体,FZCuYuan-M03S,FZY4JW--GB1-0",
+    ap.add_argument("--slug", default="fzzhunyuan", help="产出目录与 CSS 文件名后缀")
+    ap.add_argument("--family", default="方正准圆简体", help="@font-face 的 family 名")
+    ap.add_argument("--local-names", default="方正准圆简体,FZZhunYuan-M02S,FZY3JW--GB1-0",
                     help="src 里的 local() 兜底名，逗号分隔；本机装了就不下载")
     ap.add_argument("--slices", type=int, default=180, help="切成多少片（片越小、单页下载越少，但总数变大）")
     ap.add_argument("--weight", default="400", help="@font-face font-weight，**必须写真值**")
     ap.add_argument("--tabular-digits", default="1",
-                    help="把 0-9 的步进宽度统一成最宽那个（1 默认是正题，不改的话计时器跳秒会左右抖）")
+                    help="把 0-9 的步进宽度统一成最宽那个（数字默认是比例宽度，不改的话计时器跳秒会左右抖）")
     args = ap.parse_args()
 
     src = Path(args.src)
@@ -80,8 +80,8 @@ def main():
     print(f"字形：{font['maxp'].numGlyphs}  可映射码位：{total}  码位范围：U+{cps[0]:04x}-U+{cps[-1]:04x}")
 
     # ── 数字等宽化 ──────────────────────────────────────────────────────────
-    # 中文粗圆体的西文数字是**比例宽度**：方正粗圆简体里 0/2-6/8/9 = 146/256em，
-    # 7 = 137，1 只有 94（大约只有别的数字的 2/3）。它又没有 tnum 特性
+    # 中文圆体的西文数字是**比例宽度**：方正准圆简体里 0/2-6/8/9 = 137/256em，
+    # 7 = 128，1 只有 90（大约只有别的数字的 2/3）。它又没有 tnum 特性
     # （GSUB 里只有 vert），所以 CSS 的 `font-variant-numeric: tabular-nums`
     # 在这份字体上是**空转**的 —— 计时器每跳一秒、分数每加一分，宽度都会变，
     # 后面的字符跟着左右抖一下。

@@ -3,9 +3,9 @@ import { createPinia } from "pinia";
 import App from "@/App.vue";
 import { router } from "@/router";
 // 字体声明放在主题样式之前：@font-face 要先注册好，后面的 font-family 才认得出它。
-// 全站一套字：方正粗圆简体（本地字体切片，中文 + 数字 + 英文全覆盖），
+// 全站一套字：方正准圆简体（本地字体切片，中文 + 数字 + 英文全覆盖），
 // 拼接规则见 macaron.css 的 --font-round。
-import "@/styles/font-fzcuyuan.css";
+import "@/styles/font-fzzhunyuan.css";
 import "@/styles/macaron.css";
 
 const app = createApp(App);

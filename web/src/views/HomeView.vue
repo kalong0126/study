@@ -73,6 +73,19 @@ const ISLE_ART: Record<TaskKey, string> = {
  */
 const ISLE_DY = [3, -4.5, 4, -4, 4.5, -4];
 
+/**
+ * 单座岛的「岛名 + 状态胶囊」再往下让多少 px（没写的岛 = 0）。
+ *
+ * 标牌本身已经整块压到岛底座上（见 macaron.css 的 .isle-cap，`bottom: -6%`），
+ * 但那是**一刀切**：六座岛的功能物体高矮不一样，最高的三座
+ * （错题修理站 = 工具屋 + 卷轴、故事树 = 树冠、英文小屋 = ABC 小屋）
+ * 标牌顶边仍会擦到物体。这三座各再让 15px。
+ *
+ * 只动标牌：岛的定位（`--dy`）、航线、奖励星标都不受影响 ——
+ * 标牌是贴在岛上的「标牌」，不是岛的一部分。
+ */
+const CAP_DROP: Partial<Record<TaskKey, number>> = { review: 15, reading: 15, video: 15 };
+
 type IsleState = "done" | "current" | "open" | "locked";
 
 interface Isle extends TaskDef {
@@ -239,7 +252,12 @@ const stats = computed(() => [
           class="isle"
           :class="it.state"
           type="button"
-          :style="{ '--i': it.i, '--dy': `${ISLE_DY[it.i]}%`, '--c': it.color }"
+          :style="{
+            '--i': it.i,
+            '--dy': `${ISLE_DY[it.i]}%`,
+            '--c': it.color,
+            '--cap-drop': `${CAP_DROP[it.key] ?? 0}px`,
+          }"
           :aria-label="
             it.state === 'locked'
               ? `${it.name}：待解锁，先闯过「${progress.currentTaskName}」`

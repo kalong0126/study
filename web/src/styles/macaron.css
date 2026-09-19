@@ -18,12 +18,12 @@
   --shadow: 0 8px 24px rgba(120, 160, 205, .14);
   --shadow-s: 0 3px 10px rgba(120, 160, 205, .10);
 
-  /* --font-round：界面字体，全站只此一套 —— 方正粗圆简体（自托管切片，见 font-fzcuyuan.css）。
+  /* --font-round：界面字体，全站只此一套 —— 方正准圆简体（自托管切片，见 font-fzzhunyuan.css）。
      中文、数字、英文、标点它都覆盖（6763 个 GB2312 汉字 + ASCII + ×÷＝…— 全有），
      所以不再需要「拉丁一份、中文一份」的拼法，整站字形统一。
 
      ⚠️ 授权：方正字库的商业字体，仅本项目个人自用（家用 NAS，非商用）。
-     字库文件与切片都在 web/public/fonts/fzcuyuan 下，别跟着仓库外发出去。
+     字库文件与切片都在 web/public/fonts/fzzhunyuan 下，别跟着仓库外发出去。
 
      唯一缺的字符是半角 ¥（U+00A5）—— 全角 ￥（U+FFE5）有。界面里没用 ¥，
       真要用就退回后面的系统字体，别改字体。
@@ -31,18 +31,18 @@
      后面那串是兜底：切片没覆盖到的字依次退回系统圆体、再到黑体，不能省。
 
      --font-kai：识字字体。课文原文、生字、手写格这类「要照着认、照着写的字」必须用楷体 ——
-     楷体是识字教学的标准字形；粗圆的笔形是设计过的（末笔更圆、笔画等粗），
+     楷体是识字教学的标准字形；准圆的笔形是设计过的（末笔更圆、笔画等粗），
      孩子照着它记笔画会记错。这条不参与上面的讨论：楷体的数字本身就是规整的。 */
-  --font-round: "方正粗圆简体", "圆体-简", "Yuanti SC", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-round: "方正准圆简体", "圆体-简", "Yuanti SC", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-kai: "Kaiti SC", "KaiTi", "STKaiti", "楷体", "FangSong", serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
-/* 全站字体走 --font-round（方正粗圆简体）；识字内容单独用 --font-kai，见下面的 .story-text。
-   字重交给浏览器合成加粗：方正粗圆简体只有真实 400 一档，标题/数字的 700-900
+/* 全站字体走 --font-round（方正准圆简体）；识字内容单独用 --font-kai，见下面的 .story-text。
+   字重交给浏览器合成加粗：方正准圆简体只有真实 400 一档，标题/数字的 700-900
    由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
-   不再合成，全站粗细会一样（详见 font-fzcuyuan.css 顶部说明）。 */
+   不再合成，全站粗细会一样（详见 font-fzzhunyuan.css 顶部说明）。 */
 body {
   font-family: var(--font-round);
   color: var(--ink); font-size: 16px; line-height: 1.6;
@@ -270,12 +270,17 @@ a { color: var(--blue-d); }
    两块一起往下对齐：胶囊骑在岛座底缘（一半压在水面上），岛名落在草地上 ——
    3D 素材画布是 360×330，逐带量过六张图：功能物体（房子/树/书/卷轴）都在 y 60% 以上，
    草坪大致 y 55%–78%、土层底座 y 80%–92%。
-   所以整块下移到 `bottom: -6%`：岛名顶边落在 y ≈ 63%，正好在房子下沿之下、
-   草坪与土层上 —— 「只遮底座，不遮房子」就是这条。
+   所以整块下移到 `bottom: calc(-6% + var(--cap-drop, 0px))`：岛名顶边落在 y ≈ 63%，
+   正好在房子下沿之下、草坪与土层上 —— 「只遮底座，不遮房子」就是这条。
    宽度给满 + 居中，是因为名字长短不一（「口算岛」3 字、「错题修理站」5 字），
-   要的都是「在岛中间」，而不是「从岛左边排起」。 */
+   要的都是「在岛中间」，而不是「从岛左边排起」。
+
+   `--cap-drop` 是**单座岛**的追加下移量（默认 0，值写在 HomeView 的 CAP_DROP 里）：
+   -6% 是一刀切，可六座岛的功能物体高矮并不一样 —— 错题修理站（工具屋 + 卷轴）、
+   故事树（树冠）、英文小屋（ABC 小屋）这三座最高，标牌顶边仍会擦到屋檐/树冠，
+   所以这三座各再往下让 15px。 */
 .isle-cap {
-  position: absolute; left: 50%; bottom: -6%; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(-6% + var(--cap-drop, 0px)); transform: translateX(-50%);
   z-index: 2;
   width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }

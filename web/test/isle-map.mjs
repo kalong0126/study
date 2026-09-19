@@ -249,12 +249,15 @@ try {
     );
 
     // 岛名只压岛的**底座**，不能压到岛上的房子/树（用户明确要求）。
-    // 判据：岛名胶囊的上下边都落在素材高度的 60%–100% 之间。
+    // 判据一：岛名胶囊的顶边落在素材高度的 60% 以下。
     // 60% 不是随手写的：六张 3D 素材逐横带量过（按 5% 一条数「不透明覆盖率 + 主色」），
     // 功能物体（房子/树/书/卷轴）的最低点最高的是 video.png 的 ~60%
     //（math 48% / dictation 52% / language 55% / reading 55% / review 57% / video 60%），
-    // 草坪约 55%–78%、土层底座约 80%–92%。所以「顶边 ≥ 60%」＝名字只在底座上，
-    // 「底边 ≤ 100%」＝它还压在岛上（不是又漂到岛外面去了）。
+    // 草坪约 55%–78%、土层底座约 80%–92%。
+    // 判据二：整块标牌（岛名 + 状态胶囊）仍在 hero 卡片内 —— 卡片是 `overflow: hidden`，
+    // 越界就等于被裁掉。这条比「底边比例 ≤ 100%」更贴近真实约束：物体最高的三座
+    //（review/reading/video）本来就靠 `--cap-drop` 把标牌压到岛底座下沿以下，
+    // 底边比例合法地超过 100%，但绝不能被裁。
     const capGeom = await page.locator("button.isle").evaluateAll((els) =>
       els.map((el) => {
         const art = el.querySelector(".isle-art").getBoundingClientRect();
@@ -265,16 +268,31 @@ try {
           tagTopRatio: (tag.top - art.top) / art.height,
           tagBottomRatio: (tag.bottom - art.top) / art.height,
           btnBottomRatio: (btn.bottom - art.top) / art.height,
+          capBottom: btn.bottom,
+          drop: parseFloat(getComputedStyle(el).getPropertyValue("--cap-drop")) || 0,
         };
       }),
     );
-    const geomBad = capGeom.filter((g) => !(g.tagTopRatio >= 0.6 && g.tagBottomRatio <= 1));
+    const heroBottom = hero.y + hero.height;
+    const geomBad = capGeom.filter((g) => !(g.tagTopRatio >= 0.6 && g.capBottom <= heroBottom - 2));
     ok(
-      "六座岛的岛名都只压底座、不压房子/树",
+      "六座岛的岛名都只压底座、不压房子/树，且标牌没被卡片裁掉",
       capGeom.length === 6 && geomBad.length === 0,
       capGeom
-        .map((g) => `${g.name} ${(g.tagTopRatio * 100).toFixed(0)}–${(g.tagBottomRatio * 100).toFixed(0)}%`)
+        .map(
+          (g) =>
+            `${g.name} 顶 ${(g.tagTopRatio * 100).toFixed(0)}% 底 ${(g.tagBottomRatio * 100).toFixed(0)}% 距卡底 ${(heroBottom - g.capBottom).toFixed(0)}px`,
+        )
         .join(" | "),
+    );
+
+    // 用户点名：物体最高的三座岛（错题修理站 / 故事树 / 英文小屋）标牌再往下 15px。
+    // 读 computed 值而不是读源码 —— 样式被改掉这条才会红。
+    const dropped = capGeom.filter((g) => g.drop === 15).map((g) => g.name);
+    ok(
+      "标牌追加下移 15px 的正好是错题修理站 / 故事树 / 英文小屋",
+      dropped.join(",") === "错题修理站,故事树,英文小屋",
+      `实际：${dropped.join("、") || "（无）"}`,
     );
 
     // 三块（地图 / 进度带 / 学习小档案）被同一个外框框起来 ——
@@ -356,14 +374,14 @@ try {
     );
     ok("三张卡底色各不相同", new Set(statBg).size === 3, statBg.join(" | "));
 
-    // 字体：界面用方正粗圆简体（自托管切片），识字内容用楷体。
+    // 字体：界面用方正准圆简体（自托管切片），识字内容用楷体。
     // 分两条守：一条守「声明写对了」，一条守「文件真的加载进来了」——
     // 只判前一条的话，字体 404 了照样全绿。
     const bodyFont = await page.locator("body").evaluate((el) => getComputedStyle(el).fontFamily);
-    ok("界面字体是方正粗圆简体", /方正粗圆简体/.test(bodyFont), bodyFont.slice(0, 64));
+    ok("界面字体是方正准圆简体", /方正准圆简体/.test(bodyFont), bodyFont.slice(0, 64));
     const fontLoaded = await page.evaluate(async () => {
       await document.fonts.ready;
-      return [...document.fonts].some((f) => f.family.includes("方正粗圆简体") && f.status === "loaded");
+      return [...document.fonts].some((f) => f.family.includes("方正准圆简体") && f.status === "loaded");
     });
     ok("字体切片真的加载成功（不是只剩一句声明）", fontLoaded === true, String(fontLoaded));
     // 课文 / 童话是「要照着认的字」，必须楷体。这条以前踩过坑：

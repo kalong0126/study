@@ -14,8 +14,8 @@
  *    关键字，混进字体列表会让整条声明非法被丢弃，识字内容会悄悄回落到圆体。
  *    这一条在 CSS 源码里不显眼，所以既做浏览器断言，也直接静态查源码。
  *
- * ③ 全站一套字：界面中文 / 数字 / 标点全部由方正粗圆简体渲染（它的字库自带 ASCII 与
- *    中文标点，不需要再拼一份拉丁字体）。判据＝站点栈与「只有方正粗圆简体」渲染出来的
+ * ③ 全站一套字：界面中文 / 数字 / 标点全部由方正准圆简体渲染（它的字库自带 ASCII 与
+ *    中文标点，不需要再拼一份拉丁字体）。判据＝站点栈与「只有方正准圆简体」渲染出来的
  *    着墨量**必须相等** —— 不等就说明有第二个字体在偷偷参与。
  *
  * 用法：node web/test/font.mjs   或   cd web && npm run test:font
@@ -128,18 +128,18 @@ try {
       const faces = [...document.fonts];
       const pick = (kw) => faces.filter((x) => x.family.includes(kw));
       return {
-        fz: pick("方正粗圆简体").map((x) => x.status),
-        fzWeight: [...new Set(pick("方正粗圆简体").map((x) => x.weight))],
+        fz: pick("方正准圆简体").map((x) => x.status),
+        fzWeight: [...new Set(pick("方正准圆简体").map((x) => x.weight))],
       };
     });
     ok(
-      "方正粗圆简体切片已加载",
+      "方正准圆简体切片已加载",
       f.fz.length > 0 && f.fz.includes("loaded"),
       `${f.fz.filter((s) => s === "loaded").length}/${f.fz.length} 已加载`,
     );
     // 关键：字重必须是真实值。声明成区间（100 900）会静默压平全站字重。
     ok(
-      "方正粗圆简体声明的字重是真实值 400（不是 100 900 区间）",
+      "方正准圆简体声明的字重是真实值 400（不是 100 900 区间）",
       f.fzWeight.length === 1 && f.fzWeight[0] === "400",
       `weight=${JSON.stringify(f.fzWeight)}`,
     );
@@ -199,16 +199,16 @@ try {
   }
 
   // ————————————————————————————————————————— 3. 全站一套字（中文 / 数字 / 标点同源）
-  step("3. 中文、数字、标点全部由方正粗圆简体渲染");
+  step("3. 中文、数字、标点全部由方正准圆简体渲染");
   {
     const bodyFam = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
-    ok("body 字体栈里方正粗圆简体排第一", /^"?方正粗圆简体"?/.test(bodyFam), bodyFam.slice(0, 60));
+    ok("body 字体栈里方正准圆简体排第一", /^"?方正准圆简体"?/.test(bodyFam), bodyFam.slice(0, 60));
 
-    // 端到端证据：同一串字，「站点栈」与「只有方正粗圆简体」渲染出来的着墨必须**相等** ——
+    // 端到端证据：同一串字，「站点栈」与「只有方正准圆简体」渲染出来的着墨必须**相等** ——
     // 不相等就说明还有第二个字体在偷偷参与（以前是数字走 Nunito、汉字走站酷）。
     const diff = await page.evaluate(async () => {
       const stack = getComputedStyle(document.body).fontFamily;
-      const ONLY = '"方正粗圆简体"';
+      const ONLY = '"方正准圆简体"';
       const samples = ["0123456789", "口算岛", "……", "——", "1:32", "7 × 8 ="];
       // canvas 不会主动触发 @font-face 懒加载，先 load 再量
       for (const t of samples) {
@@ -246,7 +246,7 @@ try {
     };
     for (const [text, v] of Object.entries(diff)) {
       ok(
-        `${label[text]} 由方正粗圆简体渲染（站点栈与纯方正着墨一致）`,
+        `${label[text]} 由方正准圆简体渲染（站点栈与纯方正着墨一致）`,
         v.site === v.only && v.site > 0,
         `站点栈 ${v.site} vs 纯方正 ${v.only}`,
       );
@@ -368,10 +368,10 @@ try {
     ok("楷体声明至少 6 处走变量（课文/听写/手写/错题/语言/后台）", (macaron.match(/var\(--font-kai\)/g) || []).length >= 6, `${(macaron.match(/var\(--font-kai\)/g) || []).length} 处`);
 
     // 切片 CSS 由 scripts/build-local-font.py 生成，手改必被覆盖 —— 这里守住生成器的两条硬约束
-    const fzc = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-fzcuyuan.css"), "utf8");
+    const fzc = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-fzzhunyuan.css"), "utf8");
     const weights = [...fzc.matchAll(/font-weight:\s*([^;]+);/g)].map((m) => m[1].trim());
     ok(
-      "font-fzcuyuan.css 全部切片声明的都是真实字重 400",
+      "font-fzzhunyuan.css 全部切片声明的都是真实字重 400",
       weights.length > 0 && weights.every((w) => w === "400"),
       `共 ${weights.length} 条，取值 ${JSON.stringify([...new Set(weights)])}`,
     );
