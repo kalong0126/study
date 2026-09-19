@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="card">
+  <section class="card vcard">
     <div class="card-hd">
       <span class="ico" style="background: #E4F7F5; color: #2FA8A0">
         <Icon name="video" :size="19" />
@@ -285,29 +285,32 @@ onBeforeUnmount(() => {
     </template>
 
     <template v-else>
+      <!-- .vt = 浅色机身外框，.vscreen = 里面那块深色屏幕（大按钮 / 角标挂在 .vscreen 上才不会被机身边距顶偏） -->
       <div class="vt">
-        <video
-          ref="videoEl"
-          :src="src"
-          preload="metadata"
-          playsinline
-          webkit-playsinline
-          class="vplayer"
-          @loadedmetadata="onLoaded"
-          @timeupdate="onTimeUpdate"
-          @seeking="onSeeking"
-          @play="onPlay"
-          @pause="onPause"
-          @ended="onEnded"
-          @click="toggle"
-        ></video>
+        <div class="vscreen">
+          <video
+            ref="videoEl"
+            :src="src"
+            preload="metadata"
+            playsinline
+            webkit-playsinline
+            class="vplayer"
+            @loadedmetadata="onLoaded"
+            @timeupdate="onTimeUpdate"
+            @seeking="onSeeking"
+            @play="onPlay"
+            @pause="onPause"
+            @ended="onEnded"
+            @click="toggle"
+          ></video>
 
-        <button v-if="!playing" class="vbig" type="button" @click="toggle">
-          <Icon name="play" :size="30" />
-          <span>{{ current > 3 ? "继续看" : "播放" }}</span>
-        </button>
+          <button v-if="!playing" class="vbig" type="button" @click="toggle">
+            <Icon name="play" :size="30" />
+            <span>{{ current > 3 ? "继续看" : "播放" }}</span>
+          </button>
 
-        <div v-if="complete" class="vdone">看完啦 +10 分</div>
+          <div v-if="complete" class="vdone">看完啦 +10 分</div>
+        </div>
       </div>
 
       <div class="vtitle">{{ item.title }}</div>
@@ -350,13 +353,43 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* ---------- 播放器外框 ----------
+   2026-09-19 用户反馈两件事：① 深色 <video> 直接贴在白卡上，看着「没有外框包围、不像嵌在页面里」；
+   ② 16:9 铺满卡片宽度后在 1280×800 的横屏平板上高 568px，整页被撑得必须上下滚动。
+   所以这里做三件事：
+     · 给它一个「小电视」机身：浅蓝机身（padding + 描边 + 圆角 + 投影）+ 里面深色屏幕，边界一眼可见；
+     · 宽度不再取 100%，而是按「视口高 − 固定占位」反推屏幕高度（--screen-h），再乘 16:9 定宽，
+       居中摆放。这样画面永远在首屏里，不用滚动；
+     · 下面那排控件（标题 / 进度条 / 时间 / 两个按钮 / 提示语）跟着用同一个宽度，右左对齐
+       —— 视频收窄居中、控件还铺满整卡会看着错位。见文件末尾的宽度规则。
+   ⚠️ --vt-reserve 是量出来的固定占位：顶栏 61 + wrap 上下内边距 32 + 卡片头 86 + 视频下方控件区
+     ~208 + 卡片下边距 16 ≈ 403，另留 ~50px 余量 —— 长文件名把标题折成两行、或平板浏览器地址栏
+     收放时都不至于顶出滚动条（1280×800 实测还有 34px 富余）。改顶栏、卡片头或按钮高度时，
+     这个数要跟着调。
+   ⚠️ 宽度里的 +21px = 机身左右 padding 9×2 + 描边 1.5×2（全局 * 是 border-box，所以要自己加回来）。 */
+.vcard {
+  --vt-reserve: 455px;
+  --screen-h: max(200px, calc(100vh - var(--vt-reserve)));
+}
+/* dvh 认得更准（平板浏览器地址栏收起/展开时 vh 不会跳），不认的旧内核退回上面的 vh */
+@supports (height: 100dvh) {
+  .vcard { --screen-h: max(200px, calc(100dvh - var(--vt-reserve))); }
+}
 .vt {
+  padding: 9px;
+  margin: 4px auto 10px;
+  border-radius: 24px;
+  border: 1.5px solid #CFE3F5;
+  background: linear-gradient(180deg, #F1F8FF 0%, #E2EEFA 100%);
+  box-shadow: 0 10px 26px rgba(120, 160, 205, .2), inset 0 1px 0 rgba(255, 255, 255, .95);
+}
+.vscreen {
   position: relative;
-  margin: 4px 0 10px;
-  background: #0d1b26;
+  aspect-ratio: 16 / 9;
   border-radius: 16px;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
+  background: #0d1b26;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .07);
 }
 .vplayer {
   width: 100%;
@@ -403,12 +436,14 @@ onBeforeUnmount(() => {
   font-weight: 800;
   color: var(--ink);
   line-height: 1.3;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   overflow-wrap: break-word;
 }
 .vrange {
-  width: 100%;
-  height: 30px;
+  /* 必须显式 block：range 是 inline-block，margin-inline:auto 对行内块不生效，
+     会留在卡片左边缘、跟居中的播放器错位（第一版就是这样）。 */
+  display: block;
+  height: 26px;
   margin: 0;
   accent-color: #2FA8A0;
   cursor: pointer;
@@ -420,7 +455,7 @@ onBeforeUnmount(() => {
   font-size: 12.5px;
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
-  margin: 2px 0 12px;
+  margin: 2px 0 8px;
 }
 /* 两个大按钮：平板上手指点得准 */
 .vrow {
@@ -429,9 +464,24 @@ onBeforeUnmount(() => {
 }
 .vbtn {
   flex: 1;
-  min-height: 54px;
+  min-height: 50px;
   font-size: 16px;
   justify-content: center;
   gap: 6px;
+}
+
+/* ---------- 播放器和下面这排控件同宽 ----------
+   视频按视口高收窄居中之后，控件要是还铺满整张卡，左右边界就对不上了（第一版就是这样，看着错位）。
+   这里让它们统一取「机身外沿」那个宽度，各自居中。
+   ⚠️ 必须放在样式表最后：`.vrange` 的 `width: 100%`、`.vmeta` 的 `margin: 2px 0 8px` 简写都写在前头，
+   同优先级下靠后的声明才生效，挪到前面会被它们盖掉。 */
+.vt,
+.vtitle,
+.vrange,
+.vmeta,
+.vrow,
+.vcard .tip {
+  width: min(100%, calc(var(--screen-h) * 16 / 9 + 21px));
+  margin-inline: auto;
 }
 </style>

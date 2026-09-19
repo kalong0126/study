@@ -347,6 +347,57 @@ try {
   ok("显示这一集已算完成", meta.includes("这一集已经算完成"), meta);
   await shot("vd-03-done.png");
 
+  /* ————————————————————————————— 5b. 播放器外框 + 一屏放得下 */
+  /* 2026-09-19 用户反馈：视频窗「没有外框包围、不像嵌在页面里」+「撑满要滚动」。
+     修法是给播放器加浅色机身外框（.vt 包 .vscreen），并按视口高反推屏幕高度、宽度居中收窄。
+     下面这几条守住它，别再退回「深色 video 直接铺满白卡」。 */
+  step("5b. 外框 + 横屏一屏放得下");
+  ok("视频装在 .vscreen 里（机身包住屏幕）", (await page.locator(".vt > .vscreen > video.vplayer").count()) === 1);
+  const frame = await page.locator(".vt").evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {
+      pad: parseFloat(cs.paddingTop),
+      border: parseFloat(cs.borderTopWidth),
+      radius: parseFloat(cs.borderTopLeftRadius),
+      w: Math.round(r.width),
+    };
+  });
+  ok(
+    "外框看得见（有内边距 + 描边 + 大圆角）",
+    frame.pad >= 6 && frame.border >= 1 && frame.radius >= 16,
+    JSON.stringify(frame),
+  );
+  const screenAspect = await page.locator(".vscreen").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return Math.round((r.width / r.height) * 100) / 100;
+  });
+  ok("屏幕仍是 16:9", Math.abs(screenAspect - 16 / 9) < 0.02, String(screenAspect));
+
+  // 换成横屏平板（最吃竖向空间的场景）：整页不许滚，视频底必须在首屏内
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(700);
+  const fit = await page.evaluate(() => {
+    const wrap = document.querySelector(".wrap");
+    const vt = document.querySelector(".vt").getBoundingClientRect();
+    const card = document.querySelector(".card").getBoundingClientRect();
+    return {
+      content: wrap.scrollHeight,
+      view: wrap.clientHeight,
+      vtW: Math.round(vt.width),
+      cardW: Math.round(card.width),
+      vtBottom: Math.round(vt.bottom),
+      vh: window.innerHeight,
+    };
+  });
+  ok("1280×800 一屏放得下（.wrap 不滚）", fit.content <= fit.view + 1, JSON.stringify(fit));
+  ok("视频框整体在首屏内", fit.vtBottom < fit.vh, JSON.stringify(fit));
+  ok("视频框比卡片窄（居中的小电视、不铺满）", fit.vtW < fit.cardW - 20, JSON.stringify(fit));
+  await shot("vd-06-frame-landscape.png");
+
+  await page.setViewportSize({ width: 900, height: 1200 });
+  await page.waitForTimeout(500);
+
   /* ————————————————————————————— 6. 打卡与积分落库 */
   step("6. 打卡 + 10 分（后端为准）");
   const pts = await get("/points");
