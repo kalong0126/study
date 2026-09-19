@@ -179,8 +179,18 @@ a { color: var(--blue-d); }
 /* 太阳：直接衬在天空上的一枚无底色图标，比通用 .ico 的小方框大一圈 */
 .isle-hd .ico { width: 38px; height: 38px; background: transparent; color: #F3A32B; }
 .isle-hd .ico svg { width: 34px; height: 34px; }
-/* 标题压在天空上，比普通卡片头的大一号 —— 它是整页的主标题，不是分区标题 */
-.isle-hd h2 { font-size: 23px; letter-spacing: .6px; }
+/* 标题压在天空上，比普通卡片头的大一号 —— 它是整页的主标题，不是分区标题。
+   字重这里要单独补一层：字体只有真实 400 一档，`.card-hd h2` 的 800 已经是浏览器合成加粗，
+   但**合成加粗的量与请求字重无关**（写 800 还是 900，渲染像素完全一样），
+   所以从粗圆换到准圆之后标题显得单薄，只把数字改大没有用。
+   做法是叠「0 模糊的四向文字阴影」，往外各撑 0.5px —— 只向外长、不碰字腔；
+   不用 `-webkit-text-stroke` 是因为描边会同时往里吃笔画，23px 下已经开始发虚。 */
+.isle-hd h2 {
+  font-size: 23px; letter-spacing: .6px; font-weight: 900;
+  text-shadow:
+    .5px 0 0 currentColor, -.5px 0 0 currentColor,
+    0 .5px 0 currentColor, 0 -.5px 0 currentColor;
+}
 /* 副标题不能用最浅那档灰（--ink3）：浅蓝天空上对比度不够，换中间档 */
 .isle-hd .sub { font-size: 13.5px; color: var(--ink2); }
 .isle-cheer {
@@ -270,17 +280,21 @@ a { color: var(--blue-d); }
    两块一起往下对齐：胶囊骑在岛座底缘（一半压在水面上），岛名落在草地上 ——
    3D 素材画布是 360×330，逐带量过六张图：功能物体（房子/树/书/卷轴）都在 y 60% 以上，
    草坪大致 y 55%–78%、土层底座 y 80%–92%。
-   所以整块下移到 `bottom: calc(-6% + var(--cap-drop, 0px))`：岛名顶边落在 y ≈ 63%，
+   所以整块下移到 `bottom: calc(-6% - var(--cap-drop, 0px))`：岛名顶边落在 y ≈ 63%，
    正好在房子下沿之下、草坪与土层上 —— 「只遮底座，不遮房子」就是这条。
    宽度给满 + 居中，是因为名字长短不一（「口算岛」3 字、「错题修理站」5 字），
    要的都是「在岛中间」，而不是「从岛左边排起」。
 
-   `--cap-drop` 是**单座岛**的追加下移量（默认 0，值写在 HomeView 的 CAP_DROP 里）：
+   `--cap-drop` 是**单座岛**的追加下移量（默认 0，正数＝再往下让，值写在 HomeView 的 CAP_DROP 里）：
    -6% 是一刀切，可六座岛的功能物体高矮并不一样 —— 错题修理站（工具屋 + 卷轴）、
    故事树（树冠）、英文小屋（ABC 小屋）这三座最高，标牌顶边仍会擦到屋檐/树冠，
-   所以这三座各再往下让 15px。 */
+   所以这几座各自再往下让一点（错题修理站 / 英文小屋 / 听写屋 10px、故事树 20px，见 HomeView 的 CAP_DROP）。
+
+   ⚠️ 这里是 `- var(--cap-drop)` 而不是 `+`：**`bottom` 是「距容器底边的距离」，值越大元素越靠上**，
+   写成 `+` 会把「下移」翻成上移（踩过一次，用户反馈「感觉挪反了」）。
+   `--cap-drop` 的语义就锁死成「下移为正」，符号只在这条 calc 里翻一次，别在 CAP_DROP 里写负数。 */
 .isle-cap {
-  position: absolute; left: 50%; bottom: calc(-6% + var(--cap-drop, 0px)); transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: calc(-6% - var(--cap-drop, 0px)); transform: translateX(-50%);
   z-index: 2;
   width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }

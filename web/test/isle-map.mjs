@@ -286,13 +286,30 @@ try {
         .join(" | "),
     );
 
-    // 用户点名：物体最高的三座岛（错题修理站 / 故事树 / 英文小屋）标牌再往下 15px。
+    // 用户点名：几座岛的标牌要再往下让，幅度不同 ——
+    // 错题修理站 / 英文小屋 / 听写屋 10px，故事树 20px（树冠最高）。
     // 读 computed 值而不是读源码 —— 样式被改掉这条才会红。
-    const dropped = capGeom.filter((g) => g.drop === 15).map((g) => g.name);
+    // 另外顺手锁住**方向**：`--cap-drop` 是「下移为正」，这几座的标牌顶边必须比
+    // 另外三座更低（出现过 calc 里写成 `+` 把下移翻成上移的事故，光比值对不上方向）。
+    const EXPECT_DROP = { 错题修理站: 10, 英文小屋: 10, 听写屋: 10, 故事树: 20 };
+    const dropBadVal = capGeom.filter((g) => (EXPECT_DROP[g.name] ?? 0) !== g.drop);
     ok(
-      "标牌追加下移 15px 的正好是错题修理站 / 故事树 / 英文小屋",
-      dropped.join(",") === "错题修理站,故事树,英文小屋",
-      `实际：${dropped.join("、") || "（无）"}`,
+      "标牌追加下移量与点位一致（错题修理站/英文小屋/听写屋 10px、故事树 20px、其余 0）",
+      dropBadVal.length === 0,
+      capGeom.map((g) => `${g.name} ${g.drop}px`).join(" | "),
+    );
+    const dropNames = Object.keys(EXPECT_DROP);
+    const baseTop = Math.min(
+      ...capGeom.filter((g) => !dropNames.includes(g.name)).map((g) => g.tagTopRatio),
+    );
+    const dropBad = capGeom.filter((g) => dropNames.includes(g.name) && g.tagTopRatio <= baseTop);
+    ok(
+      "这三座岛名确实比另外三座**更低**（下移方向没写反）",
+      dropBad.length === 0,
+      `基准顶 ${(baseTop * 100).toFixed(0)}% | ` +
+        capGeom
+          .map((g) => `${g.name} ${(g.tagTopRatio * 100).toFixed(0)}%`)
+          .join(" | "),
     );
 
     // 三块（地图 / 进度带 / 学习小档案）被同一个外框框起来 ——

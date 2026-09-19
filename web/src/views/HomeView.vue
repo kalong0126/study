@@ -79,12 +79,21 @@ const ISLE_DY = [3, -4.5, 4, -4, 4.5, -4];
  * 标牌本身已经整块压到岛底座上（见 macaron.css 的 .isle-cap，`bottom: -6%`），
  * 但那是**一刀切**：六座岛的功能物体高矮不一样，最高的三座
  * （错题修理站 = 工具屋 + 卷轴、故事树 = 树冠、英文小屋 = ABC 小屋）
- * 标牌顶边仍会擦到物体。这三座各再让 15px。
+ * 标牌顶边仍会擦到物体，于是逐座微调：
+ *   错题修理站 / 英文小屋 / 听写屋 各 10px，故事树 20px（树冠最高）。
+ *
+ * ⚠️ 单位是「**下移**为正」：CSS 里那条 calc 会把它翻成 `bottom` 的减项
+ * （`bottom` 值越大越靠上，直接加会把下移变上移）。别在这里写负数。
  *
  * 只动标牌：岛的定位（`--dy`）、航线、奖励星标都不受影响 ——
  * 标牌是贴在岛上的「标牌」，不是岛的一部分。
  */
-const CAP_DROP: Partial<Record<TaskKey, number>> = { review: 15, reading: 15, video: 15 };
+const CAP_DROP: Partial<Record<TaskKey, number>> = {
+  review: 10,
+  video: 10,
+  dictation: 10,
+  reading: 20,
+};
 
 type IsleState = "done" | "current" | "open" | "locked";
 
