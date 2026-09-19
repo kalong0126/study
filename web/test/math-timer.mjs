@@ -237,7 +237,8 @@ try {
   const t4 = await clockSec();
   ok("做完后计时停住、不再增长", t4 === t3, `${t3}s → ${t4}s`);
   ok("做完后计时器不再是「计时中」样式", (await isRunning()) === false);
-  const timerBox = (await page.locator(".timer-box").first().innerText()).replace(/\s+/g, " ");
+  // 计时胶囊现在挂在页面工具栏那一条上（原来是卡片里的一块 .timer-box）
+  const timerBox = (await page.locator(".timer-chip").first().innerText()).replace(/\s+/g, " ");
   ok("口算页上显示「用时」", /用时/.test(timerBox), timerBox.slice(0, 70));
 
   /* ————————————————————————————— 5. 首页那座岛只有岛名 */

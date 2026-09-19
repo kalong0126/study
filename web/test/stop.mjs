@@ -237,7 +237,7 @@ await page.locator("button", { hasText: "停止朗读" }).first().click();
 await page.waitForTimeout(500);
 const justStopped = await page.evaluate(PROBE);
 ok("点停止后高亮立刻消失", justStopped.curIndex === -1, `curIndex=${justStopped.curIndex}`);
-ok("点停止后按钮变回「朗读故事」", justStopped.stopBtn === false);
+ok("点停止后按钮变回「朗读」", justStopped.stopBtn === false);
 ok("停止瞬间没有新的 TTS 请求", ttsHits === hitsBeforeStop, `新增 ${ttsHits - hitsBeforeStop} 次`);
 
 // 关键等待：必须跨过「旧实现的复活时刻」，否则是假绿
@@ -260,7 +260,7 @@ ok(
   ttsHits === hitsBeforeStop,
   `停止后新增 ${ttsHits - hitsBeforeStop} 次`,
 );
-ok("停止后按钮仍停在「朗读故事」", after.stopBtn === false);
+ok("停止后按钮仍停在「朗读」", after.stopBtn === false);
 ok("停止后句子总数不变（视图没被破坏）", after.total === base.total, `${after.total} 句`);
 await page.screenshot({ path: path.join(OUT, "stop-after.png") });
 
@@ -268,7 +268,7 @@ await page.screenshot({ path: path.join(OUT, "stop-after.png") });
  */
 step("3. 停止之后重新朗读仍然可用");
 serveLong = false;
-await page.locator("button", { hasText: "朗读故事" }).first().click();
+await page.locator("button", { hasText: /^朗读$/ }).first().click();
 const restarted = await untilIndex(0, 8000);
 ok("重新朗读可以立即从第一句开始", restarted === 0, `高亮 index=${restarted}`);
 await page.locator("button", { hasText: "停止朗读" }).first().click();

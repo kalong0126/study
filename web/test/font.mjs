@@ -307,38 +307,43 @@ try {
     };
 
     // 课文原文：用户要求「听写屋的课文内容做成和智能拼音童话一样」——
-    // 同一套字体（站内圆体）+ 同一个「固定高度的内容 DIV、内容在里面滚、整页不滚」。
+    // 先是同一套字体（站内圆体），后来（2026-09-19 规则③）连滚动方式也统一成
+    // 「整页由浏览器滚，内容 DIV 自己不再滚」。
     // 这里曾经是唯一走楷体的成篇正文（`.lesson-text`），已被要求删掉。
     const lessonFam = await famOf(".story-text");
     lessonFam === null
       ? ok("课文原文真的渲染出来了（否则这条断言是空转）", false, ".story-text 不在页面上")
       : ok("课文原文用站内圆体（与童话统一）", /方正准圆简体/.test(lessonFam), String(lessonFam).slice(0, 60));
 
-    // 内容 DIV 自己滚：overflow-y 是 auto，且正文真的超出了可视高度（否则「能滚」是空转）
+    // 内容 DIV 不再自己滚：滚动交给浏览器主滚动（规则③）。
+    // 判据要成对拿 —— 只查 `overflow-y` 会被「overflow:visible 但被父级裁掉」骗过去。
     const lessonBox = await page.evaluate(() => {
       const el = document.querySelector(".story-text");
       if (!el) return null;
       const cs = getComputedStyle(el);
-      const lh = parseFloat(cs.lineHeight) || 0;
       return {
         overflowY: cs.overflowY,
-        clientH: el.clientHeight,
-        scrollH: el.scrollHeight,
-        lines: lh ? Math.round((el.clientHeight / lh) * 10) / 10 : 0,
+        innerScroll: el.scrollHeight - el.clientHeight,
+        // 页面高度超过视口 → 浏览器主滚动条真的在起作用
+        docOver: document.documentElement.scrollHeight - window.innerHeight,
+        wrapOverflowY: getComputedStyle(document.querySelector(".wrap")).overflowY,
       };
     });
     lessonBox === null
-      ? ok("课文内容 DIV 存在（用来判断能不能滚）", false, "找不到 .story-text")
+      ? ok("课文内容 DIV 存在", false, "找不到 .story-text")
       : ok(
-          "课文在内容 DIV 里滚（固定 ~5 行高、不是整页滚）",
-          lessonBox.overflowY === "auto" && lessonBox.scrollH > lessonBox.clientH + 2 && lessonBox.lines <= 5.5,
+          "课文不自己滚（内层无滚动条），改由浏览器主滚动",
+          lessonBox.overflowY === "visible" &&
+            lessonBox.innerScroll <= 1 &&
+            lessonBox.wrapOverflowY !== "auto" &&
+            lessonBox.wrapOverflowY !== "scroll",
           JSON.stringify(lessonBox),
         );
 
     // 听写字格与手写格都要点进去才出现 —— 而这两个正是本轮修的那个 bug
     // （`font-family: "Kaiti SC", "KaiTi", inherit` 整条声明被浏览器丢掉，
     //   字形悄悄回落成圆体）。不真的走进去，这条回归就是空转。
-    await page.locator(".wb-tab", { hasText: "生字听写" }).first().click();
+    await page.locator(".seg-btn", { hasText: "生字听写" }).first().click();
     await page.waitForTimeout(900);
     await needKai("听写字格 .zi-face", ".zi-grid .zi-face");
 

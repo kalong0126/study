@@ -130,7 +130,7 @@ const ROUTES = [
   { path: "/story", name: "童话", nav: "童话", sel: ".card", min: 1, what: "卡片" },
   { path: "/language", name: "语言", nav: "语言", sel: ".card", min: 1, what: "卡片" },
   { path: "/video", name: "英文", nav: "英文", sel: ".card", min: 1, what: "卡片" },
-  { path: "/wrong", name: "错题本", nav: "错题本", sel: ".wb-tabs", min: 1, what: "分区标签" },
+  { path: "/wrong", name: "错题本", nav: "错题本", sel: ".seg", min: 1, what: "分区切换" },
 ];
 
 // 起隔离实例（传了 baseUrl 就直接用外部服务）
@@ -305,7 +305,7 @@ await page.waitForTimeout(900);
 const shortcuts = [
   { isle: "口算岛", path: "/math", sel: ".m-row", min: 20 },
   { isle: "听写屋", path: "/chinese", sel: ".story-text", min: 1 },
-  { isle: "错题修理站", path: "/wrong", sel: ".wb-tabs", min: 1 },
+  { isle: "错题修理站", path: "/wrong", sel: ".seg", min: 1 },
   { isle: "故事树", path: "/story", sel: ".card", min: 1 },
   { isle: "语言练习", path: "/language", sel: ".lg-empty, .lg-grid", min: 1 },
   { isle: "英文小屋", path: "/video", sel: ".card", min: 1 },
@@ -351,7 +351,7 @@ await page.goto(`${BASE}/chinese`, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 const redCount = await page.locator(".lesson-new").count();
 redCount > 0 ? pass(`课文页生字红标 ${redCount} 处`) : fail("课文页没有生字红标（.lesson-new）");
-await page.locator("button.wb-tab", { hasText: "生字听写" }).first().click();
+await page.locator(".seg-btn", { hasText: "生字听写" }).first().click();
 await page.waitForTimeout(800);
 const ziN = await page.locator(".zi-grid").count();
 ziN >= 1 ? pass(`切到听写页后生字格 ${ziN} 个`) : fail("切到听写页后生字格缺失（.zi-grid）");

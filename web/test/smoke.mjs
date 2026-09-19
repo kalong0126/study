@@ -242,7 +242,7 @@ const storyHd = await page.locator("h2", { hasText: "智能拼音童话" }).coun
 storyHd > 0 ? pass("童话页渲染出「智能拼音童话」") : fail("童话页没有渲染出「智能拼音童话」");
 const storyBody = await page.locator(".story-text").count();
 storyBody > 0 ? pass(`童话正文已就绪（${storyBody} 块）`) : fail("童话页没有正文");
-const storyBtn = await page.locator(".story-bar button").count();
+const storyBtn = await page.locator(".pt button").count();
 storyBtn > 0 ? pass(`童话页操作行按钮 ${storyBtn} 个`) : fail("童话页操作行没有按钮");
 // 用户要求：童话页不再显示「读过的故事」那张列表卡（去重仍在后端按已读标题做）
 const histHd = await page.locator("h2", { hasText: "读过的故事" }).count();

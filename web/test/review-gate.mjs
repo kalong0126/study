@@ -142,12 +142,12 @@ const gotoNav = (label) => goNav(page, BASE, label, { wait: 1200 });
 async function reloadWrong() {
   // 用 goto 而不是 reload —— reload 会重载「当前所在页」，而调用点可能在首页
   await page.goto(`${BASE}/wrong`, { waitUntil: "networkidle" });
-  await page.waitForSelector(".wb-tabs", { timeout: 15000 });
+  await page.waitForSelector(".seg-btn", { timeout: 15000 });
   await page.waitForTimeout(900);
 }
 
-/** 错题本卡片右上角那个「重新挑战 x / y」的进度胶囊（别撞上顶栏的今日进度） */
-const reviewPill = () => page.locator("main.wrap .card .stat-pill").first();
+/** 错题页工具栏右上角那个「重新挑战 x / y」的进度胶囊（别撞上顶栏的今日进度） */
+const reviewPill = () => page.locator(".pt .stat-pill").first();
 
 /** 回首页，返回「错题修理站」那座岛 */
 async function reviewIsle() {
@@ -220,12 +220,18 @@ try {
   // 只把「口算」标完成，听写留白
   await jpatch("/api/state/daily", { tasks: { math: true, dictation: false } });
   await page.goto(`${BASE}/wrong`, { waitUntil: "networkidle" });
-  await page.waitForSelector(".wb-tabs", { timeout: 15000 });
+  await page.waitForSelector(".seg-btn", { timeout: 15000 });
   await page.waitForTimeout(900);
 
   const dClosed = await dailyOf();
   ok("服务端 reviewTarget 仍是 null（没开闸）", dClosed.reviewTarget === null, String(dClosed.reviewTarget));
-  ok("页面上出现「先做完口算和听写」提示条", (await page.locator(".wb-lock").count()) === 1);
+  // 2026-09-19 起「为什么现在不能改」不再是一整条黄色横条（用户规则②：备注收进信息图标），
+  // 改由工具栏上的状态胶囊直说 —— 拦人的话必须在明面上，长解释才收进 ⓘ。
+  ok(
+    "工具栏状态胶囊写明「等口算和听写做完」",
+    /等口算和听写做完/.test(squash(await reviewPill().innerText())),
+    squash(await reviewPill().innerText()),
+  );
   ok("输入框是禁用的", await page.locator(".wb-item input.m-in").first().isDisabled());
   // 首页那座岛只写岛名 + 一颗状态胶囊（第二行小字已按产品要求删掉）。
   // 错题修理站是「随时能去的工具站」，所以闸没开时这里也不上锁：
@@ -247,7 +253,7 @@ try {
 
   const dOpen = await dailyOf();
   ok("开闸后 reviewTarget = 1", dOpen.reviewTarget === 1, String(dOpen.reviewTarget));
-  ok("提示条消失", (await page.locator(".wb-lock").count()) === 0);
+  ok("「等口算和听写做完」的状态胶囊消失", !/等口算和听写做完/.test(squash(await reviewPill().innerText())));
   ok("输入框恢复可用", !(await page.locator(".wb-item input.m-in").first().isDisabled()));
   const pill = squash(await reviewPill().innerText());
   ok("顶部进度显示 0 / 1（不是 0 / 3）", /0/.test(pill) && /1/.test(pill) && !/3/.test(pill), pill);

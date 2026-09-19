@@ -14,6 +14,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import Icon from "@/components/Icon.vue";
+import PageTool from "@/components/PageTool.vue";
 import { api, describeApiError } from "@/api";
 import type { VideoItemInfo } from "@/api/types";
 import { useProgressStore } from "@/stores/progress";
@@ -52,6 +53,31 @@ const watchedPct = computed(() =>
 );
 /** 还差多少才算看完（给孩子一个看得懂的目标） */
 const needPct = computed(() => Math.max(0, 90 - watchedPct.value));
+
+/** 工具栏标题右边那行小字：这一页的规则，一句话说完 */
+const metaText = computed(() => {
+  if (!enabled.value) return "暂时关掉了";
+  if (problem.value) return "共享目录没挂上或那台机器没开机";
+  if (!item.value) return "目录里还没有能播的视频";
+  return complete.value ? "今天已经看完一集啦，还想看就点「换一个」" : "看完一集可以得 10 分";
+});
+
+/** 备注（原卡片底部那段说明），收进工具栏最右侧的 ⓘ */
+const videoNote = computed(() =>
+  [
+    "只有真正在播放时才计时：暂停、拖进度条、切到后台都不算 —— 所以拖到最后骗不到这 10 分。",
+    "实看 ≥ 90% 才算完整看完，完整看完一集得 10 分（每天只算一次）。",
+    "中途退出再回来会接着上次的位置继续（位置只记在这台设备上）。",
+    total.value > 0
+      ? `目录里一共有 ${total.value} 集${unwatched.value > 0 ? `，还有 ${unwatched.value} 集没看过` : ""}。`
+      : "",
+    completeTitle.value && completeTitle.value !== item.value?.title
+      ? `今天看完的是《${completeTitle.value}》。`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n"),
+);
 
 function clock(sec: number): string {
   const s = Math.max(0, Math.floor(sec || 0));
@@ -250,43 +276,60 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="card vcard">
-    <div class="card-hd">
-      <span class="ico" style="background: #E4F7F5; color: #2FA8A0">
-        <Icon name="video" :size="19" />
-      </span>
-      <div>
-        <h2>英文故事</h2>
-        <span class="sub">
-          <template v-if="complete">今天已经看完一集啦，还想看就点「换一个」</template>
-          <template v-else>看完一集可以得 10 分</template>
-        </span>
+  <!-- 详情页统一工具栏：标题 / 规则 / 实看进度 / 主操作（播放） / 轻量操作（换一个） / 备注图标。
+       以前是「卡片头 + 播放器 + 下面一竖排标题·进度条·两个大按钮 + 一段说明」，四块竖着堆。 -->
+  <PageTool
+    icon="video"
+    tint="#E4F7F5"
+    color="#2FA8A0"
+    title="英文故事"
+    :meta="metaText"
+    :note="videoNote"
+  >
+    <template #mid>
+      <div v-if="item" class="vmeta">
+        <span>{{ clock(current) }} / {{ duration ? clock(duration) : "--:--" }}</span>
+        <span v-if="!complete">实看 {{ watchedPct }}%<template v-if="needPct > 0">，再看 {{ needPct }}% 就得分</template></span>
+        <span v-else>这一集已经算完成 ✓</span>
       </div>
-    </div>
+    </template>
 
-    <p v-if="loading" class="tip">正在找视频…</p>
+    <template v-if="item">
+      <button class="btn primary sm vplay" type="button" @click="toggle">
+        <Icon :name="playing ? 'pause' : 'play'" :size="16" />
+        {{ playing ? "暂停" : current > 3 ? "继续看" : "播放" }}
+      </button>
+      <button class="btn ghost sm" type="button" @click="next">
+        <Icon name="refresh" :size="16" />换一个
+      </button>
+    </template>
+    <button v-else-if="!loading && enabled" class="btn ghost sm" type="button" @click="load(true)">
+      <Icon name="refresh" :size="16" />重新扫描
+    </button>
+  </PageTool>
 
-    <p v-else-if="errorText" class="tip">{{ errorText }}</p>
+  <section class="card vcard">
+    <p v-if="loading" class="tip" style="margin-top: 0">正在找视频…</p>
+
+    <p v-else-if="errorText" class="tip" style="margin-top: 0">{{ errorText }}</p>
 
     <template v-else-if="!enabled">
-      <p class="tip">英文故事暂时关掉了。家长可以在 config.yaml 里把 video.enabled 改成 true 打开。</p>
+      <p class="tip" style="margin-top: 0">英文故事暂时关掉了。家长可以在 config.yaml 里把 video.enabled 改成 true 打开。</p>
     </template>
 
     <template v-else-if="problem">
-      <p class="tip">暂时看不到视频：{{ problem }}</p>
+      <p class="tip" style="margin-top: 0">暂时看不到视频：{{ problem }}</p>
       <p class="tip">（家长可以检查一下共享有没有挂上 / 那台机器有没有开机）</p>
-      <button class="btn" type="button" @click="load(true)">再试一次</button>
     </template>
 
     <template v-else-if="!item">
-      <p class="tip">这个目录里还没有能播放的视频（只支持 mp4 / webm / mov）。</p>
+      <p class="tip" style="margin-top: 0">这个目录里还没有能播放的视频（只支持 mp4 / webm / mov）。</p>
       <p class="tip">家长往目录里放几个 mp4 就能看了。</p>
-      <button class="btn" type="button" @click="load(true)">重新扫描</button>
     </template>
 
     <template v-else>
       <!-- .vbody：宽屏（横屏平板）时变成左右两栏 —— 左边 .vstage 里的播放器吃满整栏，
-           右边 .vside 放标题 / 进度 / 按钮（见样式表末尾的媒体查询）。
+           右边 .vside 放这一集的名字与进度条（见样式表里的媒体查询）。
            竖屏 / 窄屏还是上下排。
            .vt = 浅色机身外框，.vscreen = 里面那块深色屏幕
            （大按钮 / 角标挂在 .vscreen 上才不会被机身边距顶偏） -->
@@ -334,28 +377,6 @@ onBeforeUnmount(() => {
             @input="onSeekInput"
             @change="onSeekEnd"
           />
-
-          <div class="vmeta">
-            <span>{{ clock(current) }} / {{ duration ? clock(duration) : "--:--" }}</span>
-            <span v-if="!complete">实看 {{ watchedPct }}%<template v-if="needPct > 0">，再看 {{ needPct }}% 就得分</template></span>
-            <span v-else>这一集已经算完成 ✓</span>
-          </div>
-
-          <div class="vrow">
-            <button class="btn primary vbtn" type="button" @click="toggle">
-              <Icon :name="playing ? 'pause' : 'play'" :size="20" />
-              <span>{{ playing ? "暂停" : current > 3 ? "继续看" : "播放" }}</span>
-            </button>
-            <button class="btn vbtn" type="button" @click="next">
-              <Icon name="refresh" :size="20" />
-              <span>换一个</span>
-            </button>
-          </div>
-
-          <p class="tip" v-if="total > 0">
-            目录里一共有 {{ total }} 集<template v-if="unwatched > 0">，还有 {{ unwatched }} 集没看过</template>。
-            <template v-if="completeTitle && completeTitle !== item.title">今天看完的是《{{ completeTitle }}》。</template>
-          </p>
         </div>
       </div>
     </template>
@@ -364,24 +385,23 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* ---------- 播放器外框 & 一屏放得下 ----------
-   2026-09-19 用户先后反馈两件事：
-     ① 深色 <video> 直接贴在白卡上 → 看着「没有外框包围、不像嵌在页面里」；
-     ② 收窄居中之后，横屏平板上机身只占卡片宽度的四成、左右全是空白
-        → 「窗口没有铺满整个内容 div」（1080×700 实测机身仅 456px、屏幕高 245px）。
-   物理约束：16:9 的视频想铺满卡片宽度，在 1080×700 上光视频就 560px 高，而顶栏 + 卡片头
-   + 控件另有 ~400px —— 「铺满宽度」和「一屏放得下」在横屏平板上不能同时成立（①的起因）。
-   所以按屏幕形状分两套排布：
-     · 竖屏 / 窄屏（默认，上下排）：视频按「视口高 − 占位」反推高度定宽，控件跟着同宽，
-       一屏放得下（宽度富余时它本来就是整卡宽）；
-     · 宽屏 / 横屏平板（@media min-aspect-ratio: 4/3，左右分栏）：控件挪到右边一列，
-       视频吃满左栏剩下的整个宽度 —— 铺满了内容区，还比原来大一圈，且不用滚动。
-   ⚠️ --vt-reserve 是量出来的固定占位（顶栏 61 + wrap 上下内边距 32 + 卡片内边距 36 + 卡片头 86
-     + 卡片下边距 16 + 余量）：单栏 455px（控件在下面）、分栏 270px（控件在右边）。
-     改顶栏 / 卡片头 / 按钮高度时这个数要跟着调，否则会出现「差十几像素要滚一下」。
+   2026-09-19 用户先反馈「没有外框包围、不像嵌在页面里」「窗口没铺满整个内容 div」，
+   于是有了浅色机身外框（.vt 包 .vscreen）+ 按屏幕形状分两套排布。
+   同日稍晚又定了统一规则：标题/状态/操作全部并进页面工具栏（见 PageTool），
+   卡片里只剩「播放器 + 这一集的名字 + 进度条」——
+   竖排那一列大按钮整块搬走了，占位小了，所以下面的 --vt-reserve 比上一版更小。
+   物理约束没变：16:9 的视频想铺满卡片宽度，在横屏平板上就装不进一屏。
+   所以仍是两套排布：
+     · 竖屏 / 窄屏（默认，上下排）：视频按「视口高 − 占位」反推高度定宽，一屏放得下；
+     · 宽屏 / 横屏平板（@media min-aspect-ratio: 4/3，左右分栏）：名字与进度条挪到右边一列，
+       视频吃满左栏整个宽度 —— 铺满内容区，还比收窄居中大一圈。
+   ⚠️ --vt-reserve 是量出来的固定占位：顶栏 64 + wrap 上下内边距 32 + 工具栏 53 + 工具栏下边距 16
+     + 卡片内边距 36 + 卡片下边距 16，再加名字/进度条一栏（单栏 78）。
+     改顶栏 / 工具栏 / 卡片内边距时这个数要跟着调，否则会出现「差十几像素要滚一下」。
    ⚠️ 宽度里的 +21px = 机身左右 padding 9×2 + 描边 1.5×2（全局 * 是 border-box，要自己加回来）。 */
 .vcard {
   --vh100: 100vh;
-  --vt-reserve: 455px;
+  --vt-reserve: 310px;
   --screen-h: max(200px, calc(var(--vh100) - var(--vt-reserve)));
 }
 /* dvh 认得更准（平板浏览器地址栏收起/展开时 vh 不会跳），不认的旧内核退回上面的 vh */
@@ -396,7 +416,7 @@ onBeforeUnmount(() => {
 }
 .vt {
   padding: 9px;
-  margin: 4px auto 10px;
+  margin: 0 auto 10px;
   border-radius: 24px;
   border: 1.5px solid #CFE3F5;
   background: linear-gradient(180deg, #F1F8FF 0%, #E2EEFA 100%);
@@ -458,61 +478,47 @@ onBeforeUnmount(() => {
   margin-bottom: 6px;
   overflow-wrap: break-word;
 }
+/* 「00:12 / 01:30 · 实看 62%，再看 28% 就得分」—— 现在住在工具栏中段 */
+.vmeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink3);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .vrange {
   /* 必须显式 block：range 是 inline-block，margin-inline:auto 对行内块不生效，
      会留在卡片左边缘、跟居中的播放器错位（第一版就是这样）。 */
   display: block;
+  width: 100%;
   height: 26px;
   margin: 0;
   accent-color: #2FA8A0;
   cursor: pointer;
 }
-.vmeta {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  font-size: 12.5px;
-  color: var(--ink3);
-  font-variant-numeric: tabular-nums;
-  margin: 2px 0 8px;
-}
-/* 两个大按钮：平板上手指点得准 */
-.vrow {
-  display: flex;
-  gap: 10px;
-}
-.vbtn {
-  flex: 1;
-  min-height: 50px;
-  font-size: 16px;
-  justify-content: center;
-  gap: 6px;
-}
 
 /* ---------- 播放器和下面这排控件同宽（单栏） ----------
    单栏时视频按视口高收窄居中，控件要是还铺满整张卡，左右边界就对不上了（第一版就是这样，看着错位）。
    这里让它们统一取「机身外沿」那个宽度，各自居中。
-   ⚠️ 必须放在 `.vrange` / `.vmeta` 那几条之后：它们的 `width: 100%`、`margin: 2px 0 8px` 简写
-   同优先级下靠后的声明才生效，挪到前面会被盖掉。 */
+   ⚠️ 必须放在 `.vrange` 那条之后：它的 `width: 100%` 同优先级，靠后的声明才生效。 */
 .vt,
 .vtitle,
-.vrange,
-.vmeta,
-.vrow,
-.vcard .tip {
+.vrange {
   width: min(100%, calc(var(--screen-h) * 16 / 9 + 21px));
   margin-inline: auto;
 }
 
 /* ---------- 宽屏 / 横屏平板：左右分栏 ----------
-   这就是「窗口铺满内容 div」的解法：横屏平板竖向空间不够，把控件挪到右侧一列，
-   播放器就能吃满左边剩下的整个宽度，而不是被控件挤成一条居中窄缝。
+   横屏平板竖向空间不够，把名字与进度条挪到右侧一列，播放器就能吃满左边剩下的整个宽度。
    4/3 是「还够不够上下排」的分界：比值更大的（更扁的）屏幕一律分栏。
    ⚠️ 必须放在最后：上面那条统一宽度规则要在分栏里让位。 */
 @media (min-aspect-ratio: 4 / 3) {
-  /* 控件不在视频下面了，占位只剩「顶栏 + 卡片头 + 内边距」 */
+  /* 名字与进度条不在视频下面了，占位只剩「顶栏 + 工具栏 + 内边距」 */
   .vcard {
-    --vt-reserve: 270px;
+    --vt-reserve: 230px;
   }
   .vbody {
     display: flex;
@@ -523,9 +529,7 @@ onBeforeUnmount(() => {
     flex: 1 1 auto;
   }
   .vside {
-    /* 只给控件留够用的一栏（~200px 就能放下标题 / 进度条 / 两个整栏宽按钮），
-       剩下的宽度全给播放器 —— 这是「窗口铺满内容 div」的关键：栏越窄、视频越大。
-       上限定 280px 是为了在特别宽的卡片里别让控件被拉得太散。 */
+    /* 只给名字 / 进度条留够用的一栏，剩下的宽度全给播放器 —— 这是「铺满内容 div」的关键。 */
     flex: 0 0 clamp(190px, 21%, 280px);
   }
   /* 机身吃满左栏；屏幕特别扁时再用高度兜一层，别撑出滚动条 */
@@ -533,26 +537,16 @@ onBeforeUnmount(() => {
     width: 100%;
     max-width: calc(var(--screen-h) * 16 / 9 + 21px);
   }
-  /* 控件回到「自己那一栏」的宽度（末尾那条 min(100%, …) 让位）。
-     ⚠️ .vrange 不在这里归零：它是 input（inline-block），width:auto 会退回控件默认的
-     ~130px 短条；进度条必须占满整栏。 */
-  .vtitle,
-  .vmeta,
-  .vrow,
-  .vcard .tip {
+  /* 这两块回到「自己那一栏」的宽度（末尾那条 min(100%, …) 让位）。
+     ⚠️ .vrange 单列一条：它是 input（inline-block），归零成 auto 会退回控件默认的
+     ~130px 短条 —— 进度条必须占满整栏。 */
+  .vtitle {
     width: auto;
     margin-inline: 0;
   }
   .vrange {
     width: 100%;
     margin-inline: 0;
-  }
-  /* 264px 的窄栏里并排两个按钮会挤，改成上下两个整栏宽的大按钮（平板上更好点） */
-  .vrow {
-    flex-direction: column;
-  }
-  .vbtn {
-    flex: none;
   }
 }
 </style>

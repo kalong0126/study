@@ -1,5 +1,5 @@
 /**
- * 童话页「今日童话 + 滚动阅读」回归（真实浏览器 + 隔离实例 + mock 大模型）
+ * 童话页「今日童话 + 整页滚动」回归（真实浏览器 + 隔离实例 + mock 大模型）
  *
  * 这一版守的是孩子端真正会走的路径，全部用真实浏览器、真实接口，不读源码断言：
  *   ① **进来就自动生成今日童话**：不点任何按钮，正文自己出来（mock 出一篇长童话）。
@@ -7,12 +7,13 @@
  *      页面拿到的还是同一篇 —— 这是「重复今天只取今天已生成的故事内容」。
  *   ③ **倒计时自动开启**，并且和「换一篇童话」按钮**在同一行**（用户明确要求）。
  *   ④ **试读示例故事已经去掉**（按钮与样例文本都不该再出现）。
- *   ⑤ **滚动阅读**：正文容器 overflow-y: auto、内容比容器高、真的能滚到下一屏；
- *      高度仍是 5 行（平板上一屏 5 行刚刚好），并且**不再有翻页条**。
+ *   ⑤ **整页滚动**：2026-09-19 用户规则③——页面只保留浏览器主滚动，
+ *      正文容器自己不再有滚动条（overflow 可见、scrollHeight==clientHeight），
+ *      拉到页面底部时正文末段真的出现在视口里。
  *   ⑥ 正文用站内圆体（方正准圆简体），跟其它页面一致。
  *
  * 为什么用 mock 大模型：真实接口不稳定也没法断言素材长度。mock 的 `longstory`
- * 模式专门回一篇 8 段的长童话，一屏 5 行装不下，滚动才有东西可测。
+ * 模式专门回一篇 8 段的长童话，页面被撑得足够长，「整页滚动」才有东西可测。
  *
  * 用法：node web/test/story-scroll.mjs   或   cd web && npm run test:story
  * 端口：8806（应用）+ 8807（mock），隔离实例禁并行，见 .workbuddy/memory/MEMORY.md
@@ -183,19 +184,20 @@ try {
   const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
 
-  /** 量正文窗口 + 顶栏那一行：几何全从真实渲染拿 */
+  /** 量正文 + 工具栏那一行：几何全从真实渲染拿 */
   const probe = () =>
     page.evaluate(() => {
-      const view = document.querySelector(".story-scroll");
-      const bar = document.querySelector(".story-bar");
+      const view = document.querySelector(".story-text");
+      const tool = document.querySelector(".pt");
       const chip = document.querySelector(".timer-chip");
-      const btn = [...document.querySelectorAll(".story-bar .btn")].find((b) => b.textContent.includes("童话"));
+      const btn = [...document.querySelectorAll(".pt .btn")].find((b) => b.textContent.includes("童话"));
       if (!view) return null;
       const cs = getComputedStyle(view);
       const vr = view.getBoundingClientRect();
       const rect = (el) => (el ? el.getBoundingClientRect() : null);
       const cr = rect(chip);
       const br = rect(btn);
+      const tr = rect(tool);
       // 每个句子的**行片段**：一个句子换行会有好几段，数「显示了几行」只能用片段
       const frags = [...view.querySelectorAll(".sent")].flatMap((el) =>
         [...el.getClientRects()].map((r) => ({ top: r.top - vr.top, bottom: r.bottom - vr.top })),
@@ -203,10 +205,10 @@ try {
       return {
         clientH: view.clientHeight,
         scrollH: view.scrollHeight,
-        scrollTop: view.scrollTop,
-        lineH: parseFloat(cs.lineHeight),
-        lines: parseInt(cs.getPropertyValue("--story-lines"), 10),
+        // 正文自己能不能滚：应该是 0（滚动交给浏览器）
+        innerScroll: view.scrollHeight - view.clientHeight,
         overflowY: cs.overflowY,
+        lineH: parseFloat(cs.lineHeight),
         fontFamily: cs.fontFamily,
         fontSize: parseFloat(cs.fontSize),
         count: [...view.querySelectorAll(".sent")].length,
@@ -216,26 +218,26 @@ try {
         clock: document.querySelector(".timer-clock")?.textContent?.trim() ?? "",
         clockRun: !!document.querySelector(".timer-clock.run"),
         hasChip: !!chip,
+        chipDisabled: !!chip?.disabled,
         chipTop: cr ? Math.round(cr.top) : null,
         chipBottom: cr ? Math.round(cr.bottom) : null,
         btnTop: br ? Math.round(br.top) : null,
         btnBottom: br ? Math.round(br.bottom) : null,
-        barH: bar ? Math.round(bar.getBoundingClientRect().height) : null,
+        toolH: tr ? Math.round(tr.height) : null,
+        // 整页：内容比视口高多少（>0 说明浏览器主滚动真的在起作用）
+        docOver: document.documentElement.scrollHeight - window.innerHeight,
+        scrollY: Math.round(window.scrollY),
         hasPager: !!document.querySelector(".story-pager"),
         sampleBtn: [...document.querySelectorAll("button")].some((b) => /试读|示例故事/.test(b.textContent)),
         bodyText: document.body.innerText || "",
       };
     });
 
-  /** 一屏显示了几行（用行片段数，忽略完全在窗口下方的那部分） */
-  const rowsOf = (m) =>
-    new Set(m.frags.filter((f) => f.top < m.clientH - 1).map((f) => Math.round(f.top / 4))).size;
-
   // ————————————————————————————————————— 1. 进来就自动生成
   step("1. 一进 /story 就自动生成今日童话（不点任何按钮）");
   await unlockStory();
   await page.goto(`${BASE}/story`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".story-scroll .sent", { timeout: 30000 });
+  await page.waitForSelector(".story-text .sent", { timeout: 30000 });
   await page.waitForTimeout(1200); // 等字体就位
 
   const before = await probe();
@@ -246,7 +248,7 @@ try {
   // ————————————————————————————————————— 2. 当天幂等
   step("2. 刷新页面：取当天已生成的那一篇，不重复生成");
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".story-scroll .sent", { timeout: 30000 });
+  await page.waitForSelector(".story-text .sent", { timeout: 30000 });
   await page.waitForTimeout(1200);
   const again = await probe();
   const calls = await mockCalls();
@@ -263,6 +265,8 @@ try {
     again.hasChip && again.chipBottom > again.btnTop && again.btnBottom > again.chipTop,
     `chip ${again.chipTop}–${again.chipBottom} / btn ${again.btnTop}–${again.btnBottom}`);
   ok("这一行里也确实装着「换一篇童话」按钮", again.btnTop !== null);
+  // 规则①：详情页工具栏 52–56px（一行装下标题/计时/状态/操作）
+  ok("工具栏高度在 52–56px", again.toolH >= 50 && again.toolH <= 58, `toolH=${again.toolH}`);
 
   // 阅读任务已经完成的那一天，不该再自动开一轮倒计时（白等 15 分钟没有意义）。
   // 先把正在走的那一轮停掉，再重载 —— 否则看到的还是上一轮（计时状态是存在后端的）。
@@ -273,11 +277,13 @@ try {
     body: JSON.stringify({ running: false, endAt: 0 }),
   });
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".story-scroll .sent", { timeout: 30000 });
+  await page.waitForSelector(".story-text .sent", { timeout: 30000 });
   await page.waitForTimeout(1000);
   const doneDay = await probe();
   ok("阅读已完成 → 不再自动开倒计时", !doneDay.clockRun, `clock=${doneDay.clock} run=${doneDay.clockRun}`);
-  ok("阅读已完成 → 也不再给「开启计时」按钮", !/开启\s*15\s*分钟计时/.test(doneDay.bodyText));
+  // 「开启 15 分钟计时」那个按钮已经并进计时胶囊：读满了胶囊就被禁用（点不动，而不是消失）
+  ok("阅读已完成 → 计时胶囊点不动了（disabled）", doneDay.chipDisabled, `disabled=${doneDay.chipDisabled}`);
+  ok("阅读已完成 → 页面上没有第二个「开启计时」按钮", !/开启\s*15\s*分钟计时/.test(doneDay.bodyText));
   ok("阅读已完成但童话正文还看得到", doneDay.count > 0, `句子数 ${doneDay.count}`);
 
   // ————————————————————————————————————— 4. 试读示例已移除
@@ -285,30 +291,31 @@ try {
   ok("页面上没有「试读示例故事」按钮", !again.sampleBtn);
   ok("正文里没有示例故事（小水珠 / 爱笑的铅笔）", !/小水珠的旅行|爱笑的铅笔/.test(again.bodyText));
 
-  // ————————————————————————————————————— 5. 滚动阅读
-  step("5. 正文是滚动阅读（不是翻页）");
-  ok("容器 overflow-y 是 auto（可滚）", again.overflowY === "auto", again.overflowY);
-  ok("内容比容器高（需要滚动）", again.scrollH > again.clientH, `${again.scrollH} vs ${again.clientH}`);
-  ok("高度仍是 5 行（平板上一屏 5 行）", Math.abs(again.clientH - 5 * again.lineH) <= 3,
-    `clientHeight=${again.clientH} 行高=${again.lineH} 5行=${5 * again.lineH}`);
+  // ————————————————————————————————————— 5. 整页滚动（不再有内层滚动条）
+  step("5. 正文自己不再滚，交给浏览器主滚动");
+  ok("正文容器没有自己的滚动条（overflow 可见）", again.overflowY === "visible", again.overflowY);
+  ok("正文容器没有被裁（scrollHeight == clientHeight）", again.innerScroll <= 1, `innerScroll=${again.innerScroll}`);
+  ok("页面确实被长正文撑长了（浏览器主滚动可用）", again.docOver > 0, `docOver=${again.docOver}`);
   ok("不再有翻页条", !again.hasPager);
-  ok("首屏显示 5 行", rowsOf(again) === 5, `${rowsOf(again)} 行`);
 
-  // 真的滚一下：滚到底部，第一屏的内容应该被滚出去
-  await page.evaluate(() => {
-    const v = document.querySelector(".story-scroll");
-    v.scrollTop = v.scrollHeight;
-  });
+  // 真的滚一下：滚到页面底部，正文的末段应该出现在视口里
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   await page.waitForTimeout(400);
   const scrolled = await probe();
-  ok("能滚下去（scrollTop 变大了）", scrolled.scrollTop > 0, `scrollTop=${scrolled.scrollTop}`);
-  ok("滚到底后内容确实换了（不是滚不动）", scrolled.scrollTop > again.clientH * 0.5, `scrollTop=${scrolled.scrollTop}`);
+  ok("浏览器滚动条真的滚下去了（scrollY 变大）", scrolled.scrollY > 0, `scrollY=${scrolled.scrollY}`);
+  ok("滚到底后顶栏仍吸附在视口顶部（sticky）", await page.evaluate(() => {
+    const t = document.querySelector(".topbar")?.getBoundingClientRect();
+    return !!t && Math.abs(t.top) < 2;
+  }));
+  const lastSentVisible = await page.evaluate(() => {
+    const all = [...document.querySelectorAll(".story-text .sent")];
+    const last = all[all.length - 1]?.getBoundingClientRect();
+    return !!last && last.top < window.innerHeight && last.bottom > 0;
+  });
+  ok("滚到底后最后一句出现在视口里（正文没有被裁）", lastSentVisible);
   await page.screenshot({ path: path.join(SHOTS, "scroll-bottom.png"), fullPage: true });
 
-  await page.evaluate(() => {
-    const v = document.querySelector(".story-scroll");
-    v.scrollTop = 0;
-  });
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(SHOTS, "scroll-top.png"), fullPage: true });
 
@@ -322,14 +329,15 @@ try {
   ok("正文不再使用楷体", !/Kaiti|KaiTi|STKaiti|楷体/i.test(again.fontFamily), again.fontFamily.slice(0, 120));
 
   // ————————————————————————————————————— 7. 窄屏（手机）
-  step("7. 窄屏仍然是 5 行 + 可滚");
+  step("7. 窄屏同样是整页滚动、没有内层滚动条");
   await page.setViewportSize({ width: 420, height: 780 });
   await page.waitForTimeout(900);
   const narrow = await probe();
   ok("窄屏行高按断点变小（24px × 2.6）", Math.abs(narrow.lineH - 24 * 2.6) < 1, `行高 ${narrow.lineH}（宽屏 ${again.lineH}）`);
-  ok("窄屏容器仍是 5 行", Math.abs(narrow.clientH - 5 * narrow.lineH) <= 3, `clientHeight=${narrow.clientH}`);
-  ok("窄屏仍能滚", narrow.scrollH > narrow.clientH, `${narrow.scrollH} vs ${narrow.clientH}`);
+  ok("窄屏正文也没有自己的滚动条", narrow.innerScroll <= 1, `innerScroll=${narrow.innerScroll}`);
+  ok("窄屏由浏览器滚动（页面被撑长）", narrow.docOver > 0, `docOver=${narrow.docOver}`);
   ok("窄屏没有翻页条", !narrow.hasPager);
+  ok("窄屏工具栏仍然存在（会折行但不会消失）", narrow.toolH !== null && narrow.toolH > 40, `toolH=${narrow.toolH}`);
   await page.screenshot({ path: path.join(SHOTS, "scroll-narrow.png"), fullPage: true });
 } catch (e) {
   failures.push(`异常中止：${e.message}`);

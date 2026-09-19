@@ -15,6 +15,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { describeApiError } from "@/api";
 import Icon from "@/components/Icon.vue";
+import PageTool from "@/components/PageTool.vue";
 import StoryReader from "@/components/StoryReader.vue";
 import { stopAudio, useAudioState } from "@/composables/useAudio";
 import { useProgressStore } from "@/stores/progress";
@@ -32,6 +33,36 @@ const hasStory = computed(() => !!story.current?.text);
 const timerMinutes = TIMER_SECONDS / 60;
 /** 今天阅读已经完成了就别再自动开一轮倒计时 —— 那是白等 15 分钟 */
 const readingDone = computed(() => progress.isDone("reading"));
+
+/**
+ * 工具栏里那个下拉：换回读过的一篇。
+ *
+ * 「读过的故事」那张列表卡按用户要求删掉了，但**读过的还是得能翻回去**
+ * —— 所以改成工具栏里一个只占一行宽度的下拉（参考图就是这么画的）。
+ * 选项只收正文非空的，空白条目选进去只会得到一个空壳。
+ */
+const storyOptions = computed(() => story.stories.filter((s) => (s.text ?? "").trim().length > 0));
+const pickedId = computed({
+  get: () => story.current?.id ?? 0,
+  set: (id: number) => {
+    const row = story.stories.find((s) => s.id === id);
+    if (row) story.load(row);
+  },
+});
+
+/** 计时胶囊：既是状态也是开关（正在计时 → 点一下结束这一轮；没计时 → 点一下开始） */
+const canToggleTimer = computed(() => story.timer.running || !readingDone.value);
+const timerLabel = computed(() => {
+  if (story.timer.running) return "";
+  return readingDone.value ? "今日已读满" : `点一下开始 ${timerMinutes} 分钟计时`;
+});
+
+const storyNote = [
+  `进来就自动写一篇今天的童话；当天只写一次，刷新、换设备都不会重复生成。`,
+  `读满 ${timerMinutes} 分钟就完成今天的「阅读」任务。计时是自动开的：右边那枚胶囊在走就说明正在计时，点一下可以提前结束（读够 20 秒就算读完）。`,
+  "点正文里的任意一句可以从那句开始朗读，正在读的句子会高亮。",
+  "「读过不重复」由后端按已读标题保证：写新的一篇时会避开以前读过的主题。",
+].join("\n");
 
 onMounted(async () => {
   try {
@@ -66,6 +97,12 @@ function toggleRead(): void {
   }
 }
 
+/** 点计时胶囊：正在计时就结束这一轮，没在计时就开始 */
+function toggleTimer(): void {
+  if (story.timer.running) story.finishTimerEarly();
+  else if (!readingDone.value) story.startTimer();
+}
+
 watch(
   () => story.current?.id,
   () => stopAudio(),
@@ -73,53 +110,54 @@ watch(
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #F3EFFF; color: var(--purple-d)">
-        <Icon name="story" :size="19" />
-      </span>
-      <div><h2>智能拼音童话</h2><span class="sub">大模型生成 · 自动注音 · 读过不重复</span></div>
-    </div>
+  <!-- 详情页统一工具栏：标题 + 说明胶囊 + 「读哪一篇」下拉 + 计时胶囊 + 换一篇 / 朗读，
+       备注收进最右侧的 ⓘ。原来是「卡片头 / 计时区 / 操作行」三块竖排，占掉近半屏。 -->
+  <PageTool
+    icon="story"
+    tint="#F3EFFF"
+    color="var(--purple-d)"
+    title="智能拼音童话"
+    :note="storyNote"
+  >
+    <template #head>
+      <span class="pt-pill">自动注音 · 读过不重复</span>
+    </template>
 
-    <!-- 倒计时和生成按钮在同一行：这一页进来就在读，操作只有「换一篇」「朗读」「结束计时」 -->
-    <div class="story-bar">
-      <span class="timer-chip" :class="{ run: story.timer.running }">
-        <Icon name="clock" :size="20" />
+    <template #mid>
+      <select v-if="storyOptions.length" v-model.number="pickedId" class="sel" aria-label="选择要读的童话">
+        <option v-for="s in storyOptions" :key="s.id" :value="s.id">{{ s.title }}</option>
+      </select>
+
+      <button
+        class="timer-chip"
+        :class="{ run: story.timer.running }"
+        type="button"
+        :disabled="!canToggleTimer"
+        :title="story.timer.running ? '点一下结束这一轮计时' : '点一下开始计时'"
+        @click="toggleTimer()"
+      >
+        <Icon name="clock" :size="17" />
         <b class="timer-clock" :class="{ run: story.timer.running }">{{ story.timerClock }}</b>
-      </span>
-
-      <button class="btn purple" type="button" :disabled="story.generating" @click="regenerate()">
-        <Icon name="sparkle" :size="18" />{{ story.generating ? "正在写故事…" : "换一篇童话" }}
+        <span v-if="timerLabel" class="tb-say">{{ timerLabel }}</span>
       </button>
+    </template>
 
-      <button class="btn" :class="isPlaying ? 'yellow' : 'ghost'" type="button" @click="toggleRead()">
-        <Icon :name="isPlaying ? 'stop' : 'speakerLoud'" :size="18" />{{ isPlaying ? "停止朗读" : "朗读故事" }}
-      </button>
+    <button class="btn purple sm" type="button" :disabled="story.generating" @click="regenerate()">
+      <Icon name="sparkle" :size="16" />{{ story.generating ? "正在写…" : "换一篇童话" }}
+    </button>
+    <button class="btn ghost sm" type="button" @click="toggleRead()">
+      <Icon :name="isPlaying ? 'stop' : 'speakerLoud'" :size="16" />{{ isPlaying ? "停止朗读" : "朗读" }}
+    </button>
+  </PageTool>
 
-      <button v-if="story.timer.running" class="btn ghost" type="button" @click="story.finishTimerEarly()">
-        <Icon name="stop" :size="18" />结束计时
-      </button>
-      <button v-else-if="!readingDone" class="btn green" type="button" @click="story.startTimer()">
-        <Icon name="clock" :size="18" />开启 {{ timerMinutes }} 分钟计时
-      </button>
-    </div>
-
-    <p class="story-bar-tip">
-      {{
-        story.timer.running
-          ? `阅读计时中，认真读满 ${timerMinutes} 分钟就完成今天的「阅读」任务，读完记得让眼睛休息一下～`
-          : readingDone
-            ? "今天的阅读任务已经完成啦，想再读一篇随时欢迎。"
-            : `认真读满 ${timerMinutes} 分钟就能完成今日「阅读」任务`
-      }}
-    </p>
-
-    <div v-if="story.lastError" class="tip" style="border-left-color: #E95252">
+  <section class="card">
+    <!-- 生成失败是**异常**不是备注，得留在明面上，不能塞进 ⓘ -->
+    <div v-if="story.lastError" class="tip" style="margin: 0 0 14px; border-left-color: #E95252">
       上次生成失败：{{ story.lastError }}<br />
       家长可以到「运行诊断」里点「测试故事模型」确认链路。
     </div>
 
-    <div class="story-box" style="margin-top: 16px">
+    <div class="story-box">
       <StoryReader v-if="hasStory" ref="reader" :title="story.current?.title ?? ''" :text="story.current?.text ?? ''" />
       <div v-else class="story-empty">
         <svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">

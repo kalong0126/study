@@ -331,7 +331,7 @@ try {
   const dur = await page.locator("video.vplayer").evaluate((el) => el.duration);
   ok("浏览器解出了真实时长（说明 wav 是有效媒体）", dur > 4, `duration=${dur}`);
 
-  await page.locator("button.vbtn.primary").first().click();
+  await page.locator("button.vplay").first().click();
   await page.waitForFunction(() => !document.querySelector(".vbig"), null, { timeout: 8000 }).catch(() => {});
   ok("点播放后进入播放态（大按钮收起）", (await page.locator(".vbig").count()) === 0);
   await shot("vd-02-playing.png");
@@ -375,13 +375,15 @@ try {
   ok("屏幕仍是 16:9", Math.abs(screenAspect - 16 / 9) < 0.02, String(screenAspect));
 
   // 2026-09-19 第二轮反馈：收窄居中之后横屏平板上机身只占卡片四成宽、两边全是空白
-  // （用户原话「窗口没有铺满整个内容 div」）。所以宽屏改成左右分栏：控件挪到右边一列，
+  // （用户原话「窗口没有铺满整个内容 div」）。所以宽屏改成左右分栏：名字与进度条挪到右边一列，
   // 播放器吃满左栏。下面按「用户的平板 1080×700 / 常见 1280×800 / 竖屏 900×1200」三种尺寸守住它。
+  // ⚠️ 「一屏放得下」现在量的是**整页**（documentElement）：同日定的规则③已经把 .wrap 从
+  //    滚动容器改回普通块了，再量 `wrap.scrollHeight - wrap.clientHeight` 会永远等于 0（假绿）。
   const probe = async (w, h) => {
     await page.setViewportSize({ width: w, height: h });
     await page.waitForTimeout(700);
     return page.evaluate(() => {
-      const wrap = document.querySelector(".wrap");
+      const doc = document.documentElement;
       const body = document.querySelector(".vbody");
       const stage = document.querySelector(".vstage").getBoundingClientRect();
       const vt = document.querySelector(".vt").getBoundingClientRect();
@@ -396,7 +398,7 @@ try {
         sideLeft: Math.round(side.left),
         sideW: Math.round(side.width),
         rangeW: Math.round(range.width),
-        need: wrap.scrollHeight - wrap.clientHeight,
+        need: doc.scrollHeight - window.innerHeight,
         vh: window.innerHeight,
       };
     });
@@ -407,7 +409,7 @@ try {
   ok("横屏平板走左右分栏（.vbody 变 flex）", land.bodyDisplay === "flex", JSON.stringify(land));
   ok("播放器铺满左栏（≥ 左栏 95%）", land.vtW >= land.stageW * 0.95, JSON.stringify(land));
   ok("播放器明显变宽（不再是四成窄缝）", land.vtW >= 560, JSON.stringify(land));
-  ok("横屏平板一屏放得下（.wrap 不滚）", land.need <= 1, JSON.stringify(land));
+  ok("横屏平板一屏放得下（整页不滚）", land.need <= 1, JSON.stringify(land));
   ok("控件排在播放器右边、不重叠", land.sideLeft >= land.vtRight + 10, JSON.stringify(land));
   // 进度条是 input（inline-block），width:auto 会退回 ~130px 的短条 —— 分栏里必须占满右栏
   ok("进度条占满右栏（不是一小截短条）", land.rangeW >= land.sideW * 0.95, JSON.stringify(land));
@@ -415,14 +417,14 @@ try {
 
   // ② 常见 1280×800：也不能撑出滚动条
   const wide = await probe(1280, 800);
-  ok("1280×800 一屏放得下（.wrap 不滚）", wide.need <= 1, JSON.stringify(wide));
+  ok("1280×800 一屏放得下（整页不滚）", wide.need <= 1, JSON.stringify(wide));
   ok("1280×800 播放器仍在首屏内", wide.vtBottom < wide.vh, JSON.stringify(wide));
 
   // ③ 竖屏平板：回到上下排，且播放器占满内容宽度
   const port = await probe(900, 1200);
   ok("竖屏回到上下排（单栏）", port.bodyDisplay === "block", JSON.stringify(port));
   ok("竖屏时播放器铺满内容宽（不再左右留白）", port.vtW >= port.stageW * 0.98, JSON.stringify(port));
-  ok("竖屏一屏放得下（.wrap 不滚）", port.need <= 1, JSON.stringify(port));
+  ok("竖屏一屏放得下（整页不滚）", port.need <= 1, JSON.stringify(port));
 
   /* ————————————————————————————— 6. 打卡与积分落库 */
   step("6. 打卡 + 10 分（后端为准）");

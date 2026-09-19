@@ -9,6 +9,7 @@
  */
 import { computed, ref, watch } from "vue";
 import Icon from "@/components/Icon.vue";
+import PageTool from "@/components/PageTool.vue";
 import DictationPanel from "@/components/DictationPanel.vue";
 import { dictationItems, playSequence, preloadMany, stopAudio, useAudioState } from "@/composables/useAudio";
 import { playBuzz, playDing } from "@/composables/useSound";
@@ -103,6 +104,22 @@ async function toggleLessonRead(): Promise<void> {
 }
 const stat = computed(() => mastery.lessonStats(content.current?.id ?? 0, chars.value.map((c) => c.ch)));
 
+/** 备注（原「红色是本课生字…」那行小字 + 卡片底部那段提示），收进工具栏最右侧的 ⓘ */
+const cnNote = computed(() =>
+  tab.value === "text"
+    ? [
+        "红色标出的是这一课的生字。",
+        "点「朗读课文」听全文，再点一次停下来；读音由服务器本地合成，不需要联网的语音服务。",
+        "换课文用工具栏左边那个下拉（章节和课文在一起）。",
+      ].join("\n")
+    : [
+        "点击生字方块可以听读音：先读组词、再读单字，用来区分「睛 / 晴」这类音近字。",
+        "「开始听写」＝纸上听写：生字会变成「?」，写完再点一次揭晓答案。",
+        "「顺序朗读」＝从头一个字一个字读下去，再点一次停止。",
+        "下面的屏上听写会让 AI 自动批改，并记进错字本。",
+      ].join("\n"),
+);
+
 function speakChar(ch: string, word: string): void {
   readingAll.value = false;
   void playSequence(dictationItems(ch, word));
@@ -193,118 +210,111 @@ watch(
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #FBEFEA; color: #D9714E">
-        <Icon name="chinese" :size="19" />
-      </span>
-      <div>
-        <h2>语文乐园 · 课文听写</h2>
-        <span class="sub">二年级上册生字表 · 读音由服务器本地合成</span>
-      </div>
-    </div>
+  <!-- 详情页统一工具栏：标题（含当前模式）/ 章节下拉 / 两个模式的分段切换 /
+       主操作 / 轻量操作 / 备注图标，全在一条 53px 的行上。
+       以前是「卡片头 → 一排下拉 → 一排分区标签 → 一排按钮」四层竖排。 -->
+  <PageTool icon="chinese" tint="#FBEFEA" color="#D9714E" :note="cnNote">
+    <template #title>
+      <span>语文乐园</span>
+      <span class="pt-slash" aria-hidden="true">/</span>
+      <span>{{ tab === "text" ? "课文朗读" : "生字听写" }}</span>
+    </template>
 
-    <div class="row">
-      <select class="sel" style="flex: 1; min-width: 180px" :value="content.current?.id ?? ''" @change="onLessonChange">
+    <template #mid>
+      <select class="sel lesson-sel" :value="content.current?.id ?? ''" aria-label="选择课文" @change="onLessonChange">
         <option v-for="l in content.lessons" :key="l.id" :value="l.id">
           {{ l.title }}<template v-if="l.unit"> · {{ l.unit }}</template>
         </option>
       </select>
-    </div>
 
-    <div class="wb-tabs">
-      <button class="wb-tab" :class="{ on: tab === 'text' }" type="button" @click="switchTab('text')">
-        <Icon name="story" :size="17" />课文朗读
-      </button>
-      <button class="wb-tab" :class="{ on: tab === 'dictation' }" type="button" @click="switchTab('dictation')">
-        <Icon name="chinese" :size="17" />生字听写 <span class="n">{{ chars.length }}</span>
-      </button>
-    </div>
-
-    <!-- 第 1 页：课文原文（支持朗读 + 生字红标） -->
-    <template v-if="tab === 'text'">
-      <div class="row">
-        <button class="btn" :class="lessonPlaying || isPlaying ? 'yellow' : 'green'" type="button" @click="toggleLessonRead()">
-          <Icon :name="lessonPlaying || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ lessonPlaying || isPlaying ? "停止朗读" : "朗读课文" }}
+      <div class="seg" style="--seg-c: #E95252">
+        <button class="seg-btn" :class="{ on: tab === 'text' }" type="button" @click="switchTab('text')">
+          <Icon name="story" :size="16" />课文朗读
         </button>
-        <span v-if="newCharSet.size" class="sub">红色是本课生字，点「朗读课文」听全文</span>
-      </div>
-
-      <!-- 课文正文和「智能拼音童话」一样：用固定高度的内容 DIV 自己滚，不许整页跟着滚 -->
-      <div v-if="paragraphs.length" class="story-text story-scroll">
-        <p v-for="(segs, pi) in paragraphs" :key="pi">
-          <template v-for="(seg, si) in segs" :key="si">
-            <span v-if="seg.isNew" class="lesson-new">{{ seg.text }}</span>
-            <template v-else>{{ seg.text }}</template>
-          </template>
-        </p>
-      </div>
-      <div v-else class="wb-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        </svg>
-        这篇课文还没有录入原文，家长可以在内容后台补上。
+        <button class="seg-btn" :class="{ on: tab === 'dictation' }" type="button" @click="switchTab('dictation')">
+          <Icon name="chinese" :size="16" />生字听写 <span class="n">{{ chars.length }}</span>
+        </button>
       </div>
     </template>
 
-    <!-- 第 2 页：生字听写（原内容） -->
+    <template v-if="tab === 'text'">
+      <button class="btn green sm" type="button" @click="toggleLessonRead()">
+        <Icon :name="lessonPlaying || isPlaying ? 'stop' : 'speaker'" :size="16" />
+        {{ lessonPlaying || isPlaying ? "停止朗读" : "朗读课文" }}
+      </button>
+    </template>
     <template v-else>
-      <div class="row">
-        <button class="btn" :class="paperMasked ? 'yellow' : 'green'" type="button" @click="toggleMask()">
-          <Icon :name="paperMasked ? 'check' : 'play'" :size="18" />{{ paperMasked ? "结束听写" : "开始听写" }}
-        </button>
-        <button class="btn" :class="readingAll || isPlaying ? 'yellow' : 'ghost'" type="button" @click="toggleReadAll()">
-          <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="18" />{{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
-        </button>
-      </div>
+      <button class="btn ghost sm" type="button" @click="toggleReadAll()">
+        <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="16" />
+        {{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
+      </button>
+      <button class="btn green sm" type="button" @click="toggleMask()">
+        <Icon :name="paperMasked ? 'check' : 'play'" :size="16" />{{ paperMasked ? "结束听写" : "开始听写" }}
+      </button>
+    </template>
+  </PageTool>
 
-      <DictationPanel @active="onScreenDictation" />
+  <!-- 第 1 页：课文原文（支持朗读 + 生字红标） -->
+  <section v-if="tab === 'text'" class="card">
+    <div v-if="paragraphs.length" class="story-text">
+      <p v-for="(segs, pi) in paragraphs" :key="pi">
+        <template v-for="(seg, si) in segs" :key="si">
+          <span v-if="seg.isNew" class="lesson-new">{{ seg.text }}</span>
+          <template v-else>{{ seg.text }}</template>
+        </template>
+      </p>
+    </div>
+    <div v-else class="wb-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#B9CCDE" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+      </svg>
+      这篇课文还没有录入原文，家长可以在内容后台补上。
+    </div>
+  </section>
 
-      <div class="zi-grid" :class="{ masked }">
-        <div
-          v-for="c in chars"
-          :key="c.ch"
-          class="zi"
-          :class="mastery.charState(content.current?.id ?? 0, c.ch) === 1 ? 'mastered' : mastery.charState(content.current?.id ?? 0, c.ch) === 0 ? 'failed' : ''"
-        >
-          <button class="zi-face" type="button" :aria-label="`朗读 ${c.ch}`" @click="speakChar(c.ch, c.word)">
-            <span class="zi-char">{{ c.ch }}</span>
-            <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
+  <!-- 第 2 页：生字听写 -->
+  <section v-else class="card">
+    <DictationPanel @active="onScreenDictation" />
+
+    <div class="zi-grid" :class="{ masked }">
+      <div
+        v-for="c in chars"
+        :key="c.ch"
+        class="zi"
+        :class="mastery.charState(content.current?.id ?? 0, c.ch) === 1 ? 'mastered' : mastery.charState(content.current?.id ?? 0, c.ch) === 0 ? 'failed' : ''"
+      >
+        <button class="zi-face" type="button" :aria-label="`朗读 ${c.ch}`" @click="speakChar(c.ch, c.word)">
+          <span class="zi-char">{{ c.ch }}</span>
+          <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
+        </button>
+        <div class="zi-btns">
+          <button
+            class="zi-b"
+            :class="{ 'on-ok': mastery.charState(content.current?.id ?? 0, c.ch) === 1 }"
+            type="button"
+            title="已掌握"
+            @click="mark(c.ch, 1)"
+          >
+            <Icon name="check" :size="16" :stroke="2.6" />
           </button>
-          <div class="zi-btns">
-            <button
-              class="zi-b"
-              :class="{ 'on-ok': mastery.charState(content.current?.id ?? 0, c.ch) === 1 }"
-              type="button"
-              title="已掌握"
-              @click="mark(c.ch, 1)"
-            >
-              <Icon name="check" :size="16" :stroke="2.6" />
-            </button>
-            <button
-              class="zi-b"
-              :class="{ 'on-no': mastery.charState(content.current?.id ?? 0, c.ch) === 0 }"
-              type="button"
-              title="未掌握，加入错字本"
-              @click="mark(c.ch, 0)"
-            >
-              <Icon name="cross" :size="16" :stroke="2.6" />
-            </button>
-          </div>
+          <button
+            class="zi-b"
+            :class="{ 'on-no': mastery.charState(content.current?.id ?? 0, c.ch) === 0 }"
+            type="button"
+            title="未掌握，加入错字本"
+            @click="mark(c.ch, 0)"
+          >
+            <Icon name="cross" :size="16" :stroke="2.6" />
+          </button>
         </div>
       </div>
+    </div>
 
-      <div class="zi-stat">
-        <span><span class="dot" style="background: #8FE0C2"></span>已掌握 <b>{{ stat.ok }}</b></span>
-        <span><span class="dot" style="background: #FFBDBD"></span>未掌握 <b>{{ stat.no }}</b></span>
-        <span><span class="dot" style="background: #DDE9F5"></span>未检查 <b>{{ stat.none }}</b></span>
-      </div>
-
-      <p class="tip">
-        点击生字方块可以听读音（先读组词、再读单字，用来区分「睛 / 晴」这类音近字）。<br />
-        纸上听写模式下生字会变成「?」，写完再点「结束听写」揭晓答案；屏上听写则会自动批改并记录到错字本。
-      </p>
-    </template>
+    <div class="zi-stat">
+      <span><span class="dot" style="background: #8FE0C2"></span>已掌握 <b>{{ stat.ok }}</b></span>
+      <span><span class="dot" style="background: #FFBDBD"></span>未掌握 <b>{{ stat.no }}</b></span>
+      <span><span class="dot" style="background: #DDE9F5"></span>未检查 <b>{{ stat.none }}</b></span>
+    </div>
   </section>
 </template>

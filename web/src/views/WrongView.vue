@@ -13,6 +13,7 @@
 import { computed, onMounted, ref } from "vue";
 import type { WrongItem } from "@/api/types";
 import Icon from "@/components/Icon.vue";
+import PageTool from "@/components/PageTool.vue";
 import { playText } from "@/composables/useAudio";
 import { playDing } from "@/composables/useSound";
 import { useContentStore } from "@/stores/content";
@@ -41,6 +42,26 @@ onMounted(() => {
 
 const mathList = computed(() => mastery.wrong.math);
 const cnList = computed(() => mastery.wrong.chinese);
+
+/**
+ * 备注（原「为什么现在不能改」那块黄色横条 + 玩法说明），收进工具栏最右侧的 ⓘ。
+ * 没开闸时改由工具栏上的状态胶囊直说「等口算和听写做完」——**拦人的话必须在明面上**，
+ * 只藏在 ⓘ 里等于没提醒；为什么、怎么办这种长解释才收进图标。
+ */
+const wrongNote = computed(() =>
+  canReview.value
+    ? [
+        "做对一次就能擦掉一题。",
+        "数学错题：直接在题目右边把答案填进去，算对了这道题立刻被擦掉（答案不显示，防照抄）。",
+        "语文错字：点左边的字可以听读音，在纸上写一遍再点「重新挑战」。",
+        `重做满 ${progress.reviewTotal} 道（或者错题本被清空）就完成今天的「错题复习」。`,
+      ].join("\n")
+    : [
+        "今天的错题复习要先把「每日口算」和「语文听写」做完再来。",
+        "这两项还会往错题本里加题 —— 做到一半题数就变了，所以先不让改。",
+        "现在可以翻看下面的错题，输入框是灰的、填不进去。",
+      ].join("\n"),
+);
 
 const textOf = (it: WrongItem): string => String(it.payload.text ?? "");
 const ansOf = (it: WrongItem): string => String(it.payload.ans ?? "");
@@ -120,39 +141,27 @@ function switchTab(next: "math" | "chinese"): void {
 </script>
 
 <template>
+  <!-- 详情页统一工具栏：标题 / 玩法说明 / 两个分区的分段切换 / 复习状态 / 备注图标 -->
+  <PageTool icon="wrong" tint="#FFEFF3" color="#C4486B" title="错题小本本" meta="做对一次就能擦掉一题" :note="wrongNote">
+    <template #mid>
+      <div class="seg" style="--seg-c: #C4486B">
+        <button class="seg-btn" :class="{ on: tab === 'math' }" type="button" @click="switchTab('math')">
+          <Icon name="math" :size="16" />数学错题 <span class="n">{{ mathList.length }}</span>
+        </button>
+        <button class="seg-btn" :class="{ on: tab === 'chinese' }" type="button" @click="switchTab('chinese')">
+          <Icon name="chinese" :size="16" />语文错字 <span class="n">{{ cnList.length }}</span>
+        </button>
+      </div>
+    </template>
+
+    <span v-if="canReview" class="stat-pill">
+      重新挑战 <b>{{ progress.reviewCount }}</b> / {{ progress.reviewTotal }}
+    </span>
+    <!-- 没开闸时这句话必须在明面上：它说明「为什么填不进去」 -->
+    <span v-else class="stat-pill"><Icon name="wrong" :size="15" />等口算和听写做完</span>
+  </PageTool>
+
   <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #FFEFF3; color: #C4486B">
-        <Icon name="wrong" :size="19" />
-      </span>
-      <div><h2>错题小本本</h2><span class="sub">做对一次就能擦掉一题</span></div>
-      <div class="spacer"></div>
-      <span v-if="canReview" class="stat-pill">
-        重新挑战 <b>{{ progress.reviewCount }}</b> / {{ progress.reviewTotal }}
-      </span>
-      <span v-else class="stat-pill"><Icon name="wrong" :size="15" />等口算和听写做完</span>
-    </div>
-
-    <div v-if="!canReview" class="wb-lock">
-      <Icon name="wrong" :size="18" />
-      <span>
-        今天的错题复习要<b>先把「每日口算」和「语文听写」做完</b>再来 ——
-        这两项还会往错题本里加题，做到一半题数就变了。<br />
-        现在可以翻看下面的错题，但先不让改。
-      </span>
-    </div>
-
-    <div class="wb-tabs">
-      <button class="wb-tab" :class="{ on: tab === 'math' }" type="button" @click="switchTab('math')">
-        <Icon name="math" :size="17" />
-        数学错题区 <span class="n">{{ mathList.length }}</span>
-      </button>
-      <button class="wb-tab" :class="{ on: tab === 'chinese' }" type="button" @click="switchTab('chinese')">
-        <Icon name="chinese" :size="17" />
-        语文错字区 <span class="n">{{ cnList.length }}</span>
-      </button>
-    </div>
-
     <div class="wb-list">
       <!-- 数学 -->
       <template v-if="tab === 'math'">

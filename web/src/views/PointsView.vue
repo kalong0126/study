@@ -11,6 +11,7 @@ import { computed, onMounted, ref } from "vue";
 import { api } from "@/api";
 import type { Redemption, RedemptionStats } from "@/api/types";
 import Icon from "@/components/Icon.vue";
+import PageTool from "@/components/PageTool.vue";
 import { REWARDS, rewardLabel, useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
 
@@ -81,31 +82,32 @@ async function redeem(id: string): Promise<void> {
 }
 
 onMounted(load);
+
+/** 备注：原来余额下面那段说明，收进工具栏最右侧的 ⓘ（「返回」交给顶栏的「回小岛」） */
+const ptsNote = [
+  "完成任务赚积分：口算 10 分、听写 10 分、阅读 20 分、语言 20 分、英文故事 10 分。",
+  "全对的项、以及一天把 6 项全做完，都会额外再加分。",
+  `攒够 ${REWARDS[0]?.cost ?? 50} 分就能换一次奖励；兑换后请家长帮你兑现（给平板时间 / 给零花钱）。`,
+].join("\n");
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #FFF6E0; color: #C97F00">
-        <Icon name="star" :size="19" />
-      </span>
-      <div>
-        <h2>我的积分</h2>
-        <span class="sub">攒下的每一分都算数</span>
-      </div>
-      <div class="spacer"></div>
-      <RouterLink to="/" class="back-link">
-        <Icon name="arrowLeft" :size="16" />返回
-      </RouterLink>
-    </div>
+  <!-- 详情页统一工具栏：标题 / 说明 / 备注图标。「返回」不用另外放 —— 顶栏的「回小岛」就是它。
+       积分没有「主操作」：能做的动作都在下面各张卡片里（兑换奖励）。 -->
+  <PageTool
+    icon="star"
+    tint="#FFF6E0"
+    color="#C97F00"
+    title="我的积分"
+    meta="攒下的每一分都算数"
+    :note="ptsNote"
+  />
 
+  <section class="card">
     <div class="pts-balance-lg">
       <span class="pts-num">{{ balance }}</span>
       <span class="pts-unit">分</span>
     </div>
-    <p class="tip" style="margin-top: 6px">
-      完成任务赚积分，攒够 50 分就能换半小时平板或 1 块钱。下面是你的兑换记录。
-    </p>
   </section>
 
   <section class="card">

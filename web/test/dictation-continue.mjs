@@ -144,11 +144,11 @@ try {
   /* ————————————————————————— 3. 打开 /chinese，切听写 tab，开始一轮 */
   step("3. 开始第一轮（应跳过已掌握的 chars[0]）");
   await page.goto(`${BASE}/chinese`, { waitUntil: "networkidle" });
-  await page.waitForSelector(".wb-tab", { timeout: 20000 });
+  await page.waitForSelector(".seg-btn", { timeout: 20000 });
   // 确保选中第一课（默认即第一课，这里显式选一次更稳）
   await page.selectOption("select.sel", String(lesson.id)).catch(() => {});
   await page.waitForTimeout(400);
-  await page.locator(".wb-tab", { hasText: "生字听写" }).click();
+  await page.locator(".seg-btn", { hasText: "生字听写" }).click();
   await page.waitForSelector(".hw-box", { timeout: 15000 });
   await page.locator("button", { hasText: "开始屏上听写" }).click();
   await page.waitForSelector(".hw-dots .hw-dot", { timeout: 15000 });

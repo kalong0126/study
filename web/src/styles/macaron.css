@@ -64,14 +64,19 @@ body {
 button { font-family: inherit; }
 a { color: var(--blue-d); }
 
-/* ---------- 顶部 ---------- */
+/* ---------- 顶部 ----------
+   全局顶栏固定 64px 一行（用户规则①）。
+   2026-09-19 起孩子端改回**浏览器主滚动**（见下面的 .kid-shell），
+   所以顶栏改成 sticky 吸附在视口顶部 —— 滚到正文中段也还能看到「回小岛」与今日进度。
+   `flex-wrap: nowrap` + 固定高度是一件事：只要让它折行，高度就守不住 64px 了。
+   窄屏放不下时不再折行，改为**减内容**（≤819px 藏掉能量星条、品牌只留 logo），见响应式区。 */
 .topbar {
-  position: relative; z-index: 50;
-  background: rgba(255, 255, 255, .84);
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255, 255, 255, .92);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(230, 238, 247, .9);
 }
-.hd { max-width: 1080px; margin: 0 auto; width: 100%; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hd { max-width: 1080px; margin: 0 auto; width: 100%; height: 64px; padding: 0 16px; display: flex; align-items: center; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 18px; letter-spacing: .5px; white-space: nowrap; text-decoration: none; color: inherit; }
 .brand .logo { width: 38px; height: 38px; flex: none; border-radius: 13px; background: linear-gradient(135deg, #8ECDF5, #A8E6CF); display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(120, 190, 235, .4); }
 .brand .logo svg { width: 22px; height: 22px; }
@@ -107,14 +112,18 @@ a { color: var(--blue-d); }
 .hd-back:hover { background: #F3F9FF; transform: translateY(-1px); }
 .hd-back svg { width: 18px; height: 18px; }
 
-/* ---------- 孩子端固定视口外壳 ----------
-   顶栏 / 内容区 两段式：整页高度锁死为视口高度，
-   只有中间 .wrap 内部滚动，顶栏始终不动、整页没有滚动条。
-   家长后台（/admin）不走这层壳，保持普通文档流（表单长，要能整页滚）。
-   用 100dvh（动态视口高度）跟随移动端地址栏伸缩，再给 100vh 兜底老浏览器。 */
-.kid-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+/* ---------- 孩子端外壳 ----------
+   **2026-09-19 改回浏览器主滚动**（用户规则③：页面只保留浏览器主滚动，
+   去掉内容卡片里的嵌套滚动条）。之前那版是 `.kid-shell` 锁 100dvh + `overflow:hidden`、
+   只让 `.wrap` 内部滚，结果一个页面里同时存在三条滚动条（浏览器 / .wrap / 卡片里的正文），
+   平板上一划就滚错层。
+   现在 `.kid-shell` 只是「顶栏 + 内容」两段的普通文档流容器：整页由浏览器的滚动条滚，
+   顶栏靠 sticky 留在上面。`.wrap` 只负责居中与内边距，**不再是滚动容器**。
+   ⚠️ 别再把 `height` / `overflow` 加回来：一加回来顶层就被锁死，
+   浏览器主滚动变成 0，又退回「滚错层」。 */
+.kid-shell { display: flex; flex-direction: column; min-height: 100vh; }
 .kid-shell > .topbar { flex: none; }
-.kid-shell > .wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.kid-shell > .wrap { flex: 1 1 auto; }
 
 /* ---------- 主体 ---------- */
 .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 16px; }
@@ -126,6 +135,128 @@ a { color: var(--blue-d); }
 .card-hd .sub { font-size: 12.5px; color: var(--ink3); font-weight: 500; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+
+/* ---------- 详情页统一工具栏（.pt） ----------
+   2026-09-19 用户定的规则：详情页的「标题 / 题量 / 章节 / 状态 / 操作」合并成同一行，
+   备注不再单占一行（收进最右侧的信息图标里，点开才看）。
+   所以每一页的头部都是同一条白底胶囊，顺序也固定：
+     [图标] [标题 │ 题量/章节] → [中段控件：下拉 / 分段切换 / 计时胶囊 / 状态+进度条]
+     → （撑开）→ [主操作按钮] [轻量按钮] [ⓘ 信息图标]
+   高度 = 控件 36 + 上下内边距 7×2 + 描边 1.5×2 = 53px（用户要求 52–56px）。
+   ⚠️ 里面所有控件都必须 36px 高，否则这一行会被最高的那个顶到 56px 以上；
+     `.btn` 默认 44px、`.btn.sm` 38px、窄屏还全局抬到 46px —— 都在下面按 `.pt` 收回来。
+   ⚠️ 用 `flex-wrap: wrap` + `min-height` 而不是固定 height：窄屏放不下就折行、
+     工具栏自己长高（那是手机上的正常表现），宽屏永远是 53px。 */
+.pt {
+  display: flex; align-items: center; gap: 10px;
+  flex-wrap: wrap;
+  min-height: 53px; padding: 7px 12px;
+  margin-bottom: 16px;
+  background: #fff; border-radius: 18px;
+  border: 1.5px solid rgba(230, 238, 247, .9);
+  box-shadow: var(--shadow-s);
+}
+.pt-ico { width: 36px; height: 36px; flex: none; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
+.pt-ico svg { width: 20px; height: 20px; }
+.pt-head { display: flex; align-items: center; gap: 9px; min-width: 0; flex: none; }
+.pt-title { margin: 0; font-size: 17px; font-weight: 800; letter-spacing: .3px; color: var(--ink); white-space: nowrap; }
+/* 「语文乐园 / 课文听写」里那道斜杠：分隔两段标题，颜色比正文浅一档 */
+.pt-slash { color: #C3D2E0; font-weight: 700; }
+.pt-sep { width: 1.5px; height: 16px; flex: none; border-radius: 2px; background: var(--line); }
+.pt-meta { font-size: 12.5px; font-weight: 600; color: var(--ink3); white-space: nowrap; }
+/* 中段控件（下拉 / 分段切换 / 计时胶囊）与右段操作各自成组，中间靠 .pt-sp 撑开 */
+.pt-mid { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.pt-sp { flex: 1 1 12px; min-width: 12px; }
+/* 右段操作：内容多了自己折行（`.pt` 再放不下才是整组换行），永远靠右对齐 */
+.pt-act { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+/* 标题右边那枚浅色小胶囊（「自动注音 · 读过不重复」这类说明） */
+.pt-pill {
+  display: inline-flex; align-items: center; gap: 5px; flex: none;
+  padding: 3px 11px; border-radius: 999px;
+  background: #F3F7FC; border: 1.5px solid #EAF1F8;
+  font-size: 12px; font-weight: 700; color: var(--ink2); white-space: nowrap;
+}
+/* 行内状态（「已作答 20 / 20 · 全部答对」「重新挑战 2 / 4」） */
+.pt-stat { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13.5px; font-weight: 700; color: var(--ink2); white-space: nowrap; }
+/* 工具栏里的进度条：不再让 .progress-line 的 `flex:1` 把整行撑开，给个固定宽度 */
+.pt .progress-line { flex: none; }
+.pt .progress-line .bar { flex: none; width: clamp(70px, 11vw, 150px); }
+
+/* 工具栏里的控件高度统一收成 36px（含全局 `.btn` 的 44 / `.btn.sm` 的 38 / 窄屏的 46） */
+.pt .btn, .pt .btn.sm, .pt .sel, .pt .icon-btn { min-height: 36px; }
+.pt .btn.sm { padding: 0 13px; font-size: 13.5px; border-radius: 12px; }
+.pt .btn svg { width: 16px; height: 16px; }
+.pt .sel { padding: 0 12px; font-size: 13.5px; border-radius: 12px; }
+/* 语文页的课文下拉（`.lesson-sel`）：宽度必须收着，否则「生字听写」那一支会折行。
+   原生 select 的宽度由最长的 option 撑开 —— 实测 356px（《小蝌蚪找妈妈》 · 第一单元），
+   加上听写多出来的「顺序朗读」按钮，整条工具栏就差了 ~84px：
+   1280 桌面上「课文朗读」是 53px 一行、切到「生字听写」立刻折成 98px 两行
+   （用户报的「按钮太多会换行」）。收到 270 之后 1440 / 1280 / 1100 全部回到 53px 一行；
+   窄屏按 23vw 跟着缩，390 的手机上收到 96px，正好让「下拉 + 分段切换」挤在同一行
+   （工具栏 184px 四行 → 140px 三行）。
+   ⚠️ 别再放大：1440 那一行只剩 ~20px 余量，回到 300 以上就会重新折行。 */
+.pt .sel.lesson-sel { max-width: clamp(96px, 23vw, 270px); }
+/* 工具栏里 .lg-theme 只是「主题 + 徽章」那一组，外边距归工具栏管 */
+.pt .lg-theme { margin-bottom: 0; }
+
+/* 计时胶囊（童话页 / 口算页）：一行里的小胶囊，不是以前那个大号 .timer-box。
+   童话页里它是个按钮（点一下开始 / 结束计时），口算页里是纯状态。 */
+.timer-chip {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 36px; padding: 0 13px; margin: 0;
+  border-radius: 999px; border: 1.5px solid #EAF1F8; background: #F4F8FC;
+  font-family: inherit; font-size: 13px; font-weight: 800; color: var(--ink2);
+  white-space: nowrap;
+}
+button.timer-chip { cursor: pointer; transition: .18s; }
+button.timer-chip:hover:not(:disabled) { background: #EAF3FB; color: var(--blue-d); }
+button.timer-chip:disabled { cursor: default; }
+.timer-chip svg { width: 17px; height: 17px; flex: none; }
+.timer-chip.run { background: #EAFBF4; border-color: #C6EEDD; color: var(--green-d); }
+.timer-chip .timer-clock { font-size: 16px; font-weight: 800; letter-spacing: .5px; color: inherit; font-variant-numeric: tabular-nums; }
+/* 「用时 1 分 32 秒」这类紧随时钟的小字：比时钟弱一档 */
+.timer-chip .tb-say { font-size: 12.5px; font-weight: 700; color: var(--ink3); }
+.timer-chip.run .tb-say { color: inherit; opacity: .85; }
+
+/* ---------- 分段切换（详情页工具栏里的两页式切换） ----------
+   一条 36px 高的浅槽 + 内部 30px 的按钮，选中态是一颗白/浅色药丸。
+   ⚠️ 槽高就是 36：加内边距之前先算清楚（36 = 按钮 30 + 上下 3 + 描边 0），
+   否则它会比同一行里的按钮高，整条工具栏跟着变高。 */
+.seg { display: flex; align-items: center; gap: 3px; flex: none; height: 36px; padding: 3px; border-radius: 13px; background: #F1F6FB; }
+.seg-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px;
+  border: none; border-radius: 10px; background: transparent;
+  font-family: inherit; font-size: 13px; font-weight: 800; color: var(--ink2);
+  cursor: pointer; white-space: nowrap; transition: .18s;
+}
+.seg-btn:hover { color: var(--blue-d); }
+/* 选中态：白底药丸 + 主题色文字。`--seg-c` 让每一页给自己的主色（语文暖粉、错题玫红…） */
+.seg-btn.on { background: #fff; color: var(--seg-c, var(--blue-d)); box-shadow: 0 2px 7px rgba(120, 160, 205, .18); }
+.seg-btn .n { background: #FFE3E3; color: #D64545; border-radius: 999px; padding: 1px 8px; font-size: 11.5px; font-weight: 800; }
+
+/* ---------- 工具栏最右侧的信息图标（原「备注」那一行） ----------
+   备注（小提示 / 计分规则 / 为什么现在不能改…）不再占一整行，收进这枚 ⓘ 里。
+   点开浮层挂在图标下面；再点一次、或点到别处就收起（见 PageTool.vue）。 */
+.pt-note { position: relative; flex: none; }
+.pt-info {
+  width: 36px; height: 36px; padding: 0; flex: none;
+  border: none; border-radius: 999px; background: #EEF4FA; color: #7C90A6;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: .18s;
+}
+.pt-info svg { width: 18px; height: 18px; }
+.pt-info:hover { background: #E3EEF8; color: var(--blue-d); }
+.pt-info[aria-expanded="true"] { background: #E3EEF8; color: var(--blue-d); }
+.pt-pop {
+  position: absolute; right: 0; top: calc(100% + 9px); z-index: 40;
+  width: min(380px, calc(100vw - 44px));
+  padding: 11px 14px; border-radius: 14px;
+  background: #fff; border: 1.5px solid var(--line);
+  box-shadow: 0 14px 34px rgba(90, 130, 175, .22);
+  font-size: 12.5px; font-weight: 600; line-height: 1.75; color: var(--ink2);
+  white-space: pre-line; text-align: left;
+  animation: fade .16s ease both;
+}
+.pt-pop b { color: var(--ink); }
 
 /* 视图切换动画（路由过渡） */
 .fade-enter-active { animation: fadeUp .32s ease both; }
@@ -607,7 +738,7 @@ a { color: var(--blue-d); }
    .zi-face、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
    注意这条以前写的是 `..., "STKaiti", inherit` —— `inherit` 是 CSS-wide 关键字，
    不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。
-   `--lh` 是行高：下面的 `.story-scroll` 用它算「一屏 5 行有多高」，行高只写这一处。 */
+   `--lh` 是行高；窄屏（≤819px）会把它放小一档。 */
 .story-text { --lh: 2.75; font-size: 30px; line-height: var(--lh); letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: var(--font-round); }
 /* 课文原文（语文页）与童话正文用同一套版式、同一套字体（都是 .story-text 本体）。
    听写屋的课文曾经单独走楷体，用户反馈「字体显示不对」→ 已统一回站内圆体，
@@ -620,60 +751,29 @@ a { color: var(--blue-d); }
 .story-text .sent { border-radius: 8px; transition: background .3s; cursor: pointer; padding: 1px 2px; }
 .story-text .sent.cur { background: #FFF3C4; box-shadow: 0 0 0 3px rgba(255, 217, 61, .35); }
 
-/* ---------- 故事正文：滚动阅读 ----------
-   正文区高度固定成 5 行（`--story-lines`），超出部分在**它自己内部**滚动：
-   平板上一屏 5 行正文刚刚好（用户实测的结论），长文不会被撑成一条长条。
-   曾经做过「翻页」版本 —— 按量出来的句子坐标切页、整块 translateY 平移 ——
-   但注音 ruby 会撑高行高、自托管字体换入的时机、平板的实际宽度都会让换行变化，
-   量得再准也会在孩子翻到一半时错位（用户结论：翻页不够准确），于是改回滚动。
-   末尾 +2px 是给取整留的余量：30px 字号 × 2.75 行高 = 82.5px，5 行带小数，
-   `clientHeight` 只能取整。 */
-.story-scroll {
-  --story-lines: 5;
-  height: calc(var(--story-lines) * var(--lh, 2.75) * 1em + 2px);
-  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin; scrollbar-color: #CFE2F2 transparent;
-  padding-right: 6px;
-}
-.story-scroll::-webkit-scrollbar { width: 8px; }
-.story-scroll::-webkit-scrollbar-thumb { background: #CFE2F2; border-radius: 999px; }
-.story-scroll::-webkit-scrollbar-track { background: transparent; }
+/* ---------- 故事正文：**整页滚动**，正文自己不再滚 ----------
+   这里曾经是 `.story-scroll`（高度锁成 5 行、overflow-y:auto，正文在里面自己滚），
+   2026-09-19 按用户规则③去掉：**页面只保留浏览器主滚动，卡片里不许再有嵌套滚动条**。
+   现在正文就是普通文档流，长文把页面撑开、由浏览器滚 —— 阅读位置不再被切在两个坐标系里
+   （内层滚到一半、再滚外层，平板上很容易滚错层）。
+   ⚠️ 别把 `height` + `overflow-y` 加回 `.story-text`。 */
 .lesson-new { color: #E23B4E; font-weight: 800; }
 .story-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px 10px; color: var(--ink3); font-size: 14.5px; text-align: center; }
 .story-empty svg { width: 54px; height: 54px; opacity: .55; }
-.timer-box { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #F7FBFF; border: 1.5px solid var(--line2); border-radius: 16px; padding: 12px 16px; margin-top: 14px; }
-.timer-clock { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 2px; color: var(--blue-d); min-width: 120px; }
-.timer-clock.run { color: var(--green-d); }
+/* `.story-text` 内部**没有**自己的滚动条：整页由浏览器滚（见上面那段说明）。 */
 
-/* ---------- 童话页那一行：倒计时 + 换一篇 / 朗读 / 结束计时 ----------
-   用户要求「倒计时和生成童话放到一行上」：它们是同一件事的两个面 ——
-   「今天读这篇、读满 15 分钟」和「想换一篇」。分成上下两块要占两屏高度。 */
-.story-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.story-bar .btn { flex: none; }
-.timer-chip {
-  display: inline-flex; align-items: center; gap: 8px; flex: none;
-  padding: 5px 16px 5px 12px; border-radius: 999px;
-  background: #F2F8FF; border: 1.5px solid var(--line2); color: var(--ink2);
-}
-.timer-chip.run { background: #EAFBF4; border-color: #C6EEDD; color: var(--green-d); }
-.timer-chip svg { width: 20px; height: 20px; }
-/* 行内的计时器比数学页那枚小一号，且颜色交给胶囊（点击暂停态是绿的） */
-.story-bar .timer-clock { font-size: 26px; min-width: auto; letter-spacing: 1px; color: inherit; }
-.story-bar-tip { margin: 10px 0 0; font-size: 12.5px; color: var(--ink3); line-height: 1.6; }
-/* 童话页原来下面还有一张「读过的故事」列表卡（.hist / .hist-item），
-   用户要求不再显示，卡片与这套样式一起删掉了 —— 去重仍在后端按标题列表做。 */
+/* 计时胶囊与 `.timer-chip` / `.tb-say` 的定义在「详情页统一工具栏」那一节里 ——
+   它们现在只出现在工具栏的一行里（童话页 / 口算页），不再有「大号 timer-box +
+   下面一行动作按钮」的竖排版本（用户规则②：状态合并进同一行）。 */
 
-/* ---------- 错题本 ---------- */
-.wb-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
-/* 未开闸提示：口算/听写没做完之前，错题只能看、不能改 */
-.wb-lock { display: flex; gap: 9px; align-items: flex-start; margin-bottom: 14px; padding: 12px 14px; border-radius: 14px; background: #FFFBEC; border: 1.5px solid #FFE9AE; color: #8A6A16; font-size: 13px; line-height: 1.6; }
-.wb-lock svg { flex: none; margin-top: 2px; color: #C99A22; }
-.wb-lock b { color: #7A5A0A; }
-/* 禁用态：一眼看出「现在还轮不到你填」 */
+/* ---------- 错题本 ----------
+   这两页原本各有一套自己的「分区标签」(.wb-tabs/.wb-tab)，2026-09-19 统一成工具栏里的
+   `.seg` 分段控件（详见上面「详情页统一工具栏」一节）—— 同一个交互在三个页面里
+   长着三种样子，是这次要消掉的主要问题之一。 */
+/* 未开闸提示：口算/听写没做完之前，错题只能看、不能改。
+   正文里不再放这块黄色横条（用户规则②：备注收进信息图标），
+   内容搬到了工具栏的 ⓘ 浮层；这里只留禁用态本身。 */
 .wb-item .wb-ans .m-in:disabled { background: #F4F7FA; border-color: #E4EBF3; color: #B6C4D3; cursor: not-allowed; }
-.wb-tab { flex: 1; min-height: 44px; border-radius: 14px; border: 1.5px solid var(--line); background: #fff; font-weight: 700; font-size: 14.5px; color: var(--ink2); cursor: pointer; transition: .2s; display: flex; align-items: center; justify-content: center; gap: 7px; font-family: inherit; }
-.wb-tab.on { background: linear-gradient(135deg, #FFEFF3, #FFF6E5); border-color: #FFCFDA; color: #C4486B; }
-.wb-tab .n { background: #FFE3E3; color: #D64545; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 800; }
 .wb-list { display: flex; flex-direction: column; gap: 10px; }
 .wb-item { padding: 13px 15px; border-radius: 15px; background: #FFFBFC; border: 1.5px solid #FFE4E9; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wb-item .w-q { font-size: 18px; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
@@ -815,10 +915,10 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   50% { opacity: 1; transform: scale(1.2) rotate(22deg); }
 }
 
-/* ---------- 积分页（余额 / 统计 / 历史 / 分页） ---------- */
-.back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; color: var(--blue-d); text-decoration: none; white-space: nowrap; }
-.back-link:hover { opacity: .8; }
-.pts-balance-lg { display: flex; align-items: baseline; justify-content: center; gap: 8px; margin-top: 14px; }
+/* ---------- 积分页（余额 / 统计 / 历史 / 分页） ----------
+   这里原来有一条 `.back-link`（卡片头右侧的「返回」），已删：
+   顶栏的「回小岛」就是回首页那条路，页内再放一个只是重复。 */
+.pts-balance-lg { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
 .pts-balance-lg .pts-num { font-size: 52px; font-weight: 900; line-height: 1; color: #C97F00; font-variant-numeric: tabular-nums; text-shadow: 0 3px 14px rgba(232, 168, 0, .35); }
 .pts-balance-lg .pts-unit { font-size: 18px; font-weight: 800; color: var(--ink3); }
 .pts-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
@@ -855,8 +955,8 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .lg-cell.wrong .lg-st { color: #D94848; }
 .lg-empty { text-align: center; padding: 24px 10px; color: var(--ink3); font-size: 14.5px; line-height: 2; }
 
-.lg-qhd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
-.lg-qidx { font-size: 13px; font-weight: 800; color: var(--blue-d); background: #E9F4FF; border-radius: 999px; padding: 5px 12px; white-space: nowrap; }
+/* 单题页的题号 / 题型徽章原来有自己的 `.lg-qhd` / `.lg-qidx` 一行，
+   2026-09-19 并进工具栏（`.pt-meta` + `.badge-lite`），两条样式已删。 */
 .lg-how { font-size: 13.5px; color: var(--ink2); font-weight: 600; background: #F8FBFF; border-left: 3px solid var(--blue); border-radius: 0 10px 10px 0; padding: 9px 12px; margin: 0 0 14px; line-height: 1.75; }
 .lg-how b { color: var(--blue-d); }
 .lg-big { font-size: 18px; font-weight: 800; line-height: 1.8; color: var(--ink); }
@@ -962,15 +1062,38 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .isle-stats { grid-template-columns: 1fr; }
 }
 @media (max-width: 819px) {
-  .hd { padding: 9px 12px; gap: 9px; }
-  /* 手机上顶栏本来就窄：回小岛按钮只留箭头（文字藏掉），但点击区仍 ≥44px */
+  /* 顶栏在手机上不再折行（折行就守不住 64px 了），改为减内容：
+     品牌只留 logo（点它照样回首页）、能量星条整条收起、「项任务」后缀省掉
+     —— 剩余进度由「今日已完成 N/6」说。 */
+  .hd { height: 64px; padding: 0 12px; gap: 8px; }
+  .brand span { display: none; }
+  .brand .logo { width: 34px; height: 34px; border-radius: 11px; }
+  .energy { display: none; }
   .hd-back { padding: 0; width: 44px; height: 44px; justify-content: center; }
   .hd-back span { display: none; }
-  .brand { font-size: 16px; }
-  .brand .logo { width: 33px; height: 33px; border-radius: 11px; }
-  .energy { order: 5; flex: 1 1 100%; min-width: 0; }
+  /* 顶栏右侧两枚胶囊也收窄：360px 的机器上「今日已完成 6 / 6 项任务」+ 积分胶囊
+     会把积分胶囊顶出屏幕（实测横向溢出 14px，smoke 用例抓到的）。
+     ⚠️ 只压字号和内边距，**不要改文案** —— 那句话是 nav 用例的断言文本。 */
+  .stat-pill { gap: 5px; padding: 4px 9px; font-size: 11.5px; }
+  .stat-pill b { font-size: 14px; }
   .wrap, .admin-body { padding: 12px; }
   .card { padding: 15px; border-radius: 18px; }
+  /* 工具栏：按钮仍收在 36px（上面 `.pt .btn` 已经赢了全局的 46px）。
+     手机上这一行装不下全部信息，按「留什么」排优先级：
+       留 标题 / 状态数字 / 主操作 / ⓘ；让位 题量副标题、计时小节、进度条宽度。
+     目标是**最多三行**（`.pt` 高 ≤165px），别再叠第四行。 */
+  .pt { padding: 7px 10px; border-radius: 16px; gap: 8px; }
+  .pt-title { font-size: 15.5px; }
+  .pt-meta { display: none; }
+  /* 中段控件整块挪到最后一行的行首（order 9 + basis 100%）。
+     它们自己内部还会再折（口算=计时胶囊+进度、语文=下拉+分段），跟标题/按钮挤在同一行
+     会叠成四行（实测 170–184px）；单独占一行之后最多三行。 */
+  .pt-mid { flex: 1 1 100%; order: 9; }
+  .pt .timer-chip .tb-say { display: none; }
+  .pt .progress-line .bar { width: clamp(52px, 15vw, 110px); }
+  .pt .sel { max-width: 40vw; }
+  .seg-btn { gap: 4px; padding: 0 10px; font-size: 12.5px; }
+  .seg-btn .n { padding: 1px 6px; font-size: 11px; }
   /* 小朋友手小，移动端把点击区再放大一点（次要按钮也保证 ≥44px） */
   .btn { min-height: 46px; }
   .btn.sm { min-height: 46px; }

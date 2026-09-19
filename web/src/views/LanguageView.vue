@@ -22,6 +22,7 @@ import { api, describeApiError } from "@/api";
 import type { LanguageImageInfo, LanguageProgress, LanguageQuestion, LanguageSet } from "@/api/types";
 import Icon from "@/components/Icon.vue";
 import LanguagePicture from "@/components/LanguagePicture.vue";
+import PageTool from "@/components/PageTool.vue";
 import { playText, stopAudio, useAudioState } from "@/composables/useAudio";
 import { TASK_DEFS, useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
@@ -387,6 +388,26 @@ watch(allDone, (v, old) => {
   ui.celebrate({ title: "9 道题全部完成！🎉", sub: "语言小达人就是你 · 这一项 +20 分" });
 });
 
+/* ------------------------------------------------------------ 工具栏备注 */
+
+/**
+ * 备注（原来散在页面上的「训练目标 / 换主题说明 / 模型配置提示」），
+ * 收进工具栏最右侧的 ⓘ —— 还没出题时连训练目标都还没有，逐条判空再拼。
+ */
+const lgNote = computed(() =>
+  [
+    set.value?.trainingGoal ? `训练目标：${set.value.trainingGoal}` : "",
+    "「换一套题」会重新出 9 道题，今天的作答记录会清掉；换主题时会避开最近用过的主题。",
+    themes.value.length ? `最近用过的主题：${themes.value.slice(0, 4).join("、")}${themes.value.length > 4 ? "…" : ""}` : "",
+    "出题用的是「故事模型」那套配置（接口地址固定为 DeepSeek）。一直失败请家长到 /admin 的「系统与数据」里确认模型名与 API Key。",
+  ]
+    .filter(Boolean)
+    .join("\n"),
+);
+
+/** 单题页的 ⓘ：只放这道题的小提示（「怎么做」留在正文里，那是题面不是备注） */
+const qNote = computed(() => q.value?.hint ?? "");
+
 onMounted(load);
 onUnmounted(() => stopAudio());
 </script>
@@ -410,90 +431,96 @@ onUnmounted(() => stopAudio());
   </section>
 
   <!-- 还没有今天的题目 -->
-  <section v-else-if="!set" class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #EAF9F1; color: var(--green-d)"><Icon name="wand" :size="19" /></span>
-      <div>
-        <h2>语言强化训练</h2>
-        <span class="sub">AI 出题 · 每天 9 道 · 说给大人听</span>
-      </div>
-    </div>
-    <div class="lg-empty">
-      还没有今天的题目哦。<br />
-      点下面的按钮，AI 会围绕一个随机主题出 9 道题：<br />
-      词语 → 搭配 → 扩句 → 改病句 → 写具体 → 排句子 → 看图观察 → 看图说话 → 写一小段。
-    </div>
-    <div class="row" style="justify-content: center">
-      <button class="btn green" type="button" :disabled="generating" @click="generate(false)">
-        <Icon name="sparkle" :size="18" />{{ generating ? "AI 正在出题…（约 20 秒）" : "生成今日训练" }}
+  <template v-else-if="!set">
+    <PageTool
+      icon="wand"
+      tint="#EAF9F1"
+      color="var(--green-d)"
+      title="语言强化训练"
+      meta="AI 出题 · 每天 9 道 · 说给大人听"
+      :note="lgNote"
+    >
+      <button class="btn green sm" type="button" :disabled="generating" @click="generate(false)">
+        <Icon name="sparkle" :size="16" />{{ generating ? "AI 正在出题…" : "生成今日训练" }}
       </button>
-    </div>
-    <p class="tip">
-      出题用的是「故事模型」那套配置（接口地址固定为 DeepSeek）。<br />
-      如果一直失败，家长可以到 <code>/admin</code> 的「系统与数据」里确认模型名与 API Key。
-    </p>
-  </section>
+    </PageTool>
+
+    <section class="card">
+      <div class="lg-empty">
+        还没有今天的题目哦。<br />
+        点右上角的按钮，AI 会围绕一个随机主题出 9 道题：<br />
+        词语 → 搭配 → 扩句 → 改病句 → 写具体 → 排句子 → 看图观察 → 看图说话 → 写一小段。
+      </div>
+    </section>
+  </template>
 
   <!-- 九宫格目录 -->
-  <section v-else-if="view === 'grid'" class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #EAF9F1; color: var(--green-d)"><Icon name="wand" :size="19" /></span>
-      <div>
-        <h2>语言强化训练</h2>
-        <span class="sub">今天 9 道题，点开哪一道就做哪一道</span>
-      </div>
-    </div>
+  <template v-else-if="view === 'grid'">
+    <PageTool
+      icon="wand"
+      tint="#EAF9F1"
+      color="var(--green-d)"
+      title="语言强化训练"
+      meta="点开哪一道就做哪一道"
+      :note="lgNote"
+    >
+      <template #mid>
+        <div class="lg-theme">
+          <span class="lg-theme-t">今日主题：{{ set.theme }}</span>
+          <span class="badge-lite">难度 {{ set.difficulty }}</span>
+          <span class="badge-lite" :class="allDone ? 'ok' : ''">完成 {{ doneCount }}/9</span>
+          <span v-if="wrongCount" class="badge-lite err">要再练 {{ wrongCount }}</span>
+        </div>
+      </template>
 
-    <div class="lg-theme">
-      <span class="lg-theme-t">今日主题：{{ set.theme }}</span>
-      <span class="badge-lite">难度 {{ set.difficulty }}</span>
-      <span class="badge-lite" :class="allDone ? 'ok' : ''">完成 {{ doneCount }}/9</span>
-      <span v-if="wrongCount" class="badge-lite err">要再练 {{ wrongCount }}</span>
-    </div>
-
-    <p v-if="set.trainingGoal" class="tip" style="margin-top: 0">训练目标：{{ set.trainingGoal }}</p>
-
-    <div class="lg-grid">
-      <button
-        v-for="(item, i) in questions"
-        :key="item.id"
-        class="lg-cell"
-        :class="statusOf(item.id)"
-        type="button"
-        @click="openQ(i)"
-      >
-        <span class="lg-no">{{ i + 1 }}</span>
-        <span class="lg-ico"><Icon :name="item.icon" :size="20" /></span>
-        <span class="lg-name">{{ item.typeName }}</span>
-        <span class="lg-tag">{{ modeLabel(item) }}</span>
-        <span class="lg-st">{{ statusText(item) }}</span>
-      </button>
-    </div>
-
-    <div class="row" style="margin-top: 16px">
       <button class="btn ghost sm" type="button" :disabled="generating" @click="generate(true)">
         <Icon name="refresh" :size="16" />{{ generating ? "正在换一套…" : "换一套题" }}
       </button>
-      <span style="font-size: 12.5px; color: var(--ink3)">
-        换主题时会避开最近用过的{{ themes.length ? `（最近用过：${themes.slice(0, 4).join("、")}${themes.length > 4 ? "…" : ""}）` : "" }}
-      </span>
-    </div>
-  </section>
+    </PageTool>
+
+    <section class="card">
+      <div class="lg-grid">
+        <button
+          v-for="(item, i) in questions"
+          :key="item.id"
+          class="lg-cell"
+          :class="statusOf(item.id)"
+          type="button"
+          @click="openQ(i)"
+        >
+          <span class="lg-no">{{ i + 1 }}</span>
+          <span class="lg-ico"><Icon :name="item.icon" :size="20" /></span>
+          <span class="lg-name">{{ item.typeName }}</span>
+          <span class="lg-tag">{{ modeLabel(item) }}</span>
+          <span class="lg-st">{{ statusText(item) }}</span>
+        </button>
+      </div>
+    </section>
+  </template>
 
   <!-- 单题作答 -->
-  <section v-else-if="q" class="card">
-    <div class="lg-qhd">
+  <template v-else-if="q">
+    <PageTool
+      icon="wand"
+      tint="#EAF9F1"
+      color="var(--green-d)"
+      title="语言强化训练"
+      :meta="`第 ${idx + 1} / 9 题 · ${q.typeName}`"
+      :note="qNote"
+    >
+      <template #head>
+        <span class="badge-lite" :class="statusOf(q.id) === 'done' ? 'ok' : statusOf(q.id) === 'wrong' ? 'err' : ''">
+          {{ statusText(q) }}
+        </span>
+      </template>
+
       <button class="btn ghost sm" type="button" @click="backToGrid()"><Icon name="back" :size="16" />九宫格</button>
-      <span class="lg-qidx">第 {{ idx + 1 }} / 9 题</span>
-      <span class="badge-lite">{{ q.typeName }}</span>
-      <span class="badge-lite" :class="statusOf(q.id) === 'done' ? 'ok' : statusOf(q.id) === 'wrong' ? 'err' : ''">
-        {{ statusText(q) }}
-      </span>
-      <span class="spacer"></span>
       <button class="btn ghost sm" type="button" @click="toggleRead()">
         <Icon :name="playing ? 'stop' : 'speakerLoud'" :size="16" />{{ playing ? "停止" : "读题目" }}
       </button>
-    </div>
+    </PageTool>
+
+    <section class="card">
 
     <p class="lg-how"><b>怎么做：</b>{{ q.howTo }}</p>
 
@@ -703,5 +730,6 @@ onUnmounted(() => stopAudio());
         下一题<Icon name="arrowRight" :size="18" />
       </button>
     </div>
-  </section>
+    </section>
+  </template>
 </template>

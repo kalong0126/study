@@ -8,12 +8,13 @@
  *   · 单句可以重复听（点句子即从这句开始）
  *   · 缓存粒度是句子，长文也不会一次合成很久
  *
- * 正文是**滚动**阅读（不是翻页）：正文区高度固定成 5 行（`--story-lines`），
- * 里面自己滚。翻页那版是按「量出来的句子坐标」切页的，可注音 ruby 的行高、
- * 字体换入的时机、平板的实际宽度都会让换行变化 —— 量得再准也会在孩子翻到一半时错位
- * （实测结论：翻页不够准确）。滚动没有这个问题：内容就是内容，读到哪里看哪里。
- * 高度仍然锁 5 行，是为了让正文区和页面其它卡片一样是一块「面板」，
- * 而不是被长文撑成一条长条。朗读时自动把当前句滚进视野（见下面的 watch）。
+ * 正文是**整页滚动**阅读（不是翻页、也不再是内层滚动）：
+ * 2026-09-19 按用户规则③去掉正文自己的滚动条 —— 页面只保留浏览器主滚动，
+ * 卡片里不许再嵌一条滚动条。之前正文高度锁 5 行、overflow-y:auto，
+ * 平板上一划就滚错层（内层滚到底才带动外层）。
+ * 翻页那版是按「量出来的句子坐标」切页的，可注音 ruby 的行高、字体换入的时机、
+ * 平板的实际宽度都会让换行变化 —— 量得再准也会在孩子翻到一半时错位（实测结论：不够准）。
+ * 现在内容就是内容：长文把页面撑开，由浏览器滚，读到哪里看哪里。
  */
 import { computed, ref, watch } from "vue";
 import { playSequence, stopAudio, useAudioState } from "@/composables/useAudio";
@@ -86,24 +87,24 @@ const textOf = (s: Sentence): string => s.tokens.map((tok) => tok.text).join("")
 
 const currentIdx = ref(-1);
 
-/** 正文滚动窗口（固定 5 行高、内部滚动） */
+/** 正文容器（整页滚动，不再自己滚） */
 const viewEl = ref<HTMLElement | null>(null);
 
 /**
- * 朗读走到下一句时把那一句滚进视野。
- * 只在它**已经看不见**的时候才滚 —— 每句都滚会让正文一直在动，孩子反而跟不住。
+ * 朗读走到下一句时把那句带进视野。
+ * 整页滚动之后「有没有滚」看的是**视口**，不再是容器：
+ * 已经能看见就不动它（每句都滚会让正文一直在动，孩子反而跟不住），
+ * 看不见才 `scrollIntoView`。`block:"center"` 让它落在视口中间，
+ * 顶栏是 sticky 的（64px），落在中间就不会被压住。
  */
 watch(currentIdx, (idx) => {
-  const view = viewEl.value;
-  if (idx < 0 || !view) return;
-  const el = view.querySelector<HTMLElement>(`.sent[data-i="${idx}"]`);
-  if (!el) return;
-  const vr = view.getBoundingClientRect();
+  const el = viewEl.value?.querySelector<HTMLElement>(`.sent[data-i="${idx}"]`);
+  if (idx < 0 || !el) return;
   const r = el.getBoundingClientRect();
-  const visible = r.top >= vr.top - 2 && r.bottom <= vr.bottom + 2;
-  if (visible) return;
-  const want = view.scrollTop + (r.top - vr.top) - view.clientHeight * 0.3;
-  view.scrollTo({ top: Math.max(0, want), behavior: "smooth" });
+  const top = 76; // 顶栏 64 + 一点余量
+  const bottom = window.innerHeight - 24;
+  if (r.top >= top && r.bottom <= bottom) return;
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
 });
 
 /* ------------------------------ 朗读 ------------------------------ */
@@ -142,8 +143,8 @@ defineExpose({ start, stop });
 <template>
   <div v-if="title" class="story-title">{{ title }}</div>
 
-  <!-- 正文区：高度固定 5 行，里面自己滚（不翻页 —— 理由见文件头注释） -->
-  <div ref="viewEl" class="story-text story-scroll">
+  <!-- 正文：普通文档流（整页由浏览器滚），不再有自己的滚动条 -->
+  <div ref="viewEl" class="story-text">
     <p v-for="(line, li) in lines" :key="li">
       <span
         v-for="s in line.sentences"
@@ -161,8 +162,6 @@ defineExpose({ start, stop });
     </p>
   </div>
 
-  <p class="tip" style="margin-top: 14px">
-    点任意一句可以从那句开始朗读，正在读的句子会高亮。
-    <template v-if="isPlaying">正在朗读：{{ currentText }}</template>
-  </p>
+  <!-- 「点句子可以朗读」这种说明已收进工具栏的 ⓘ；这里只留正在读哪一句的**实时**状态 -->
+  <p v-if="isPlaying" class="tip" style="margin-top: 14px">正在朗读：{{ currentText }}</p>
 </template>

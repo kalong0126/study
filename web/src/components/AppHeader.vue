@@ -40,6 +40,8 @@ const isHome = computed(() => route.path === "/");
 
       <div class="spacer"></div>
 
+      <!-- 窄屏放不下时靠 CSS 把这一行整体收窄（字号 / 内边距），别改文案：
+           「今日已完成 N / 6 项任务」是 nav 用例的断言文本。 -->
       <div class="stat-pill" :class="{ full }">今日已完成 <b>{{ progress.completedCount }}</b> / {{ total }} 项任务</div>
 
       <div class="energy" :title="`能量值 ${pct}%`">
