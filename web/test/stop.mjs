@@ -24,6 +24,7 @@
 import { createRequire } from "node:module";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const {
@@ -31,7 +32,9 @@ const {
 } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/node_modules/playwright-core");
 
 const BASE = process.argv[2] ?? "http://127.0.0.1:8788";
-const OUT = path.resolve("web/test/shots");
+// 截图目录按脚本自身位置推，不能用 cwd：`npm run test:stop` 时 cwd 已经是 web/，
+// 再 resolve("web/test/shots") 会错写成 web/web/test/shots（这个坑 smoke.mjs 也踩过）。
+const OUT = path.join(path.dirname(fileURLToPath(import.meta.url)), "shots");
 mkdirSync(OUT, { recursive: true });
 
 let passed = 0;

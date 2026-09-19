@@ -29,7 +29,6 @@ const { playing: isPlaying } = useAudioState();
 const reader = ref<InstanceType<typeof StoryReader> | null>(null);
 
 const hasStory = computed(() => !!story.current?.text);
-const readCount = computed(() => story.readTitles.length);
 const timerMinutes = TIMER_SECONDS / 60;
 /** 今天阅读已经完成了就别再自动开一轮倒计时 —— 那是白等 15 分钟 */
 const readingDone = computed(() => progress.isDone("reading"));
@@ -71,20 +70,6 @@ watch(
   () => story.current?.id,
   () => stopAudio(),
 );
-
-function openHistory(id: number): void {
-  const s = story.stories.find((x) => x.id === id);
-  if (s) story.load(s);
-}
-
-async function remove(title: string): Promise<void> {
-  if (!window.confirm(`确定要移除《${title}》吗？\n移除后这个主题可以再次生成。`)) return;
-  try {
-    await story.remove(title);
-  } catch (e) {
-    ui.toast(describeApiError(e));
-  }
-}
 </script>
 
 <template>
@@ -143,36 +128,6 @@ async function remove(title: string): Promise<void> {
         </svg>
         <div>{{ story.generating ? "正在写今天的故事，稍等一下下…" : "今天的故事还没写出来" }}</div>
         <div>第一次使用请先让家长在服务器的 config.yaml 里配好大模型</div>
-      </div>
-    </div>
-  </section>
-
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #E9FBF3; color: var(--green-d)">
-        <Icon name="calendar" :size="19" />
-      </span>
-      <div>
-        <h2>读过的故事</h2>
-        <span class="sub">已读过 {{ readCount }} 个主题，生成新故事时会自动避开</span>
-      </div>
-    </div>
-
-    <div class="hist">
-      <div v-if="!story.stories.length" class="wb-empty">还没有读过故事，快去生成一篇吧！</div>
-      <div
-        v-for="s in story.stories"
-        :key="s.id"
-        class="hist-item"
-        :class="{ cur: story.current?.id === s.id }"
-        style="cursor: pointer"
-        @click="openHistory(s.id)"
-      >
-        <span class="h-t">{{ s.title }}</span>
-        <span class="h-d">{{ String(s.createdAt).slice(0, 10) }}</span>
-        <button class="h-x" type="button" title="删除这条记录，之后可以再生成这个主题" @click.stop="remove(s.title)">
-          <Icon name="cross" :size="15" :stroke="2.2" />
-        </button>
       </div>
     </div>
   </section>

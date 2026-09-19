@@ -306,10 +306,34 @@ try {
       ok(`${label} 用楷体而非圆体`, /Kaiti|KaiTi|楷体/.test(fam), String(fam).slice(0, 44));
     };
 
-    // 课文原文：教材正文用楷体渲染「要照着认的字」。
-    // 选 `.lesson-text` 而不是 `.story-text`：童话正文（同一个 `.story-text`）已按用户要求
-    // 统一成站内圆体，语文课文原文另加 `.lesson-text` 走楷体（见 macaron.css）。
-    await needKai("课文原文 .lesson-text", ".lesson-text");
+    // 课文原文：用户要求「听写屋的课文内容做成和智能拼音童话一样」——
+    // 同一套字体（站内圆体）+ 同一个「固定高度的内容 DIV、内容在里面滚、整页不滚」。
+    // 这里曾经是唯一走楷体的成篇正文（`.lesson-text`），已被要求删掉。
+    const lessonFam = await famOf(".story-text");
+    lessonFam === null
+      ? ok("课文原文真的渲染出来了（否则这条断言是空转）", false, ".story-text 不在页面上")
+      : ok("课文原文用站内圆体（与童话统一）", /方正准圆简体/.test(lessonFam), String(lessonFam).slice(0, 60));
+
+    // 内容 DIV 自己滚：overflow-y 是 auto，且正文真的超出了可视高度（否则「能滚」是空转）
+    const lessonBox = await page.evaluate(() => {
+      const el = document.querySelector(".story-text");
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const lh = parseFloat(cs.lineHeight) || 0;
+      return {
+        overflowY: cs.overflowY,
+        clientH: el.clientHeight,
+        scrollH: el.scrollHeight,
+        lines: lh ? Math.round((el.clientHeight / lh) * 10) / 10 : 0,
+      };
+    });
+    lessonBox === null
+      ? ok("课文内容 DIV 存在（用来判断能不能滚）", false, "找不到 .story-text")
+      : ok(
+          "课文在内容 DIV 里滚（固定 ~5 行高、不是整页滚）",
+          lessonBox.overflowY === "auto" && lessonBox.scrollH > lessonBox.clientH + 2 && lessonBox.lines <= 5.5,
+          JSON.stringify(lessonBox),
+        );
 
     // 听写字格与手写格都要点进去才出现 —— 而这两个正是本轮修的那个 bug
     // （`font-family: "Kaiti SC", "KaiTi", inherit` 整条声明被浏览器丢掉，
@@ -367,7 +391,7 @@ try {
       !/font-family:[^;]*["']Kaiti/.test(macaron),
       (macaron.match(/font-family:[^;]*["']Kaiti[^;]*;/g) || []).join(" | ").slice(0, 120),
     );
-    ok("楷体声明至少 6 处走变量（课文/听写/手写/错题/语言/后台）", (macaron.match(/var\(--font-kai\)/g) || []).length >= 6, `${(macaron.match(/var\(--font-kai\)/g) || []).length} 处`);
+    ok("楷体声明至少 6 处走变量（听写 / 手写 / 错题汉字 / 语言句子与大字）", (macaron.match(/var\(--font-kai\)/g) || []).length >= 6, `${(macaron.match(/var\(--font-kai\)/g) || []).length} 处`);
 
     // 切片 CSS 由 scripts/build-local-font.py 生成，手改必被覆盖 —— 这里守住生成器的两条硬约束
     const fzc = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-fzzhunyuan.css"), "utf8");

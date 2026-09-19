@@ -401,19 +401,12 @@ try {
       return [...document.fonts].some((f) => f.family.includes("方正准圆简体") && f.status === "loaded");
     });
     ok("字体切片真的加载成功（不是只剩一句声明）", fontLoaded === true, String(fontLoaded));
-    // 语文课文原文是「要照着认的字」，必须楷体（`.lesson-text`）。这条以前踩过坑：
-    // 字体列表里混进 `inherit` 这种 CSS-wide 关键字会让整条声明判无效，楷体白设、悄悄退回黑体。
-    // 注意：童话正文（`.story-text`）**改成圆体**了（与全站统一），所以这里只能量 `.lesson-text`。
-    const kaiFont = await page.evaluate(() => {
-      const d = document.createElement("div");
-      d.className = "story-text lesson-text";
-      document.body.appendChild(d);
-      const f = getComputedStyle(d).fontFamily;
-      d.remove();
-      return f;
-    });
-    ok("语文课文原文用楷体（识字用规范字形）", /Kaiti|KaiTi|楷体/.test(kaiFont), kaiFont.slice(0, 64));
-    const storyFont = await page.evaluate(() => {
+    // 成篇的正文（童话正文 / 语文课文原文）都用站内圆体 —— 用户明确要求
+    // 「听写屋的课文和智能拼音童话一样」，楷体的那个例外（`.lesson-text`）已经删掉，
+    // 楷体现在只留给「单个要照着认、照着写的字」（.zi-face / .hw-cell 那几处）。
+    // 这条以前踩过坑：字体列表里混进 `inherit` 这种 CSS-wide 关键字会让整条声明判无效，
+    // 楷体白设、悄悄退回黑体。
+    const bodyTextFont = await page.evaluate(() => {
       const d = document.createElement("div");
       d.className = "story-text";
       document.body.appendChild(d);
@@ -421,7 +414,7 @@ try {
       d.remove();
       return f;
     });
-    ok("童话正文用站内圆体（不再用楷体）", /方正准圆简体/.test(storyFont), storyFont.slice(0, 64));
+    ok("成篇正文（童话 / 课文）用站内圆体", /方正准圆简体/.test(bodyTextFont), bodyTextFont.slice(0, 64));
   }
 
   /* ————————————————————————————— 2. 开局：只有第一关能走 */

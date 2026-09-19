@@ -72,6 +72,35 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 
+// /story 现在是「一进页面就自动生成今日童话」。这一条要是不打桩：慢、花钱，而且生成中
+// 按钮文案会变成「正在写故事…」，让下面「童话页有按钮」的断言随模型快慢抖 —— 所以固定给一篇小童话。
+// （真实生成链路由 server 的 api.test 和新加的 web/test/story-scroll.mjs 负责守。）
+const STUB_STORY = {
+  id: 9001,
+  title: "《冒烟测试用小童话》",
+  text: [
+    "小水珠住在一朵软软的白云里。",
+    "有一天，它听见大地在喊渴。",
+    "它就和小伙伴们一起跳了下去。",
+    "它落进一条小溪，溪水叮叮咚咚地唱歌。",
+    "后来，它又回到了天上，变成一朵白云。",
+  ].join("\n"),
+};
+await page.route("**/api/story/today", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ story: STUB_STORY }),
+  }),
+);
+await page.route("**/api/story/generate", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...STUB_STORY, charCount: 100, avoidCount: 0, ms: 0, model: "stub", cached: false }),
+  }),
+);
+
 const consoleErrors = [];
 page.on("console", (m) => {
   if (m.type() !== "error" && m.type() !== "warning") return;
@@ -208,8 +237,16 @@ await page.screenshot({ path: path.join(OUT, "03-chinese.png"), fullPage: true }
 // ——————————————————————————————————————— 4. 童话
 step("童话 /story 渲染");
 await goto("/story", ".wrap");
-const storyBtn = await page.locator("button", { hasText: /生成|童话|来一个/ }).count();
-storyBtn > 0 ? pass(`童话页按钮 ${storyBtn} 个`) : fail("童话页没有生成按钮");
+await page.waitForSelector(".story-text", { timeout: 10000 }).catch(() => {});
+const storyHd = await page.locator("h2", { hasText: "智能拼音童话" }).count();
+storyHd > 0 ? pass("童话页渲染出「智能拼音童话」") : fail("童话页没有渲染出「智能拼音童话」");
+const storyBody = await page.locator(".story-text").count();
+storyBody > 0 ? pass(`童话正文已就绪（${storyBody} 块）`) : fail("童话页没有正文");
+const storyBtn = await page.locator(".story-bar button").count();
+storyBtn > 0 ? pass(`童话页操作行按钮 ${storyBtn} 个`) : fail("童话页操作行没有按钮");
+// 用户要求：童话页不再显示「读过的故事」那张列表卡（去重仍在后端按已读标题做）
+const histHd = await page.locator("h2", { hasText: "读过的故事" }).count();
+histHd === 0 ? pass("童话页不再显示「读过的故事」列表") : fail("童话页仍然显示「读过的故事」");
 await page.screenshot({ path: path.join(OUT, "04-story.png"), fullPage: true });
 
 // ——————————————————————————————————————— 5. 错题本

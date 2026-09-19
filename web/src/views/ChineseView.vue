@@ -230,7 +230,8 @@ watch(
         <span v-if="newCharSet.size" class="sub">红色是本课生字，点「朗读课文」听全文</span>
       </div>
 
-      <div v-if="paragraphs.length" class="story-text lesson-text">
+      <!-- 课文正文和「智能拼音童话」一样：用固定高度的内容 DIV 自己滚，不许整页跟着滚 -->
+      <div v-if="paragraphs.length" class="story-text story-scroll">
         <p v-for="(segs, pi) in paragraphs" :key="pi">
           <template v-for="(seg, si) in segs" :key="si">
             <span v-if="seg.isNew" class="lesson-new">{{ seg.text }}</span>

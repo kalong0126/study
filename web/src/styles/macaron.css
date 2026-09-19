@@ -30,17 +30,20 @@
 
      后面那串是兜底：切片没覆盖到的字依次退回系统圆体、再到黑体，不能省。
 
-     --font-kai：识字字体。课文原文、生字、手写格这类「要照着认、照着写的字」必须用楷体 ——
-     楷体是识字教学的标准字形；准圆的笔形是设计过的（末笔更圆、笔画等粗），
-     孩子照着它记笔画会记错。这条不参与上面的讨论：楷体的数字本身就是规整的。 */
+     --font-kai：识字字体。只给「单个要照着认、照着写的字」用（生字卡 / 手写格 / 错题汉字 /
+     语言练习的大字与句子 / 后台课文编辑）。楷体是识字教学的标准字形；准圆的笔形是设计过的
+     （末笔更圆、笔画等粗），孩子照着它记笔画会记错。这条不参与上面的讨论：楷体的数字本身就是规整的。
+     ⚠️ 整段成篇的正文（童话正文、语文课文原文）**一律走 --font-round**，不再走楷体 ——
+     两页共用同一套版式，字体也要一致，否则同一屏里看着像两个 App。 */
   --font-round: "方正准圆简体", "圆体-简", "Yuanti SC", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-kai: "Kaiti SC", "KaiTi", "STKaiti", "楷体", "FangSong", serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
-/* 全站字体走 --font-round（方正准圆简体）；识字内容单独用 --font-kai，
-   见下面的 .lesson-text（语文课文原文）与 .zi-face / .hw-cell 等字卡。
+/* 全站字体走 --font-round（方正准圆简体）—— 连成篇的正文（童话、语文课文）也是它；
+   只有「单个要照着认、照着写的字」才单独走 --font-kai，见 .zi-face / .hw-cell /
+   .lg-word-big / .wb-item .w-char / .row-edit .re-ch。
    字重交给浏览器合成加粗：方正准圆简体只有真实 400 一档，标题/数字的 700-900
    由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
    不再合成，全站粗细会一样（详见 font-fzzhunyuan.css 顶部说明）。 */
@@ -601,16 +604,15 @@ a { color: var(--blue-d); }
 .story-title { font-size: 19px; font-weight: 800; color: var(--purple-d); margin: 0 0 12px; letter-spacing: .5px; }
 /* 课文原文 / 童话正文：整段读的正文一律走站内圆体（--font-round），跟页面其它文字统一；
    只有「单个要照着认、照着写的字」（字卡 / 手写格 / 生字表）才用楷体，见
-   .lesson-text（语文课文原文）、.zi-face、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
+   .zi-face、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
    注意这条以前写的是 `..., "STKaiti", inherit` —— `inherit` 是 CSS-wide 关键字，
    不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。
    `--lh` 是行高：下面的 `.story-scroll` 用它算「一屏 5 行有多高」，行高只写这一处。 */
 .story-text { --lh: 2.75; font-size: 30px; line-height: var(--lh); letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: var(--font-round); }
-/* 课文原文（语文页）单独走楷体：它是「照着认、跟着读」的教材正文，
-   楷体才是识字教学的标准字形；童话正文（.story-text 本体）走站内圆体，
-   两者共用版式但字体不同，所以在这里按用途分开，而不是在 body 上分。
-   ⚠️ 这条不能省：`.story-text` 现在是圆体，漏了它语文课文会跟着变圆。 */
-.lesson-text { font-family: var(--font-kai); }
+/* 课文原文（语文页）与童话正文用同一套版式、同一套字体（都是 .story-text 本体）。
+   听写屋的课文曾经单独走楷体，用户反馈「字体显示不对」→ 已统一回站内圆体，
+   所以这里不再有 `.lesson-text` 这个例外。楷体只留给「单个要照着认、照着写的字」：
+   .zi-face / .hw-cell / .lg-word-big / .wb-item .w-char / .row-edit .re-ch。 */
 .story-text p { margin: 0 0 14px; }
 .story-text ruby { ruby-position: over; ruby-align: center; margin: 0 2px; }
 .story-text rt { font-size: .42em; color: var(--blue-d); font-weight: 700; letter-spacing: 0; line-height: 1.15; }
@@ -658,15 +660,8 @@ a { color: var(--blue-d); }
 /* 行内的计时器比数学页那枚小一号，且颜色交给胶囊（点击暂停态是绿的） */
 .story-bar .timer-clock { font-size: 26px; min-width: auto; letter-spacing: 1px; color: inherit; }
 .story-bar-tip { margin: 10px 0 0; font-size: 12.5px; color: var(--ink3); line-height: 1.6; }
-.hist { display: flex; flex-direction: column; gap: 8px; max-height: 230px; overflow-y: auto; }
-.hist-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: #FAFCFF; border: 1px solid var(--line2); font-size: 13.5px; transition: .2s; }
-.hist-item:hover { background: #F3F9FF; }
-.hist-item .h-t { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hist-item .h-d { flex: none; font-size: 11.5px; color: var(--ink3); }
-.hist-item .h-x { flex: none; width: 30px; height: 30px; border: none; background: transparent; border-radius: 9px; color: var(--ink3); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.hist-item .h-x:hover { background: #FFECEC; color: var(--red-d); }
-.hist-item .h-x svg { width: 15px; height: 15px; }
-.hist-item.cur { border-color: #C9BCFF; background: #F7F4FF; }
+/* 童话页原来下面还有一张「读过的故事」列表卡（.hist / .hist-item），
+   用户要求不再显示，卡片与这套样式一起删掉了 —— 去重仍在后端按标题列表做。 */
 
 /* ---------- 错题本 ---------- */
 .wb-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
