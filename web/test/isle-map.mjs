@@ -248,6 +248,78 @@ try {
       `胶囊顶 ${capOnIsle.capTop.toFixed(0)} vs 岛底 ${capOnIsle.artBottom.toFixed(0)}，交叠 ${Math.round(capOnIsle.ov)}px²`,
     );
 
+    // 岛名只压岛的**底座**，不能压到岛上的房子/树（用户明确要求）。
+    // 判据：岛名胶囊的上下边都落在素材高度的 60%–100% 之间。
+    // 60% 不是随手写的：六张 3D 素材逐横带量过（按 5% 一条数「不透明覆盖率 + 主色」），
+    // 功能物体（房子/树/书/卷轴）的最低点最高的是 video.png 的 ~60%
+    //（math 48% / dictation 52% / language 55% / reading 55% / review 57% / video 60%），
+    // 草坪约 55%–78%、土层底座约 80%–92%。所以「顶边 ≥ 60%」＝名字只在底座上，
+    // 「底边 ≤ 100%」＝它还压在岛上（不是又漂到岛外面去了）。
+    const capGeom = await page.locator("button.isle").evaluateAll((els) =>
+      els.map((el) => {
+        const art = el.querySelector(".isle-art").getBoundingClientRect();
+        const tag = el.querySelector(".isle-tag").getBoundingClientRect();
+        const btn = el.querySelector(".isle-wait, .isle-go, .isle-flag").getBoundingClientRect();
+        return {
+          name: el.querySelector(".isle-tag b").textContent.trim(),
+          tagTopRatio: (tag.top - art.top) / art.height,
+          tagBottomRatio: (tag.bottom - art.top) / art.height,
+          btnBottomRatio: (btn.bottom - art.top) / art.height,
+        };
+      }),
+    );
+    const geomBad = capGeom.filter((g) => !(g.tagTopRatio >= 0.6 && g.tagBottomRatio <= 1));
+    ok(
+      "六座岛的岛名都只压底座、不压房子/树",
+      capGeom.length === 6 && geomBad.length === 0,
+      capGeom
+        .map((g) => `${g.name} ${(g.tagTopRatio * 100).toFixed(0)}–${(g.tagBottomRatio * 100).toFixed(0)}%`)
+        .join(" | "),
+    );
+
+    // 三块（地图 / 进度带 / 学习小档案）被同一个外框框起来 ——
+    // 光有一条 .home-frame 不算数：要确认它真是这三块的父节点，而且三块都落在框内。
+    const framed = await page.evaluate(() => {
+      const f = document.querySelector(".home-frame");
+      if (!f) return null;
+      const fr = f.getBoundingClientRect();
+      const kids = [...f.children].map((c) => ({
+        cls: c.className,
+        inside:
+          c.getBoundingClientRect().left >= fr.left - 1 &&
+          c.getBoundingClientRect().right <= fr.right + 1 &&
+          c.getBoundingClientRect().top >= fr.top - 1 &&
+          c.getBoundingClientRect().bottom <= fr.bottom + 1,
+        padTop: Math.round(c.getBoundingClientRect().top - fr.top),
+      }));
+      return { kids, radius: getComputedStyle(f).borderTopLeftRadius, border: getComputedStyle(f).borderTopWidth };
+    });
+    ok(
+      "三块收在同一个外框里（地图 / 进度带 / 学习小档案）",
+      !!framed &&
+        framed.kids.length === 3 &&
+        /isle-card/.test(framed.kids[0].cls) &&
+        /isle-track/.test(framed.kids[1].cls) &&
+        /isle-stats/.test(framed.kids[2].cls),
+      JSON.stringify(framed?.kids.map((k) => k.cls)),
+    );
+    ok(
+      "外框真的框住了三块，且间距一致（不是只有一条边框线）",
+      !!framed && framed.kids.every((k) => k.inside) && new Set(framed.kids.map((k) => k.padTop)).size >= 1 && framed.kids[0].padTop >= 10,
+      JSON.stringify(framed?.kids.map((k) => k.padTop)),
+    );
+    // 外框圆角要跟内层卡片「同心」：20px 卡片 + 14px 内边距 → 34px
+    ok("外框圆角与内层卡片同心（20 + 14 = 34px）", framed?.radius === "34px", `${framed?.radius} / 描边 ${framed?.border}`);
+
+    // 家长后台的说明（课文库几篇、/admin 在哪）从孩子端整段拿掉：
+    // 孩子端不该出现任何指向家长后台的说明文字，家长知道 /admin 就够了。
+    const kidText = await page.locator("main.wrap").innerText();
+    ok(
+      "孩子端不再出现「课文库 / 内容后台」的说明",
+      (await page.locator(".isle-note").count()) === 0 && !/课文库|内容后台/.test(kidText),
+      kidText.replace(/\s+/g, " ").slice(-70),
+    );
+
     // 奖励宝箱也换成了 3D 素材图，同样要确认图真的解码出来了
     const chestArt = await page
       .locator(".tk-chest .tk-chest-art")
@@ -407,6 +479,26 @@ try {
     const dir = path.join(REPO, "web", "test", "shots");
     fs.mkdirSync(dir, { recursive: true });
     await page.screenshot({ path: path.join(dir, "isle-map-start.png"), fullPage: true });
+
+    // 局部放大图：这几处都是「一眼看上去对不对」的判断（岛名压在哪儿、连线断没断、
+    // 外框收没收住），整页缩略图看不出来。改版式时先看这几张。
+    const zoom = path.join(dir, "isle-shot");
+    fs.mkdirSync(zoom, { recursive: true });
+    for (const [name, sel] of [
+      ["01-track", ".isle-track"],
+      ["02-hero", ".isle-card"],
+      ["03-stats", ".isle-stats"],
+      ["04-isle-one", "button.isle"],
+      ["06-frame", ".home-frame"],
+    ]) {
+      await page.locator(sel).first().screenshot({ path: path.join(zoom, `${name}.png`) });
+    }
+    // 平板宽度：地图转竖向，岛名与状态胶囊必须回到同一行、不再叠岛
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.waitForTimeout(400);
+    await page.locator(".isle-card").first().screenshot({ path: path.join(zoom, "05-tablet-hero.png") });
+    await page.setViewportSize({ width: 1200, height: 900 });
+    await page.waitForTimeout(400);
   }
 
   /* ————————————————————————————— 3. 点锁着的岛：拦住 + 说清先做哪一关 */

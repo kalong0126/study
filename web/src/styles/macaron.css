@@ -125,6 +125,25 @@ a { color: var(--blue-d); }
 .fade-leave-active { display: none; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
+/* ---------- 今日面板外框 ----------
+   「学习小岛地图 / 路线进度 / 学习小档案」三块是同一件事的三段（下一步去哪 → 走到哪了 →
+   攒下了什么），散着摆像三张互不相干的卡；这一层把它们框成一个整体。
+   框本身不投影、不加标题、不加操作：浅底 + 细描边，权重全让给内层卡片，
+   它的职责只有「分组」——告诉眼睛「这三块是一套」。
+
+   圆角按**同心圆角**算：内层卡片 20px + 本框内边距 14px = 34px。
+   两层边线等距，四角才是干净的；随手写个 24px 会在角上露出一圈宽窄不一的缝。 */
+.home-frame {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14px; border-radius: 34px;
+  background: #F8FBFF;
+  border: 1.5px solid #E4EFFA;
+  box-shadow: 0 6px 22px rgba(120, 160, 205, .10);
+}
+/* 内层自带的下外边距（.card / .isle-stats 各有 16px）在框里会变成「最后多出一截空白」，
+   把间距统一交给 gap 一处管：框内每块都清零。 */
+.home-frame > * { margin-bottom: 0; }
+
 /* ---------- 首页 · 学习小岛地图 ----------
    六座岛串成一条虚线航线，完成一座才解锁下一座。奖励（岛上的 +N、终点的宝箱）
    直接钉在进度的位置上，不另开一块「积分区」。
@@ -228,32 +247,37 @@ a { color: var(--blue-d); }
 
 /* 岛上不再挂「锁」角标：锁只出现在岛名下面那枚「待解锁」胶囊里。
    同一个意思在一座岛上写两遍（角标一把锁 + 胶囊一把锁），视觉上只是噪音。
-   位置从「岛座右下角」提到 26%：岛名 + 状态胶囊现在叠在岛座下半部分，
-   贴底摆会被那两颗胶囊压住。26% 正好落在草地右缘，和中间的岛名并排。 */
-.isle-mark { position: absolute; right: 0; bottom: 26%; }
+   位置在岛座右缘、贴着岛名胶囊**上方**：岛名与状态胶囊整体下移到岛底座后（见 .isle-cap），
+   绿勾必须跟着往上让，否则正好压在岛名上。41% 落在草坪右缘、功能物体右侧的空处。 */
+.isle-mark { position: absolute; right: 0; bottom: 41%; }
 .isle-mark.ok { width: 25px; height: 25px; }
 .isle-mark.ok svg { width: 25px; height: 25px; display: block; filter: drop-shadow(0 2px 5px rgba(46, 156, 114, .4)); }
 
 /* 岛名胶囊：白底 + 米色描边 + 大圆角，与下方那颗「出发 / 待解锁」胶囊是同一套形状语言。
    只装岛名一行 —— 以前进度小字也挤在这里，一行变两行就把六座岛的基线拉得参差不齐；
-   岛名本身不折行（「错题修理站」5 个字在 1/6 格里放得下），折了就该缩短文案而不是换行。 */
+   岛名本身不折行（「错题修理站」5 个字在 1/6 格里放得下），折了就该缩短文案而不是换行。
+   上下内边距收成 4px（原 5px）：两颗胶囊加起来要能从「房子下沿」一路摆到「土层底座」，
+   这点高度是量出来的余量 —— 竖向少 1px，岛名就能多避开房子 1px。 */
 .isle-tag {
   display: flex; align-items: center; justify-content: center;
-  min-width: 74px; max-width: 100%; padding: 5px 14px;
+  min-width: 74px; max-width: 100%; padding: 4px 13px;
   background: #fff; border: 1.5px solid #EDF1F7; border-radius: 999px;
   box-shadow: 0 3px 10px rgba(70, 120, 170, .15);
 }
 .isle-tag b { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.3; letter-spacing: .2px; text-align: center; white-space: nowrap; }
 
-/* 岛名 + 状态胶囊整块叠在岛座上（不是挂在岛下面）。
-   两块一起往下对齐：胶囊贴着岛座底缘（一半压在水面上），岛名正好落在草地上 ——
-   3D 素材画布是 360×330，草地大约在 y 45%–75%，`bottom: 2%` 起往上摞正好压住这一段。
+/* 岛名 + 状态胶囊整块叠在岛的**底座**上（不是挂在岛下面，也不压岛上的房子）。
+   两块一起往下对齐：胶囊骑在岛座底缘（一半压在水面上），岛名落在草地上 ——
+   3D 素材画布是 360×330，逐带量过六张图：功能物体（房子/树/书/卷轴）都在 y 60% 以上，
+   草坪大致 y 55%–78%、土层底座 y 80%–92%。
+   所以整块下移到 `bottom: -6%`：岛名顶边落在 y ≈ 63%，正好在房子下沿之下、
+   草坪与土层上 —— 「只遮底座，不遮房子」就是这条。
    宽度给满 + 居中，是因为名字长短不一（「口算岛」3 字、「错题修理站」5 字），
    要的都是「在岛中间」，而不是「从岛左边排起」。 */
 .isle-cap {
-  position: absolute; left: 50%; bottom: 2%; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: -6%; transform: translateX(-50%);
   z-index: 2;
-  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
 
 /* 岛名下面那颗按钮：同一形状、三种状态 —— 出发（主线，蓝）/ 去看看（工具站，白描边）/
@@ -261,7 +285,7 @@ a { color: var(--blue-d); }
    不用去分辨三种排版的差别。三者都是 1.5px 描边，高度才是齐的。 */
 .isle-go {
   display: inline-flex; align-items: center; gap: 2px;
-  padding: 4px 11px 4px 14px; border-radius: 999px;
+  padding: 3px 11px 3px 13px; border-radius: 999px;
   border: 1.5px solid transparent;
   background: linear-gradient(135deg, #7FC5F0, #55ABE3);
   color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: .5px;
@@ -274,7 +298,7 @@ a { color: var(--blue-d); }
    三态同形状、只有颜色不同，一排扫过去才知道「这三格是同一类东西，只是状态不一样」。 */
 .isle-flag {
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 4px 12px; border-radius: 999px;
+  padding: 3px 12px; border-radius: 999px;
   background: #E9F9F1; border: 1.5px solid #C6EEDA;
   color: #2E9C72; font-size: 12px; font-weight: 800; letter-spacing: .3px;
 }
@@ -284,7 +308,7 @@ a { color: var(--blue-d); }
    全靠这颗胶囊说「还锁着」—— 它必须够显眼，又不能说成一整句话（一行放不下）。 */
 .isle-wait {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 12px; border-radius: 999px;
+  padding: 3px 12px; border-radius: 999px;
   background: #fff; border: 1.5px solid #E6EBF2;
   color: #6E7D8E; font-size: 12px; font-weight: 800; letter-spacing: .3px;
   box-shadow: 0 3px 9px rgba(130, 150, 175, .18);
@@ -394,7 +418,6 @@ a { color: var(--blue-d); }
 .stat-n { font-size: 27px; font-weight: 900; line-height: 1.12; color: var(--c); font-variant-numeric: tabular-nums; }
 .stat-l { font-size: 13px; font-weight: 800; color: var(--ink2); }
 .stat-t { font-size: 11.5px; color: var(--ink3); line-height: 1.45; }
-.isle-note { margin-top: 0; }
 
 /* 窄屏（平板竖屏 / 手机）：横排六座岛挤不下 —— 改成竖向路线，
    左边一列岛、右边文字；横排航线 SVG 收起，海洋背景图也换回浅蓝渐变

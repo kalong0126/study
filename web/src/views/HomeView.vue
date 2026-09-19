@@ -36,7 +36,6 @@ import artChest from "@/assets/icons/chest.png";
 import artTree from "@/assets/icons/tree.png";
 import artTarget from "@/assets/icons/target.png";
 import artBook from "@/assets/icons/book.png";
-import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
 import { TASK_DEFS, useProgressStore, type TaskDef } from "@/stores/progress";
 import { useStoryStore } from "@/stores/story";
@@ -46,7 +45,6 @@ import type { TaskKey } from "@/api/types";
 const router = useRouter();
 const progress = useProgressStore();
 const mastery = useMasteryStore();
-const content = useContentStore();
 const story = useStoryStore();
 const ui = useUiStore();
 
@@ -206,125 +204,129 @@ const stats = computed(() => [
 </script>
 
 <template>
-  <section class="card isle-card">
-    <!-- 标题不是「卡片头」，而是这片海的一部分：绝对定位压在天空带上，
-         海铺在整块 .isle-card 上（见 macaron.css 的 .isle-card）。
-         太阳用 DOM 图标画 —— 背景图里原本也有一轮太阳，补天空时抹掉了：
-         那个位置正好是标题文字和第一座岛，两个太阳也会打架。 -->
-    <div class="card-hd isle-hd">
-      <span class="ico isle-sun"><Icon name="sun" :size="30" /></span>
-      <div>
-        <h2>今天的学习小岛</h2>
-        <span class="sub">{{ mapSub }}</span>
+  <!-- 三块收进同一个外框：地图 / 进度带 / 学习小档案 本来就是同一件事的三段
+       （下一步去哪 → 走到哪了 → 攒下了什么），散着摆像三张互不相干的卡，
+       框起来才读得出「这是今天的整块面板」。
+       外框只负责框住它们：浅底 + 细描边、不投影、不加标题也不加操作 ——
+       视觉权重仍然全在内层卡片上，框只是把这一组和页面上别的东西分开。
+       圆角按**同心圆角**算：内层 20px + 外框内边距 14px = 34px；
+       随手写 24px 的话，两层边线在四角会露出宽窄不一的缝。 -->
+  <div class="home-frame">
+    <section class="card isle-card">
+      <!-- 标题不是「卡片头」，而是这片海的一部分：绝对定位压在天空带上，
+           海铺在整块 .isle-card 上（见 macaron.css 的 .isle-card）。
+           太阳用 DOM 图标画 —— 背景图里原本也有一轮太阳，补天空时抹掉了：
+           那个位置正好是标题文字和第一座岛，两个太阳也会打架。 -->
+      <div class="card-hd isle-hd">
+        <span class="ico isle-sun"><Icon name="sun" :size="30" /></span>
+        <div>
+          <h2>今天的学习小岛</h2>
+          <span class="sub">{{ mapSub }}</span>
+        </div>
+        <span class="isle-cheer">加油！你一定可以的！</span>
       </div>
-      <span class="isle-cheer">加油！你一定可以的！</span>
-    </div>
 
-    <!-- 六座岛：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
-         这块自己没有背景 —— 海是 .isle-card 上那张图，它从标题一直铺到卡片底。 -->
-    <div class="isle-map">
-      <svg class="isle-road" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
-        <path :d="roadPath" />
-      </svg>
+      <!-- 六座岛：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
+           这块自己没有背景 —— 海是 .isle-card 上那张图，它从标题一直铺到卡片底。 -->
+      <div class="isle-map">
+        <svg class="isle-road" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
+          <path :d="roadPath" />
+        </svg>
 
-      <button
-        v-for="it in isles"
-        :key="it.key"
-        class="isle"
-        :class="it.state"
-        type="button"
-        :style="{ '--i': it.i, '--dy': `${ISLE_DY[it.i]}%`, '--c': it.color }"
-        :aria-label="
-          it.state === 'locked'
-            ? `${it.name}：待解锁，先闯过「${progress.currentTaskName}」`
-            : `${it.name}：${STATE_LABEL[it.state]}`
-        "
-        @click="go(it)"
-      >
-        <span class="isle-art">
-          <!-- 整座功能岛是一张透明底 3D 素材（岛座+功能物体一体，水面投影已烤进 PNG），
-               当前关注吸圈、奖励星标、通关绿勾都叠在这一层上。
-               未解锁的岛**不做灰度**：整座岛还是全彩的，只在岛名下面换成「🔒 待解锁」胶囊。 -->
-          <img class="isle-obj" :src="ISLE_ART[it.key]" alt="" draggable="false" />
+        <button
+          v-for="it in isles"
+          :key="it.key"
+          class="isle"
+          :class="it.state"
+          type="button"
+          :style="{ '--i': it.i, '--dy': `${ISLE_DY[it.i]}%`, '--c': it.color }"
+          :aria-label="
+            it.state === 'locked'
+              ? `${it.name}：待解锁，先闯过「${progress.currentTaskName}」`
+              : `${it.name}：${STATE_LABEL[it.state]}`
+          "
+          @click="go(it)"
+        >
+          <span class="isle-art">
+            <!-- 整座功能岛是一张透明底 3D 素材（岛座+功能物体一体，水面投影已烤进 PNG），
+                 当前关注吸圈、奖励星标、通关绿勾都叠在这一层上。
+                 未解锁的岛**不做灰度**：整座岛还是全彩的，只在岛名下面换成「🔒 待解锁」胶囊。 -->
+            <img class="isle-obj" :src="ISLE_ART[it.key]" alt="" draggable="false" />
 
-          <span v-if="it.reward > 0" class="isle-star" :title="`完成可得 ${it.reward} 分`">
-            +{{ it.reward }}
+            <span v-if="it.reward > 0" class="isle-star" :title="`完成可得 ${it.reward} 分`">
+              +{{ it.reward }}
+            </span>
+
+            <span v-if="it.state === 'done'" class="isle-mark ok" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="11" fill="#3FBF8F" />
+                <path
+                  d="M7 12.4 10.4 15.8 17 8.6"
+                  stroke="#fff"
+                  stroke-width="2.4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
           </span>
 
-          <span v-if="it.state === 'done'" class="isle-mark ok" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <circle cx="12" cy="12" r="11" fill="#3FBF8F" />
-              <path
-                d="M7 12.4 10.4 15.8 17 8.6"
-                stroke="#fff"
-                stroke-width="2.4"
-                fill="none"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+          <!-- 岛名 + 状态胶囊整块**叠在岛座底座上**，不再挂在岛下面。
+               挂下面时每座岛实际占的高度是「岛 + 两行字」，六座并排就把地图下沿顶满，
+               岛只好缩着画；叠上去以后岛是画面主体，那两行字是贴在岛底座上的标牌 ——
+               像参考图那样：名字写在岛的底座上，不是漂在岛外面，也不去压岛上的房子/树。
+               （窄屏是横排卡片，这一块会回到文档流、与岛名并排，见 macaron.css 的断点。） -->
+          <span class="isle-cap">
+            <span class="isle-tag"><b>{{ it.name }}</b></span>
+
+            <span v-if="it.state === 'current' || it.state === 'open'" class="isle-go" :class="{ soft: it.state === 'open' }">
+              {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
+            </span>
+            <span v-else-if="it.state === 'done'" class="isle-flag"><Icon name="check" :size="13" :stroke="3.2" />已通关</span>
+            <span v-else class="isle-wait"><Icon name="lock" :size="12" :stroke="2.4" />待解锁</span>
           </span>
-        </span>
-
-        <!-- 岛名 + 状态胶囊整块**叠在岛座上**，不再挂在岛下面。
-             挂下面时每座岛实际占的高度是「岛 + 两行字」，六座并排就把地图下沿顶满，
-             岛只好缩着画；叠上去以后岛是画面主体，那两行字是贴在岛上的标牌 ——
-             和参考图一样：名字写在岛的草地上，不是漂在岛外面。
-             （窄屏是横排卡片，这一块会回到文档流、与岛名并排，见 macaron.css 的断点。） -->
-        <span class="isle-cap">
-          <span class="isle-tag"><b>{{ it.name }}</b></span>
-
-          <span v-if="it.state === 'current' || it.state === 'open'" class="isle-go" :class="{ soft: it.state === 'open' }">
-            {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
-          </span>
-          <span v-else-if="it.state === 'done'" class="isle-flag"><Icon name="check" :size="13" :stroke="3.2" />已通关</span>
-          <span v-else class="isle-wait"><Icon name="lock" :size="12" :stroke="2.4" />待解锁</span>
-        </span>
-      </button>
-    </div>
-  </section>
-
-  <!-- 路线进度：今天完成几关 + 每关一个编号节点 + 终点宝箱。
-       窄屏下只留「完成数 + 宝箱」—— 竖向地图已经把每一关都写清楚了，再来一排节点是重复的。 -->
-  <section class="card isle-track" :class="{ full: cleared }">
-    <div class="tk-count">
-      <span class="tk-lbl">今天完成</span>
-      <b>{{ progress.completedCount }}</b>
-      <span class="tk-tot">/ {{ TASK_DEFS.length }}</span>
-    </div>
-
-    <ol class="tk-dots">
-      <li v-for="it in isles" :key="it.key" :class="it.state">
-        <span class="tk-dot">
-          <Icon v-if="it.state === 'done'" name="check" :size="13" :stroke="3" />
-          <template v-else>{{ it.i + 1 }}</template>
-        </span>
-        <span class="tk-name">{{ it.name }}</span>
-      </li>
-    </ol>
-
-    <div class="tk-chest" :class="{ on: cleared }" :title="cleared ? '宝箱打开了！' : '走完六座小岛就能打开宝箱'">
-      <img class="tk-chest-art" :src="artChest" alt="" draggable="false" />
-      <span class="tk-chest-tip">{{ cleared ? "宝箱开了！" : "全部走完开宝箱" }}</span>
-    </div>
-  </section>
-
-  <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励）。
-       不再套一层白卡：套上之后这三块就只是「一张卡里的三个格子」，
-       三行长得一样的数字；拆成独立卡、各自一色，才像三枚并列的徽章。 -->
-  <section class="isle-stats">
-    <div v-for="s in stats" :key="s.l" class="stat-card" :style="{ background: s.bg, '--c': s.c }">
-      <span class="stat-ico"><img class="stat-art" :src="s.art" alt="" draggable="false" /></span>
-      <div class="stat-body">
-        <b class="stat-n">{{ s.n }}</b>
-        <span class="stat-l">{{ s.l }}</span>
-        <span class="stat-t">{{ s.tip }}</span>
+        </button>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <p class="tip isle-note">
-    当前课文库共 {{ content.lessons.length }} 篇课文。家长可以登录内容后台继续录制新的篇章，孩子这边立刻就能选到。<br />
-    （内容后台与数据备份都在 <code>/admin</code>，只能靠网址打开，孩子端不放入口。）
-  </p>
+    <!-- 路线进度：今天完成几关 + 每关一个编号节点 + 终点宝箱。
+         窄屏下只留「完成数 + 宝箱」—— 竖向地图已经把每一关都写清楚了，再来一排节点是重复的。 -->
+    <section class="card isle-track" :class="{ full: cleared }">
+      <div class="tk-count">
+        <span class="tk-lbl">今天完成</span>
+        <b>{{ progress.completedCount }}</b>
+        <span class="tk-tot">/ {{ TASK_DEFS.length }}</span>
+      </div>
+
+      <ol class="tk-dots">
+        <li v-for="it in isles" :key="it.key" :class="it.state">
+          <span class="tk-dot">
+            <Icon v-if="it.state === 'done'" name="check" :size="13" :stroke="3" />
+            <template v-else>{{ it.i + 1 }}</template>
+          </span>
+          <span class="tk-name">{{ it.name }}</span>
+        </li>
+      </ol>
+
+      <div class="tk-chest" :class="{ on: cleared }" :title="cleared ? '宝箱打开了！' : '走完六座小岛就能打开宝箱'">
+        <img class="tk-chest-art" :src="artChest" alt="" draggable="false" />
+        <span class="tk-chest-tip">{{ cleared ? "宝箱开了！" : "全部走完开宝箱" }}</span>
+      </div>
+    </section>
+
+    <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励）。
+         不再套一层白卡：套上之后这三块就只是「一张卡里的三个格子」，
+         三行长得一样的数字；拆成独立卡、各自一色，才像三枚并列的徽章。 -->
+    <section class="isle-stats">
+      <div v-for="s in stats" :key="s.l" class="stat-card" :style="{ background: s.bg, '--c': s.c }">
+        <span class="stat-ico"><img class="stat-art" :src="s.art" alt="" draggable="false" /></span>
+        <div class="stat-body">
+          <b class="stat-n">{{ s.n }}</b>
+          <span class="stat-l">{{ s.l }}</span>
+          <span class="stat-t">{{ s.tip }}</span>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>
