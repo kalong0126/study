@@ -5,7 +5,7 @@
  * 三种玩法都在这一页：
  *   · 生字表：点字听读音（先读组词再读单字，用来消歧音近字），可标记已掌握/未掌握
  *   · 纸上听写：生字变「?」，听读音在纸上写，写完揭晓答案
- *   · 屏上听写：在田字格里手写，整轮写完一起交给 AI 或大人（见 DictationPanel）
+ *   · 屏上听写：在田字格里手写，整轮写完交给大人逐个判定（见 DictationPanel；已不接大模型判卷）
  */
 import { computed, ref, watch } from "vue";
 import Icon from "@/components/Icon.vue";
@@ -31,8 +31,6 @@ const paperMasked = ref(false);
 const screenDictating = ref(false);
 /** 生字是否需要遮住：纸上听写 或 屏上听写进行中，任一为真就遮 */
 const masked = computed(() => paperMasked.value || screenDictating.value);
-/** 顺序朗读是否进行中（与页面朗读状态解耦，用于按钮文案） */
-const readingAll = ref(false);
 
 /** 两页式：text = 课文原文（朗读 + 生字红标）；dictation = 生字听写 */
 const tab = ref<"text" | "dictation">("text");
@@ -78,7 +76,6 @@ function switchTab(next: "text" | "dictation"): void {
   if (tab.value === next) return;
   tab.value = next;
   stopAudio();
-  readingAll.value = false;
   lessonPlaying.value = false;
 }
 
@@ -115,52 +112,27 @@ const cnNote = computed(() =>
     : [
         "点击生字方块可以听读音：先读组词、再读单字，用来区分「睛 / 晴」这类音近字。",
         "「开始听写」＝纸上听写：生字会变成「?」，写完再点一次揭晓答案。",
-        "「顺序朗读」＝从头一个字一个字读下去，再点一次停止。",
-        "下面的屏上听写会让 AI 自动批改，并记进错字本。",
+        "下面那块屏上听写是在田字格里手写，写完整轮交给大人看，不经大模型；大人逐个点「写对 / 写错」。",
+        "每个字下面的 ✓ / ✗ 是大人的手动标记：点 ✓ 记掌握、点 ✗ 进错字本，再点一次取消。",
       ].join("\n"),
 );
 
 function speakChar(ch: string, word: string): void {
-  readingAll.value = false;
+  stopAudio();
   void playSequence(dictationItems(ch, word));
 }
 
 function toggleMask(): void {
   paperMasked.value = !paperMasked.value;
   if (paperMasked.value) {
-    readingAll.value = false;
     const first = chars.value[0];
     ui.toast("听写开始！音会念给你听，在纸上写下来吧");
     if (first) void playSequence(dictationItems(first.ch, first.word));
   } else {
     stopAudio();
-    readingAll.value = false;
     void progress.completeTask("dictation");
     ui.toast("听写结束，来对对答案吧～");
   }
-}
-
-async function toggleReadAll(): Promise<void> {
-  if (readingAll.value || isPlaying.value) {
-    readingAll.value = false;
-    stopAudio();
-    ui.toast("已停止朗读");
-    return;
-  }
-  if (!chars.value.length) return;
-  paperMasked.value = false;
-  readingAll.value = true;
-  ui.toast("正在依次朗读，再点一次可停止");
-  // 只读单字，串行推进（用 ended 事件，不用定时器）
-  await playSequence(
-    chars.value.map((c) => ({ text: c.ch, kind: "char" as const })),
-    {
-      onIndex: (i) => {
-        if (i < 0) readingAll.value = false;
-      },
-    },
-  );
-  readingAll.value = false;
 }
 
 async function mark(ch: string, state: 0 | 1): Promise<void> {
@@ -187,7 +159,6 @@ async function mark(ch: string, state: 0 | 1): Promise<void> {
 function onLessonChange(e: Event): void {
   const id = Number((e.target as HTMLSelectElement).value);
   stopAudio();
-  readingAll.value = false;
   paperMasked.value = false;
   content.selectLesson(id);
 }
@@ -244,10 +215,6 @@ watch(
       </button>
     </template>
     <template v-else>
-      <button class="btn ghost sm" type="button" @click="toggleReadAll()">
-        <Icon :name="readingAll || isPlaying ? 'stop' : 'speaker'" :size="16" />
-        {{ readingAll || isPlaying ? "停止朗读" : "顺序朗读" }}
-      </button>
       <button class="btn green sm" type="button" @click="toggleMask()">
         <Icon :name="paperMasked ? 'check' : 'play'" :size="16" />{{ paperMasked ? "结束听写" : "开始听写" }}
       </button>
