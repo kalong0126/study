@@ -226,15 +226,52 @@ try {
     });
     ok("岛名对比度 ≥ 4.5:1（WCAG AA）", contrast >= 4.5, `${contrast}:1`);
 
+    // 岛名 + 状态胶囊是**叠在岛身上**的（参考图那样：名字写在岛上，不漂在岛外）。
+    // 判据用「交叠面积」而不是「标签顶边在岛顶边下面」——
+    // 后者在标签只压住岛的一个角时也成立，等于没判。
+    const capOnIsle = await page
+      .locator("button.isle")
+      .first()
+      .evaluate((el) => {
+        const art = el.querySelector(".isle-art").getBoundingClientRect();
+        const cap = el.querySelector(".isle-cap").getBoundingClientRect();
+        const ovTop = Math.max(art.top, cap.top);
+        const ovBot = Math.min(art.bottom, cap.bottom);
+        const ovLeft = Math.max(art.left, cap.left);
+        const ovRight = Math.min(art.right, cap.right);
+        const ov = Math.max(0, ovBot - ovTop) * Math.max(0, ovRight - ovLeft);
+        return { ov, capArea: cap.width * cap.height, artBottom: art.bottom, capTop: cap.top };
+      });
+    ok(
+      "岛名 + 状态胶囊叠在岛身上（不是挂在岛下面）",
+      capOnIsle.capTop < capOnIsle.artBottom && capOnIsle.ov > 0,
+      `胶囊顶 ${capOnIsle.capTop.toFixed(0)} vs 岛底 ${capOnIsle.artBottom.toFixed(0)}，交叠 ${Math.round(capOnIsle.ov)}px²`,
+    );
+
+    // 奖励宝箱也换成了 3D 素材图，同样要确认图真的解码出来了
+    const chestArt = await page
+      .locator(".tk-chest .tk-chest-art")
+      .evaluate((el) => ({ w: el.naturalWidth, h: el.naturalHeight }));
+    ok("宝箱用的是 3D 素材图且已加载", chestArt.w >= 100 && chestArt.h >= 100, JSON.stringify(chestArt));
+
     // 学习小档案：三张各自成卡（图标 + 数字 + 标签 + 一句鼓励），不再套一层白卡 ——
     // 套上之后这三块就只是「一张卡里的三个格子」，三行长得一样的数字。
     const statCards = page.locator(".isle-stats .stat-card");
     ok("学习小档案是三张独立卡", (await statCards.count()) === 3, `${await statCards.count()} 张`);
-    // 图标名写错时 Icon 会渲染一个空 <svg>，count() 照样是 1 —— 断言图形条数才堵得住假通过
-    const statGlyphs = await page
-      .locator(".isle-stats .stat-ico svg path, .isle-stats .stat-ico svg circle")
-      .count();
-    ok("每张卡都画出了图标", statGlyphs >= 6, `图形 ${statGlyphs} 条`);
+    // 图标位装的是 3D 素材图（不是线描 SVG）。断言「真的解码出来了」=
+    // naturalWidth > 0 —— 只数 <li> 或 <img> 的话，路径写错、图 404 了照样是 3 张，
+    // 页面上一片空白也全绿。三个 <img> 还必须是三张不同的图，不能是同一张复用。
+    const statArt = await page
+      .locator(".isle-stats .stat-ico img.stat-art")
+      .evaluateAll((els) =>
+        els.map((el) => ({ w: el.naturalWidth, src: el.getAttribute("src") || "" })),
+      );
+    ok(
+      "每张卡的 3D 图标都真的加载出来了",
+      statArt.length === 3 && statArt.every((a) => a.w >= 100),
+      JSON.stringify(statArt),
+    );
+    ok("三张卡的图标各不相同", new Set(statArt.map((a) => a.src)).size === 3, statArt.map((a) => a.src.split("/").pop()).join(" | "));
     const statTips = await page.locator(".isle-stats .stat-t").allInnerTexts();
     ok(
       "每张卡都带一句鼓励",
@@ -247,14 +284,14 @@ try {
     );
     ok("三张卡底色各不相同", new Set(statBg).size === 3, statBg.join(" | "));
 
-    // 字体：界面用站酷快乐体（自托管），识字内容用楷体。
+    // 字体：界面用方正粗圆简体（自托管切片），识字内容用楷体。
     // 分两条守：一条守「声明写对了」，一条守「文件真的加载进来了」——
     // 只判前一条的话，字体 404 了照样全绿。
     const bodyFont = await page.locator("body").evaluate((el) => getComputedStyle(el).fontFamily);
-    ok("界面字体是站酷快乐体", /ZCOOL KuaiLe/.test(bodyFont), bodyFont.slice(0, 64));
+    ok("界面字体是方正粗圆简体", /方正粗圆简体/.test(bodyFont), bodyFont.slice(0, 64));
     const fontLoaded = await page.evaluate(async () => {
       await document.fonts.ready;
-      return [...document.fonts].some((f) => f.family.includes("ZCOOL") && f.status === "loaded");
+      return [...document.fonts].some((f) => f.family.includes("方正粗圆简体") && f.status === "loaded");
     });
     ok("字体切片真的加载成功（不是只剩一句声明）", fontLoaded === true, String(fontLoaded));
     // 课文 / 童话是「要照着认的字」，必须楷体。这条以前踩过坑：
@@ -414,6 +451,34 @@ try {
     ok("当前关是听写屋", cur.includes("听写屋"), cur);
     ok("锁只剩 3 座", (await page.locator(".isle.locked").count()) === 3, `${await page.locator(".isle.locked").count()} 座`);
     ok("进度带第一个节点打了勾", (await page.locator(".tk-dots li.done").count()) === 1);
+    // 节点之间的虚线必须**断成一段一段**，不能穿进数字圆点里。
+    // 这条是回归：连线是 li::before（绝对定位），圆点是普通流元素 ——
+    // 绝对定位的伪元素画在普通流元素之上，所以「从圆心画到圆心」的老写法
+    // 会让线正好从数字身上横穿过去，六个数字全被划一道。
+    const segs = await page.evaluate(() => {
+      const lis = [...document.querySelectorAll(".tk-dots li")];
+      return lis.slice(1).map((li) => {
+        const s = getComputedStyle(li, "::before");
+        const lr = li.getBoundingClientRect();
+        const dot = li.querySelector(".tk-dot").getBoundingClientRect();
+        const prev = lis[lis.indexOf(li) - 1].querySelector(".tk-dot").getBoundingClientRect();
+        const left = lr.left + parseFloat(s.left);
+        return {
+          left,
+          right: left + parseFloat(s.width),
+          dotLeft: dot.left,
+          prevDotRight: prev.right,
+        };
+      });
+    });
+    ok("进度带连线断成 5 段（每段在两个圆点之间）", segs.length === 5, `${segs.length} 段`);
+    ok(
+      "连线不穿过数字圆点（两端都让开了）",
+      segs.every((s) => s.right <= s.dotLeft + 1 && s.left >= s.prevDotRight - 1),
+      segs
+        .map((s) => `${s.left.toFixed(0)}..${s.right.toFixed(0)} vs 点 ${s.prevDotRight.toFixed(0)}..${s.dotLeft.toFixed(0)}`)
+        .join(" | "),
+    );
   }
 
   /* ————————————————————————————— 6. 错题修理站仍然可进（不受前两关之外的影响） */

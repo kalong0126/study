@@ -25,6 +25,19 @@ web/test/shots/
 # 临时脚本/命令输出（根目录下的 _xxx.txt，如测试与 typecheck 回显）
 /_*.txt
 
+# 字体源文件（方正粗圆简体是商业字体，只作本地切片输入，随仓库外发即侵权）
+# 切片产物 web/public/fonts/fzcuyuan/*.woff2 是要进镜像的，不在这里忽略。
+/*.ttf
+/*.otf
+
+# 图标源图（AI 出的 2048px 大图，带水印，只作抠图输入）
+# 抠好的 256px 透明底素材在 web/src/assets/icons/，那几张要进 git。
+# 生成脚本：scripts/prepare-icons.py
+/box.png
+/tree.png
+/jianba.png
+/book.png
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

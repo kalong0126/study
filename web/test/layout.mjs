@@ -28,6 +28,31 @@ const bad = (m) => {
 };
 const note = (m) => console.log(`  -   ${m}`);
 
+/**
+ * 把今日六项置为已完成。
+ *
+ * 为什么进「应用内点击切页」之前必须重来一遍：
+ * 上面那圈 `goto` 会真的访问 `/language` 和 `/video`，而这两个页面**一进去就会上报进度**
+ * （语言 0/9、视频没看完）→ 后端把对应任务打回未完成 → 顺序锁随即把后面的页拦下来，
+ * 于是点 `/video` 会被守卫挡回首页，报出「点击 /video 后 URL 是 /」。
+ * 那是**产品行为正确**，跟布局无关 —— 这条测试要测的是「切页后整页不滚动」，
+ * 所以先把锁解开再点。转发给任意实例都能跑，不依赖外部脚本预先改状态。
+ */
+async function unlockAll(label) {
+  try {
+    const r = await fetch(`${BASE}/api/state/daily`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        tasks: { math: true, dictation: true, review: true, reading: true, language: true, video: true },
+      }),
+    });
+    if (!r.ok) note(`${label} 解锁失败 HTTP ${r.status}（后面的点击断言可能因此误报）`);
+  } catch (e) {
+    note(`${label} 解锁请求发不出去：${e?.message ?? e}`);
+  }
+}
+
 const VIEWPORTS = [
   { name: "手机", width: 390, height: 844 },
   { name: "平板", width: 820, height: 1180 },
@@ -104,6 +129,7 @@ for (const vp of VIEWPORTS) {
 
   // 应用内点击切页：切完仍必须不滚动（整页加载不经过路由 Transition，会掩盖问题）
   console.log(`\n-- 应用内点击切页（${vp.name}）--`);
+  await unlockAll(`点击前（${vp.name}）`);
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
   await page.waitForSelector(".kid-shell", { timeout: 8000 }).catch(() => {});
   await page.waitForTimeout(300);
@@ -112,7 +138,15 @@ for (const vp of VIEWPORTS) {
     await page.waitForTimeout(420);
     const m = await measure(page);
     const url = new URL(page.url()).pathname;
-    if (url !== route) bad(`点击 ${route} 后 URL 是 ${url}`);
+    if (url !== route) {
+      // 被守卫拦下时 URL 不变、只会弹 toast —— 把 toast 一起打出来，
+      // 否则「点不动」和「点错了」在日志里长得一模一样。
+      const toast = await page
+        .locator("#toast")
+        .innerText()
+        .catch(() => "");
+      bad(`点击 ${route} 后 URL 是 ${url}${toast ? `（提示：${toast.replace(/\s+/g, " ")}）` : ""}`);
+    }
     checkViewport(m, `点击→${route}`);
   }
 

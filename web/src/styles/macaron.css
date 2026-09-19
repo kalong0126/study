@@ -18,32 +18,31 @@
   --shadow: 0 8px 24px rgba(120, 160, 205, .14);
   --shadow-s: 0 3px 10px rgba(120, 160, 205, .10);
 
-  /* --font-round：界面字体。
-     第一位是 Nunito（拉丁，自托管，见 font-nunito.css）—— 它只管数字和英文。
-     font-family 是**逐字符回退**的：数字、字母在 Nunito 里有字形就用它，
-     汉字没有字形就落到第二位的站酷快乐体。所以这两份要按「拉丁在前、中文在后」排。
+  /* --font-round：界面字体，全站只此一套 —— 方正粗圆简体（自托管切片，见 font-fzcuyuan.css）。
+     中文、数字、英文、标点它都覆盖（6763 个 GB2312 汉字 + ASCII + ×÷＝…— 全有），
+     所以不再需要「拉丁一份、中文一份」的拼法，整站字形统一。
 
-     为什么数字不能交给站酷快乐体：它是展示型中文字体，数字与西文是手写涂鸦风的异形 ——
-     0 是歪斜的椭圆、1 像一撇、每个数字宽度都不一样，也没有 tabular-nums 特性。
-     而本站数字用量极大（积分、今天完成 x/6、题号、用时 1:32、+10 奖励），
-     用它渲染既读不准、宽度还会随着数字变化左右跳；叠上合成加粗后 30px/900 的 0
-     直接糊成实心块。站酷另外还缺 ÷ 和 ／ 两个字符（口算可能用到），Nunito 有。
+     ⚠️ 授权：方正字库的商业字体，仅本项目个人自用（家用 NAS，非商用）。
+     字库文件与切片都在 web/public/fonts/fzcuyuan 下，别跟着仓库外发出去。
 
-     后面那串是兜底：两份自托管字体都没覆盖到的字依次退回系统圆体、再到黑体，不能省。
+     唯一缺的字符是半角 ¥（U+00A5）—— 全角 ￥（U+FFE5）有。界面里没用 ¥，
+      真要用就退回后面的系统字体，别改字体。
+
+     后面那串是兜底：切片没覆盖到的字依次退回系统圆体、再到黑体，不能省。
 
      --font-kai：识字字体。课文原文、生字、手写格这类「要照着认、照着写的字」必须用楷体 ——
-     楷体是识字教学的标准字形；卡通体的笔形是设计过的（末笔更圆、结构更松），
-     孩子照着它记笔画会记错。这条不参与上面的数字讨论：楷体的数字本身就是规整的。 */
-  --font-round: "Nunito", "ZCOOL KuaiLe", "Yuanti SC", "圆体-简", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+     楷体是识字教学的标准字形；粗圆的笔形是设计过的（末笔更圆、笔画等粗），
+     孩子照着它记笔画会记错。这条不参与上面的讨论：楷体的数字本身就是规整的。 */
+  --font-round: "方正粗圆简体", "圆体-简", "Yuanti SC", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-kai: "Kaiti SC", "KaiTi", "STKaiti", "楷体", "FangSong", serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
-/* 全站字体走 --font-round（站酷快乐体）；识字内容单独用 --font-kai，见下面的 .story-text。
-   字重交给浏览器合成加粗：站酷快乐体只有真实 400 一档，标题/数字的 700-900
+/* 全站字体走 --font-round（方正粗圆简体）；识字内容单独用 --font-kai，见下面的 .story-text。
+   字重交给浏览器合成加粗：方正粗圆简体只有真实 400 一档，标题/数字的 700-900
    由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
-   不再合成，全站粗细会一样（详见 font-zcool.css 顶部说明）。 */
+   不再合成，全站粗细会一样（详见 font-fzcuyuan.css 顶部说明）。 */
 body {
   font-family: var(--font-round);
   color: var(--ink); font-size: 16px; line-height: 1.6;
@@ -208,8 +207,8 @@ a { color: var(--blue-d); }
   font-family: inherit; cursor: pointer;
 }
 /* 岛名与下面那颗状态按钮之间再松一点：两颗胶囊紧挨着会看成一块「双层的方块」，
-   拉开一点才读得出「岛名 + 这一关能不能进」两层信息 */
-.isle-go, .isle-flag, .isle-wait { margin-top: 3px; }
+   拉开一点才读得出「岛名 + 这一关能不能进」两层信息。
+   这里不再用 margin-top —— 两块现在同属 .isle-cap，间距由它的 gap 一处说了算。 */
 .isle:focus-visible { outline: 3px solid var(--blue); outline-offset: 4px; border-radius: 16px; }
 
 .isle-art { position: relative; width: 100%; max-width: 140px; aspect-ratio: 360 / 330; }
@@ -228,8 +227,10 @@ a { color: var(--blue-d); }
 }
 
 /* 岛上不再挂「锁」角标：锁只出现在岛名下面那枚「待解锁」胶囊里。
-   同一个意思在一座岛上写两遍（角标一把锁 + 胶囊一把锁），视觉上只是噪音。 */
-.isle-mark { position: absolute; right: 0; bottom: 6%; }
+   同一个意思在一座岛上写两遍（角标一把锁 + 胶囊一把锁），视觉上只是噪音。
+   位置从「岛座右下角」提到 26%：岛名 + 状态胶囊现在叠在岛座下半部分，
+   贴底摆会被那两颗胶囊压住。26% 正好落在草地右缘，和中间的岛名并排。 */
+.isle-mark { position: absolute; right: 0; bottom: 26%; }
 .isle-mark.ok { width: 25px; height: 25px; }
 .isle-mark.ok svg { width: 25px; height: 25px; display: block; filter: drop-shadow(0 2px 5px rgba(46, 156, 114, .4)); }
 
@@ -243,6 +244,17 @@ a { color: var(--blue-d); }
   box-shadow: 0 3px 10px rgba(70, 120, 170, .15);
 }
 .isle-tag b { font-size: 13.5px; font-weight: 800; color: var(--ink); line-height: 1.3; letter-spacing: .2px; text-align: center; white-space: nowrap; }
+
+/* 岛名 + 状态胶囊整块叠在岛座上（不是挂在岛下面）。
+   两块一起往下对齐：胶囊贴着岛座底缘（一半压在水面上），岛名正好落在草地上 ——
+   3D 素材画布是 360×330，草地大约在 y 45%–75%，`bottom: 2%` 起往上摞正好压住这一段。
+   宽度给满 + 居中，是因为名字长短不一（「口算岛」3 字、「错题修理站」5 字），
+   要的都是「在岛中间」，而不是「从岛左边排起」。 */
+.isle-cap {
+  position: absolute; left: 50%; bottom: 2%; transform: translateX(-50%);
+  z-index: 2;
+  width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
 
 /* 岛名下面那颗按钮：同一形状、三种状态 —— 出发（主线，蓝）/ 去看看（工具站，白描边）/
    待解锁（白底 + 锁）。框一样、位置一样，孩子扫一眼就知道「这格能不能点」，
@@ -307,13 +319,22 @@ a { color: var(--blue-d); }
 
 .tk-dots { flex: 1; min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; margin: 0; padding: 0; list-style: none; }
 .tk-dots li { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* 节点之间的虚线：**断成一段一段**，不连着画。
+   `left`/`width` 各让出 17px（圆点半径 13 + 4px 间隙），所以每段都是
+   「上一个圆点右边 → 下一个圆点左边」，中间空着 —— 数字不会被线穿过去。
+   以前写的是 left:-50%; width:100%（从圆心画到圆心），而这条 ::before 是绝对定位、
+   圆点是普通流里的元素：绝对定位的伪元素**画在普通流元素之上**，
+   于是线正好从数字身上横穿过去，六个数字都被划了一道。 */
 .tk-dots li::before {
-  content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px;
+  content: ""; position: absolute; top: 13px; left: calc(-50% + 17px); width: calc(100% - 34px); height: 2px;
   background: repeating-linear-gradient(90deg, #DAE6F2 0 5px, transparent 5px 10px);
 }
 .tk-dots li:first-child::before { display: none; }
 .tk-dots li.done::before, .tk-dots li.current::before { background: repeating-linear-gradient(90deg, #A5DCC2 0 5px, transparent 5px 10px); }
+/* z-index 是安全网：格子很窄时「-50% + 17px」可能算到圆点范围内，
+   让圆点自身成为一个定位元素，就永远压在那条虚线上面。 */
 .tk-dot {
+  position: relative; z-index: 1;
   width: 26px; height: 26px; border-radius: 999px; flex: none;
   display: flex; align-items: center; justify-content: center;
   background: #E7EEF7; color: #8A9CAE; font-size: 12.5px; font-weight: 900;
@@ -325,18 +346,29 @@ a { color: var(--blue-d); }
 .tk-dots li.done .tk-name { color: #2E9C72; }
 .tk-dots li.current .tk-name { color: var(--blue-d); font-weight: 800; }
 
+/* 宝箱：3D 素材图（不再用线描图标）。底色块留着，但内边距收小了 ——
+   图本身有体积和投影，再垫一圈厚 padding 就成了一块空盒子。
+   没通关时整块压暗（filter 压亮度，而不是换一张灰图），
+   点亮时那层 filter 撤掉、换成暖色底 + 上浮，宝箱「打开」的对比才够强。 */
 .tk-chest {
-  flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 9px 13px; border-radius: 16px;
-  background: #F4F8FC; border: 1.5px solid #E6EEF7; color: #A9B8C7;
+  flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 7px 12px 8px; border-radius: 16px;
+  background: #F4F8FC; border: 1.5px solid #E6EEF7;
 }
-.tk-chest-tip { font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+.tk-chest-art {
+  width: 44px; height: 44px; display: block; user-select: none; -webkit-user-drag: none;
+  filter: grayscale(.45) opacity(.62) drop-shadow(0 2px 4px rgba(90, 110, 140, .20));
+  transition: filter .3s;
+}
+.tk-chest-tip { font-size: 10.5px; font-weight: 800; white-space: nowrap; color: #A9B8C7; }
 .tk-chest.on {
   background: linear-gradient(135deg, #FFF5D6, #FFE49E);
-  border-color: #F1C85F; color: #B8860B;
+  border-color: #F1C85F;
   box-shadow: 0 6px 18px rgba(232, 168, 0, .30);
   animation: chestFloat 3.4s ease-in-out infinite;
 }
+.tk-chest.on .tk-chest-art { filter: drop-shadow(0 4px 8px rgba(200, 140, 10, .38)); }
+.tk-chest.on .tk-chest-tip { color: #B8860B; }
 @keyframes chestFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
 /* 学习小档案：三张并列的成绩徽章。图标和数字同色（--c），底色各自一浅色 ——
@@ -348,10 +380,15 @@ a { color: var(--blue-d); }
   border: 1.5px solid rgba(255, 255, 255, .92);
   box-shadow: 0 4px 14px rgba(120, 160, 205, .13);
 }
-.stat-ico {
-  width: 46px; height: 46px; flex: none; border-radius: 15px;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 255, 255, .8); color: var(--c);
+/* 图标位：装的是 3D 素材图，所以不再垫白色圆角块 ——
+   图本身有体积感，垫一层白底就成了「白框里再套一张图」，两层边界打架。
+   尺寸比原来的线描图标位大一档（46 → 56）：3D 图四周有透明留白，
+   按老尺寸摆会显得比线描小一圈。 */
+.stat-ico { width: 56px; height: 56px; flex: none; display: flex; align-items: center; justify-content: center; }
+.stat-art {
+  width: 100%; height: 100%; display: block; object-fit: contain;
+  user-select: none; -webkit-user-drag: none;
+  filter: drop-shadow(0 3px 6px rgba(90, 115, 150, .20));
 }
 .stat-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .stat-n { font-size: 27px; font-weight: 900; line-height: 1.12; color: var(--c); font-variant-numeric: tabular-nums; }
@@ -385,6 +422,11 @@ a { color: var(--blue-d); }
   .isle-mark.ok { width: 20px; height: 20px; }
   .isle-mark.ok svg { width: 20px; height: 20px; }
   .isle.current .isle-art::before { left: 3%; right: 3%; top: 50%; bottom: 2%; }
+  /* 竖排是「岛在左、字在右」的卡片，没有可叠的岛身 ——
+     .isle-cap 必须回到文档流：宽屏那套绝对定位会让它压在 78px 的小岛上，
+     而且它脱离文档流后 .isle（row）里只剩岛素材一个孩子，整张卡片会塌成一条。
+     宽度交给 flex，岛名与状态仍在同一行（岛名 flex:1 撑开，胶囊 flex:none）。 */
+  .isle-cap { position: static; transform: none; width: auto; flex: 1; min-width: 0; flex-direction: row; align-items: center; gap: 10px; }
   /* 竖排时岛名不再是「岛下的胶囊」，而是卡片上的一行标题：去掉白底与描边，
      把左边让给岛素材；岛名与状态胶囊仍然只在同一行，不再有第二行小字。 */
   .isle-tag { flex: 1; min-width: 0; align-items: flex-start; padding: 0; background: transparent; border: none; box-shadow: none; text-align: left; }

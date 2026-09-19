@@ -233,7 +233,16 @@ try {
 
   /* ————————————————————————————— 2. Range 分段 */
   step("2. 视频流 + HTTP Range");
-  const size = fs.statSync(path.join(VIDEO_DIR, "Ep 1.wav")).size;
+  // 当天抽到哪一集是**随机的**（`pickVideoItem` 用 `Math.floor(rnd()*n)`），
+  // 所以基准文件必须从抽到的这一集推，不能写死 "Ep 1.wav" ——
+  // 写死的话，抽到 Ep 2 / E10 的那一天，下面五条字节数断言会集体假失败
+  // （现象是 served 48044 vs disk 64044，看着像 Range 实现坏了，其实抽的不是同一集）。
+  // 接口只回 `{id,title,name,ext,sizeMB}`（`publicItem` 不吐相对路径），
+  // 所以按服务端同一套编解码把 id 还原成相对路径；反过来也顺带验了 id ↔ 文件是对得上的。
+  const rel = Buffer.from(String(t1.item.id), "base64url").toString("utf8");
+  const pickedAbs = path.join(VIDEO_DIR, ...rel.split("/"));
+  ok("id 解出来就是抽到的那一集的文件", fs.existsSync(pickedAbs), `${rel} → ${pickedAbs}`);
+  const size = fs.statSync(pickedAbs).size;
   const full = await fetch(`${BASE}/api/video/stream/${t1.item.id}`);
   ok("不带 Range → 200", full.status === 200, `status=${full.status}`);
   ok("声明 Accept-Ranges: bytes", full.headers.get("accept-ranges") === "bytes");

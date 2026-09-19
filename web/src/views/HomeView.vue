@@ -29,6 +29,13 @@ import isleReview from "@/assets/islands/review.png";
 import isleReading from "@/assets/islands/reading.png";
 import isleLanguage from "@/assets/islands/language.png";
 import isleVideo from "@/assets/islands/video.png";
+// 3D 小图标（宝箱 / 树 / 箭靶 / 书）：原来这几处是线描 SVG 图标，
+// 和 3D 岛座摆在一起像两个画风。换成 3D 素材后整页是同一套渲染语言。
+// 素材由 scripts/prepare-icons.py 从 AI 出的 2048px 大图抠底生成（源图不进 git）。
+import artChest from "@/assets/icons/chest.png";
+import artTree from "@/assets/icons/tree.png";
+import artTarget from "@/assets/icons/target.png";
+import artBook from "@/assets/icons/book.png";
 import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
 import { TASK_DEFS, useProgressStore, type TaskDef } from "@/stores/progress";
@@ -164,8 +171,11 @@ function go(it: Isle): void {
 /**
  * 学习小档案的三张卡。
  *
- * 每张都有自己的 `bg`（浅色底）和 `c`（主色），数字、图标、边框都跟着 `c` 走 ——
- * 三块能一眼分开，靠的就是「颜色 + 图标」这两件事，而不是三行长得一样的数字。
+ * 每张都有自己的 `bg`（浅色底）和 `c`（主色），数字、文字、边框都跟着 `c` 走 ——
+ * 三块能一眼分开，靠的就是「颜色 + 图」这两件事，而不是三行长得一样的数字。
+ *
+ * `art` 是 3D 素材图，不是线描图标：这三块和上面的岛座是同一屏，画风必须统一。
+ * 素材自带体积感，所以卡片里不再给它垫底色块（垫了就是「白框里再套一张图」）。
  */
 const stats = computed(() => [
   {
@@ -173,7 +183,7 @@ const stats = computed(() => [
     l: "已掌握生字",
     c: "#2FA37A",
     bg: "#E9FBF3",
-    icon: "sprout",
+    art: artTree,
     tip: "继续加油，认识更多有趣的字吧！",
   },
   {
@@ -181,7 +191,7 @@ const stats = computed(() => [
     l: "错题待复习",
     c: "#D9557C",
     bg: "#FFEFF3",
-    icon: "target",
+    art: artTarget,
     tip: "把错题变成会做的题！",
   },
   {
@@ -189,7 +199,7 @@ const stats = computed(() => [
     l: "读过的故事",
     c: "#7C68E0",
     bg: "#F3EFFF",
-    icon: "story",
+    art: artBook,
     tip: "阅读让世界更大！",
   },
 ]);
@@ -256,13 +266,20 @@ const stats = computed(() => [
           </span>
         </span>
 
-        <span class="isle-tag"><b>{{ it.name }}</b></span>
+        <!-- 岛名 + 状态胶囊整块**叠在岛座上**，不再挂在岛下面。
+             挂下面时每座岛实际占的高度是「岛 + 两行字」，六座并排就把地图下沿顶满，
+             岛只好缩着画；叠上去以后岛是画面主体，那两行字是贴在岛上的标牌 ——
+             和参考图一样：名字写在岛的草地上，不是漂在岛外面。
+             （窄屏是横排卡片，这一块会回到文档流、与岛名并排，见 macaron.css 的断点。） -->
+        <span class="isle-cap">
+          <span class="isle-tag"><b>{{ it.name }}</b></span>
 
-        <span v-if="it.state === 'current' || it.state === 'open'" class="isle-go" :class="{ soft: it.state === 'open' }">
-          {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
+          <span v-if="it.state === 'current' || it.state === 'open'" class="isle-go" :class="{ soft: it.state === 'open' }">
+            {{ it.state === "open" ? "去看看" : "出发" }}<Icon name="chevRight" :size="14" :stroke="3" />
+          </span>
+          <span v-else-if="it.state === 'done'" class="isle-flag"><Icon name="check" :size="13" :stroke="3.2" />已通关</span>
+          <span v-else class="isle-wait"><Icon name="lock" :size="12" :stroke="2.4" />待解锁</span>
         </span>
-        <span v-else-if="it.state === 'done'" class="isle-flag"><Icon name="check" :size="13" :stroke="3.2" />已通关</span>
-        <span v-else class="isle-wait"><Icon name="lock" :size="12" :stroke="2.4" />待解锁</span>
       </button>
     </div>
   </section>
@@ -287,7 +304,7 @@ const stats = computed(() => [
     </ol>
 
     <div class="tk-chest" :class="{ on: cleared }" :title="cleared ? '宝箱打开了！' : '走完六座小岛就能打开宝箱'">
-      <Icon name="chest" :size="30" :stroke="1.9" />
+      <img class="tk-chest-art" :src="artChest" alt="" draggable="false" />
       <span class="tk-chest-tip">{{ cleared ? "宝箱开了！" : "全部走完开宝箱" }}</span>
     </div>
   </section>
@@ -297,7 +314,7 @@ const stats = computed(() => [
        三行长得一样的数字；拆成独立卡、各自一色，才像三枚并列的徽章。 -->
   <section class="isle-stats">
     <div v-for="s in stats" :key="s.l" class="stat-card" :style="{ background: s.bg, '--c': s.c }">
-      <span class="stat-ico"><Icon :name="s.icon" :size="24" :stroke="2.1" /></span>
+      <span class="stat-ico"><img class="stat-art" :src="s.art" alt="" draggable="false" /></span>
       <div class="stat-body">
         <b class="stat-n">{{ s.n }}</b>
         <span class="stat-l">{{ s.l }}</span>

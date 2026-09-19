@@ -10,11 +10,13 @@
  *    （合成加粗在 Blink 里只加宽笔画，不改 advance width）。
  *    唯一可靠的量法是「着墨像素数」—— 把同一串字画到 canvas 上数深色像素。
  *
- * ② 数字用了涂鸦体 + 楷体声明被丢弃：
- *    · 站酷快乐体的数字是手写异形（0 歪椭圆、1 像一撇、宽度不齐），必须由 Nunito 接管；
- *    · `font-family: "Kaiti SC", "KaiTi", inherit` —— `inherit` 是 CSS-wide 关键字，
- *      混进字体列表会让整条声明非法被丢弃，识字内容会悄悄回落到圆体。
- *      这两条在 CSS 源码里都不显眼，所以既做浏览器断言，也直接静态查源码。
+ * ② 楷体声明被丢弃：`font-family: "Kaiti SC", "KaiTi", inherit` —— `inherit` 是 CSS-wide
+ *    关键字，混进字体列表会让整条声明非法被丢弃，识字内容会悄悄回落到圆体。
+ *    这一条在 CSS 源码里不显眼，所以既做浏览器断言，也直接静态查源码。
+ *
+ * ③ 全站一套字：界面中文 / 数字 / 标点全部由方正粗圆简体渲染（它的字库自带 ASCII 与
+ *    中文标点，不需要再拼一份拉丁字体）。判据＝站点栈与「只有方正粗圆简体」渲染出来的
+ *    着墨量**必须相等** —— 不等就说明有第二个字体在偷偷参与。
  *
  * 用法：node web/test/font.mjs   或   cd web && npm run test:font
  * 依赖：playwright-core + 已构建的 web/dist
@@ -118,7 +120,7 @@ try {
   await page.waitForSelector("button.isle", { timeout: 20000 });
   await page.waitForTimeout(1200);
 
-  // ————————————————————————————————————————— 1. 两份自托管字体都真的加载了
+  // ————————————————————————————————————————— 1. 自托管切片真的加载了
   step("1. 字体文件真的加载成功（不是只剩一句声明）");
   {
     const f = await page.evaluate(async () => {
@@ -126,23 +128,20 @@ try {
       const faces = [...document.fonts];
       const pick = (kw) => faces.filter((x) => x.family.includes(kw));
       return {
-        zcool: pick("ZCOOL").map((x) => x.status),
-        nunito: pick("Nunito").map((x) => x.status),
-        zcoolWeight: [...new Set(pick("ZCOOL").map((x) => x.weight))],
-        nunitoWeight: [...new Set(pick("Nunito").map((x) => x.weight))],
+        fz: pick("方正粗圆简体").map((x) => x.status),
+        fzWeight: [...new Set(pick("方正粗圆简体").map((x) => x.weight))],
       };
     });
     ok(
-      "站酷快乐体切片已加载（中文）",
-      f.zcool.length > 0 && f.zcool.includes("loaded"),
-      `${f.zcool.filter((s) => s === "loaded").length}/${f.zcool.length} 已加载`,
+      "方正粗圆简体切片已加载",
+      f.fz.length > 0 && f.fz.includes("loaded"),
+      `${f.fz.filter((s) => s === "loaded").length}/${f.fz.length} 已加载`,
     );
-    ok("Nunito 已加载（数字/英文）", f.nunito.length > 0 && f.nunito.includes("loaded"), JSON.stringify(f.nunito));
     // 关键：字重必须是真实值。声明成区间（100 900）会静默压平全站字重。
     ok(
-      "站酷声明的字重是真实值 400（不是 100 900 区间）",
-      f.zcoolWeight.length === 1 && f.zcoolWeight[0] === "400",
-      `weight=${JSON.stringify(f.zcoolWeight)}`,
+      "方正粗圆简体声明的字重是真实值 400（不是 100 900 区间）",
+      f.fzWeight.length === 1 && f.fzWeight[0] === "400",
+      `weight=${JSON.stringify(f.fzWeight)}`,
     );
   }
 
@@ -199,16 +198,24 @@ try {
     ok("顶栏进度数字带真实字重", !!r.real && Number(r.real.weight) >= 800, JSON.stringify(r.real));
   }
 
-  // ————————————————————————————————————————— 3. 数字/英文由 Nunito 接管
-  step("3. 数字与英文走 Nunito，中文走站酷快乐体");
+  // ————————————————————————————————————————— 3. 全站一套字（中文 / 数字 / 标点同源）
+  step("3. 中文、数字、标点全部由方正粗圆简体渲染");
   {
     const bodyFam = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
-    ok("body 字体栈里 Nunito 排在中文字体之前", /^"?Nunito"?/.test(bodyFam), bodyFam.slice(0, 60));
+    ok("body 字体栈里方正粗圆简体排第一", /^"?方正粗圆简体"?/.test(bodyFam), bodyFam.slice(0, 60));
 
-    // 端到端证据：同一串数字，「站点栈」与「只有站酷」渲染出来的着墨必须不同 ——
-    // 说明数字确实不是站酷画的。相同就说明 Nunito 没接上（白白多下一份字体）。
-    const diff = await page.evaluate(() => {
+    // 端到端证据：同一串字，「站点栈」与「只有方正粗圆简体」渲染出来的着墨必须**相等** ——
+    // 不相等就说明还有第二个字体在偷偷参与（以前是数字走 Nunito、汉字走站酷）。
+    const diff = await page.evaluate(async () => {
       const stack = getComputedStyle(document.body).fontFamily;
+      const ONLY = '"方正粗圆简体"';
+      const samples = ["0123456789", "口算岛", "……", "——", "1:32", "7 × 8 ="];
+      // canvas 不会主动触发 @font-face 懒加载，先 load 再量
+      for (const t of samples) {
+        await document.fonts.load(`900 40px ${stack}`, t);
+        await document.fonts.load(`900 40px ${ONLY}`, t);
+      }
+      await document.fonts.ready;
       const ink = (fam, text) => {
         const c = document.createElement("canvas");
         c.width = 460;
@@ -224,56 +231,57 @@ try {
         for (let i = 0; i < d.length; i += 4) if (d[i] < 128) n++;
         return n;
       };
-      return {
-        site: ink(stack, "0123456789"),
-        zcoolOnly: ink('"ZCOOL KuaiLe"', "0123456789"),
-        // 中文反过来：站点栈与只有站酷应当**一致**（汉字由站酷负责，Nunito 不参与）
-        siteCn: ink(stack, "口算岛"),
-        zcoolOnlyCn: ink('"ZCOOL KuaiLe"', "口算岛"),
-        // 中文标点也必须由站酷画：Nunito 的 unicode-range 已摘掉 U+2000-206F，
-        // 正是为了让 `…` `—` `“”` 不被拉丁字体按英文排版画成窄标点。
-        sitePunc: ink(stack, "……"),
-        zcoolPunc: ink('"ZCOOL KuaiLe"', "……"),
-        siteDash: ink(stack, "——"),
-        zcoolDash: ink('"ZCOOL KuaiLe"', "——"),
-      };
+      const out = {};
+      for (const t of samples) out[t] = { site: ink(stack, t), only: ink(ONLY, t) };
+      return out;
     });
-    ok(
-      "数字字形来自 Nunito（与纯站酷渲染明显不同）",
-      Math.abs(diff.site - diff.zcoolOnly) / Math.max(diff.zcoolOnly, 1) > 0.05,
-      `站点栈 ${diff.site} vs 站酷 ${diff.zcoolOnly}`,
-    );
-    ok(
-      "汉字仍由站酷快乐体渲染（与纯站酷渲染一致）",
-      diff.siteCn === diff.zcoolOnlyCn,
-      `站点栈 ${diff.siteCn} vs 站酷 ${diff.zcoolOnlyCn}`,
-    );
-    // `…` 页面里到处在用（"正在打开学习台…"），`—` 出现在中文句子里（"写下来 —— 一个字写一格"）。
-    // 拉丁字体画这两个是英文排版（省略号只占 1/3 字宽、靠左；破折号细而低），
-    // 混进中文一眼就不对。Nunito 的 unicode-range 已摘掉 U+2000-206F，这里守住它别被加回来。
-    ok(
-      "省略号 … 由中文圆体渲染（不是拉丁字体的窄省略号）",
-      diff.sitePunc === diff.zcoolPunc,
-      `站点栈 ${diff.sitePunc} vs 站酷 ${diff.zcoolPunc}`,
-    );
-    ok(
-      "破折号 —— 由中文圆体渲染",
-      diff.siteDash === diff.zcoolDash,
-      `站点栈 ${diff.siteDash} vs 站酷 ${diff.zcoolDash}`,
-    );
 
-    // 站点真正会用到的字符：口算的 `7 × 8 =`、进度 `0 / 6`、用时 `1:32`、小数点。
-    // （站酷缺 ÷ 和全角 ／，但本站口算只出 + − ×，这两个字符没有实际用处，
-    //  所以只保证「实际会用到的」不缺，别把断言写成整张符号表。）
+    const label = {
+      "0123456789": "数字 0-9",
+      "口算岛": "汉字",
+      "……": "省略号 …",
+      "——": "破折号 ——",
+      "1:32": "用时 1:32",
+      "7 × 8 =": "算式 7 × 8 =",
+    };
+    for (const [text, v] of Object.entries(diff)) {
+      ok(
+        `${label[text]} 由方正粗圆简体渲染（站点栈与纯方正着墨一致）`,
+        v.site === v.only && v.site > 0,
+        `站点栈 ${v.site} vs 纯方正 ${v.only}`,
+      );
+    }
+
+    // 站点真正会用到的字符必须都有字形：口算的 `7 × 8 =`、进度 `0 / 6`、用时 `1:32`、小数点。
     const cov = await page.evaluate(async () => {
-      const need = "0123456789+-×=/:.%".split("");
+      const need = "0123456789+-×÷=/:.%".split("");
       const stack = getComputedStyle(document.body).fontFamily;
       // check() 只对「已加载」的字体返回 true，不主动触发加载 —— 先 load 再 check
       await document.fonts.load(`900 40px ${stack}`, need.join(""));
       await document.fonts.ready;
       return need.filter((c) => !document.fonts.check(`900 40px ${stack}`, c));
     });
-    ok("数字与运算符无缺字（0-9 + − × = / : . %）", cov.length === 0, `缺：${cov.join(" ")}`);
+    ok("数字与运算符无缺字（0-9 + − × ÷ = / : . %）", cov.length === 0, `缺：${cov.join(" ")}`);
+
+    // 数字必须是**等宽步进**：这份字体的 GSUB 里只有 vert，没有 tnum，
+    // 所以 CSS 的 `font-variant-numeric: tabular-nums` 是空转的 ——
+    // 原字体里 1 只有别的数字的 2/3 宽，计时器每跳一秒、分数每加一分都会左右抖。
+    // scripts/build-local-font.py 的等宽化（只改间距，不动字形）就是修这个，这里守住它。
+    const adv = await page.evaluate(async () => {
+      const stack = getComputedStyle(document.body).fontFamily;
+      await document.fonts.load(`800 30px ${stack}`, "0123456789");
+      await document.fonts.ready;
+      const c = document.createElement("canvas");
+      const ctx = c.getContext("2d");
+      ctx.font = `800 30px ${stack}`;
+      return "0123456789".split("").map((d) => ctx.measureText(d).width);
+    });
+    const spread = Math.max(...adv) - Math.min(...adv);
+    ok(
+      "0-9 步进宽度一致（计时器不会跳秒抖动）",
+      spread <= 0.5,
+      `宽度 ${adv.map((x) => x.toFixed(1)).join("/")}，极差 ${spread.toFixed(2)}px`,
+    );
   }
 
   // ————————————————————————————————————————— 4. 识字内容用楷体
@@ -359,23 +367,30 @@ try {
     );
     ok("楷体声明至少 6 处走变量（课文/听写/手写/错题/语言/后台）", (macaron.match(/var\(--font-kai\)/g) || []).length >= 6, `${(macaron.match(/var\(--font-kai\)/g) || []).length} 处`);
 
-    const zcool = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-zcool.css"), "utf8");
-    const ranges = [...zcool.matchAll(/font-weight:\s*([^;]+);/g)].map((m) => m[1].trim());
+    // 切片 CSS 由 scripts/build-local-font.py 生成，手改必被覆盖 —— 这里守住生成器的两条硬约束
+    const fzc = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-fzcuyuan.css"), "utf8");
+    const weights = [...fzc.matchAll(/font-weight:\s*([^;]+);/g)].map((m) => m[1].trim());
     ok(
-      "font-zcool.css 全部切片声明的都是真实字重 400",
-      ranges.length > 0 && ranges.every((w) => w === "400"),
-      `共 ${ranges.length} 条，取值 ${JSON.stringify([...new Set(ranges)])}`,
+      "font-fzcuyuan.css 全部切片声明的都是真实字重 400",
+      weights.length > 0 && weights.every((w) => w === "400"),
+      `共 ${weights.length} 条，取值 ${JSON.stringify([...new Set(weights)])}`,
     );
+    const slices = [...fzc.matchAll(/unicode-range:/g)].length;
+    ok("切片数量够多（字体才不会整包下载）", slices >= 50, `${slices} 片`);
 
-    // Nunito 是拉丁字体，但 unicode-range 里必须没带 U+2000-206F ——
-    // 那一段含中文要用的 … — “ ”，会让它们被按英文排版渲染。
-    const nunito = fs.readFileSync(path.join(REPO, "web", "src", "styles", "font-nunito.css"), "utf8");
-    const ranges2 = [...nunito.matchAll(/unicode-range:\s*([^;]+);/g)].map((m) => m[1]);
-    ok(
-      "font-nunito.css 的 unicode-range 不含 U+2000-206F",
-      ranges2.length > 0 && !ranges2.some((r) => r.includes("U+2000-206F")),
-      ranges2.join(" | ").slice(0, 80),
-    );
+    // 换字体最容易留下的尾巴：旧字体的名字还散落在样式表里
+    const cssDir = path.join(REPO, "web", "src", "styles");
+    const leftovers = [];
+    for (const file of fs.readdirSync(cssDir)) {
+      if (!file.endsWith(".css")) continue;
+      const t = fs.readFileSync(path.join(cssDir, file), "utf8");
+      for (const kw of ["ZCOOL", "Nunito"]) if (t.includes(kw)) leftovers.push(`${file}:${kw}`);
+    }
+    ok("样式表里没有残留的旧字体（ZCOOL / Nunito）", leftovers.length === 0, leftovers.join(" "));
+
+    // 字体源文件是商业字体，绝不能进 git —— 只允许留在本地当切片输入
+    const gi = fs.readFileSync(path.join(REPO, ".gitignore"), "utf8");
+    ok(".gitignore 忽略了仓库根的 *.ttf / *.otf", /\/?\*\.ttf/.test(gi) && /\/?\*\.otf/.test(gi));
   }
 
   // 留几张 2x 截图便于人工复核（字体问题很难靠断言完全覆盖）
