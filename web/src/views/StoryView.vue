@@ -178,8 +178,10 @@ watch(
       :title="fav ? '已收藏，点一下取消' : '收藏这一篇'"
       @click="toggleFav()"
     >
-      <Icon name="star" :size="16" :stroke="2.2" />
-      {{ fav ? "已收藏" : "收藏" }}
+      <!-- 文字恒为「收藏」，宽度不变：多一个字会把工具栏挤换行；
+           收藏态用星星变金黄实心 + 按钮变金黄底来表达 -->
+      <Icon name="star" :size="16" :stroke="2.2" :fill="fav ? '#F5B301' : 'none'" />
+      收藏
     </button>
     <button class="btn ghost sm" type="button" @click="toggleRead()">
       <Icon :name="isPlaying ? 'stop' : 'speakerLoud'" :size="16" />{{ isPlaying ? "停止朗读" : "朗读" }}
