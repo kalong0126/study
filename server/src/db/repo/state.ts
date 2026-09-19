@@ -412,12 +412,69 @@ export async function addReadTitle(childId: number, title: string): Promise<void
   ]);
 }
 
+/* ------------------------------------------------------------ 故事收藏 */
+export interface StoryFav {
+  id: number;
+  title: string;
+  /** 收藏时把正文一起存进 KV：历史故事被删之后，收藏的那篇还能照常重读 */
+  text: string;
+  favAt: string;
+}
+
+/** 收藏存 app_kv（`storyFavs`），最多留 50 篇 —— 孩子的收藏不会比这更多 */
+const FAV_KEY = "storyFavs";
+const FAVS_MAX = 50;
+
+export async function listStoryFavs(childId: number): Promise<StoryFav[]> {
+  const list = (await kvGet<StoryFav[]>(childId, FAV_KEY)) ?? [];
+  return Array.isArray(list)
+    ? list
+        .filter((f) => f && typeof f.title === "string")
+        .map((f) => ({
+          id: Number(f.id) || 0,
+          title: f.title,
+          text: typeof f.text === "string" ? f.text : "",
+          favAt: typeof f.favAt === "string" ? f.favAt : nowIso(),
+        }))
+    : [];
+}
+
+/** 切换收藏（按标题去重）；返回切换后的状态与最新列表 */
+export async function toggleStoryFav(
+  childId: number,
+  story: { id: number; title: string; text: string },
+): Promise<{ fav: boolean; favs: StoryFav[] }> {
+  const prev = await listStoryFavs(childId);
+  const kept = prev.filter((f) => f.title !== story.title);
+  const wasFav = kept.length !== prev.length;
+  if (wasFav) {
+    return { fav: false, favs: kept };
+  }
+  const next = [{ id: story.id, title: story.title, text: story.text, favAt: nowIso() }, ...kept].slice(0, FAVS_MAX);
+  await kvSet(childId, FAV_KEY, next);
+  return { fav: true, favs: next };
+}
+
 /* -------------------------------------------------------------------- 键值 */
 export async function kvGet<T>(childId: number, k: string): Promise<T | undefined> {
   const d = db();
   const row = await d.get<{ v: string | null }>("SELECT v FROM app_kv WHERE child_id = ? AND k = ?", [childId, k]);
   if (!row || row.v === null) return undefined;
   return parseJson<T | undefined>(row.v, undefined);
+}
+
+/**
+ * 按前缀扫描一批 KV（LIKE 前缀匹配）。
+ * 语言强化的历史题集按天散在 `language:<date>` 一串键里，「列出曾经出现过的词语」
+ * 这种跨天汇总就靠它 —— 量级是几百条 JSON，一次扫完没有压力。
+ */
+export async function kvScan(childId: number, prefix: string): Promise<{ k: string; v: string }[]> {
+  const d = db();
+  const rows = await d.all<{ k: string; v: string | null }>(
+    "SELECT k, v FROM app_kv WHERE child_id = ? AND k LIKE ?",
+    [childId, `${prefix}%`],
+  );
+  return rows.filter((r): r is { k: string; v: string } => typeof r.v === "string").map((r) => ({ k: r.k, v: r.v }));
 }
 
 export async function kvSet(childId: number, k: string, v: unknown): Promise<void> {

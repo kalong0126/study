@@ -15,6 +15,7 @@ import {
   type LanguageProgress,
   type LanguageSet,
   type LanguageToday,
+  type LearnedWord,
   type Lesson,
   type LogRow,
   type MarkTaskView,
@@ -25,6 +26,7 @@ import {
   type Redemption,
   type RedemptionHistory,
   type StateSnapshot,
+  type StoryFav,
   type StoryRow,
   type TimerState,
   type TtsStats,
@@ -200,10 +202,23 @@ export const api = {
   listStories: (limit = 30) =>
     request<{ stories: StoryRow[]; readTitles: string[] }>(`/stories${qs({ limit })}`),
 
+  /** 收藏的故事列表（历史故事删了也还能重读） */
+  storyFavs: () => request<{ favs: StoryFav[] }>("/stories/favs").then((r) => r.favs),
+
+  /** 收藏 / 取消收藏（幂等切换，按标题去重） */
+  toggleStoryFav: (story: { id: number; title: string; text: string }) =>
+    request<{ fav: boolean; favs: StoryFav[] }>("/stories/fav", {
+      method: "POST",
+      body: JSON.stringify(story),
+    }),
+
   /* -------------------------------------------------------------- 语言强化 */
 
   /** 当天的语言强化题目 + 作答进度（未生成时 set 为 null） */
   languageToday: (date?: string) => request<LanguageToday>(`/language/today${qs({ date })}`),
+
+  /** 语言强化训练里曾经出现过的词语（跨天汇总，按最近出现日期倒序） */
+  languageWords: () => request<{ words: LearnedWord[] }>("/language/words").then((r) => r.words),
 
   /** 生成当天 9 道题；已有题目时幂等返回（force=true 才会换一套） */
   generateLanguage: (body: { date?: string; theme?: string; difficulty?: number; force?: boolean } = {}) =>

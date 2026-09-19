@@ -11,7 +11,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { api } from "@/api";
-import type { StateSnapshot, StoryRow } from "@/api/types";
+import type { StateSnapshot, StoryFav, StoryRow } from "@/api/types";
 import { useProgressStore } from "./progress";
 import { useUiStore } from "./ui";
 
@@ -29,6 +29,34 @@ export const useStoryStore = defineStore("story", () => {
   const timer = ref<{ running: boolean; endAt: number }>({ running: false, endAt: 0 });
   const now = ref(Date.now());
   let tick: number | null = null;
+
+  /* ------------------------------------------------------------ 故事收藏 */
+
+  /** 收藏的故事（正文随收藏一起存，历史故事删了也能照常重读） */
+  const favs = ref<StoryFav[]>([]);
+  const favCount = computed(() => favs.value.length);
+
+  function isFav(title: string): boolean {
+    return favs.value.some((f) => f.title === title);
+  }
+
+  /** 拉一次收藏列表（首页 / 收藏页用） */
+  async function loadFavs(): Promise<void> {
+    try {
+      favs.value = await api.storyFavs();
+    } catch {
+      /* 拉取失败不打扰孩子：收藏页会再拉一次 */
+    }
+  }
+
+  /** 收藏 / 取消收藏当前这篇（按标题切换，幂等） */
+  async function toggleFav(story: { id: number; title: string; text: string }): Promise<boolean> {
+    const ui = useUiStore();
+    const r = await api.toggleStoryFav(story);
+    favs.value = r.favs;
+    ui.toast(r.fav ? `已收藏《${story.title}》，可以反复读啦` : "已取消收藏");
+    return r.fav;
+  }
 
   const timerRemain = computed(() => {
     if (!timer.value.running || !timer.value.endAt) return TIMER_SECONDS;
@@ -188,6 +216,11 @@ export const useStoryStore = defineStore("story", () => {
     timer,
     timerClock,
     timerRemain,
+    favs,
+    favCount,
+    isFav,
+    loadFavs,
+    toggleFav,
     applySnapshot,
     refresh,
     ensureToday,

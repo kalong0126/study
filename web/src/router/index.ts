@@ -15,6 +15,14 @@ const routes: RouteRecordRaw[] = [
   },
   { path: "/video", name: "video", component: () => import("@/views/VideoView.vue"), meta: { title: "英文故事" } },
   { path: "/wrong", name: "wrong", component: () => import("@/views/WrongView.vue"), meta: { title: "错题本" } },
+  {
+    path: "/mastered",
+    name: "mastered",
+    component: () => import("@/views/MasteredView.vue"),
+    meta: { title: "已掌握生字" },
+  },
+  { path: "/words", name: "words", component: () => import("@/views/WordsView.vue"), meta: { title: "已掌握词语" } },
+  { path: "/favs", name: "favs", component: () => import("@/views/StoryFavsView.vue"), meta: { title: "收藏的故事" } },
   { path: "/points", name: "points", component: () => import("@/views/PointsView.vue"), meta: { title: "我的积分" } },
   {
     path: "/admin",

@@ -13,6 +13,7 @@
  * 朗读走按句串行 + 高亮（见 StoryReader）。
  */
 import { computed, onMounted, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { describeApiError } from "@/api";
 import Icon from "@/components/Icon.vue";
 import PageTool from "@/components/PageTool.vue";
@@ -22,6 +23,7 @@ import { useProgressStore } from "@/stores/progress";
 import { TIMER_SECONDS, useStoryStore } from "@/stores/story";
 import { useUiStore } from "@/stores/ui";
 
+const route = useRoute();
 const story = useStoryStore();
 const progress = useProgressStore();
 const ui = useUiStore();
@@ -61,10 +63,33 @@ const storyNote = [
   `进来就自动写一篇今天的童话；当天只写一次，刷新、换设备都不会重复生成。`,
   `读满 ${timerMinutes} 分钟就完成今天的「阅读」任务。计时是自动开的：右边那枚胶囊在走就说明正在计时，点一下可以提前结束（读够 20 秒就算读完）。`,
   "点正文里的任意一句可以从那句开始朗读，正在读的句子会高亮。",
+  "读到喜欢的一篇，点一下星星收进「收藏的故事」，以后随时从首页再读一遍。",
   "「读过不重复」由后端按已读标题保证：写新的一篇时会避开以前读过的主题。",
 ].join("\n");
 
+/* ---------------------------------------------------------------- 故事收藏 */
+
+/** 当前这篇是否已收藏（按标题） */
+const fav = computed(() => !!story.current?.title && story.isFav(story.current.title));
+
+/** 收藏 / 取消收藏当前这篇（正文随收藏一起存，历史故事删了也还能重读） */
+async function toggleFav(): Promise<void> {
+  if (!story.current) return;
+  try {
+    await story.toggleFav({ id: story.current.id, title: story.current.title, text: story.current.text });
+  } catch (e) {
+    ui.toast(e instanceof Error ? e.message : "收藏失败，请再试一次");
+  }
+}
+
 onMounted(async () => {
+  void story.loadFavs(); // 星星的高亮状态要靠它（拉取失败也不影响阅读）
+  // 从「收藏的故事」点进来重读（?from=fav）→ 不要用「今天的那篇」把孩子正读着的顶掉；
+  // 直接刷新落在这条链接上而 store 里还没有故事时，才照常走「今天的一篇」。
+  if (route.query.from === "fav" && story.current) {
+    // 收藏重读不自动开计时：阅读任务今天多半已经完成，再计时只会让孩子莫名其妙
+    return;
+  }
   try {
     await story.ensureToday();
   } catch (e) {
@@ -145,6 +170,17 @@ watch(
     <button class="btn purple sm" type="button" :disabled="story.generating" @click="regenerate()">
       <Icon name="sparkle" :size="16" />{{ story.generating ? "正在写…" : "换一篇童话" }}
     </button>
+    <button
+      class="btn ghost sm fav-btn"
+      :class="{ on: fav }"
+      type="button"
+      :disabled="!hasStory"
+      :title="fav ? '已收藏，点一下取消' : '收藏这一篇'"
+      @click="toggleFav()"
+    >
+      <Icon name="star" :size="16" :stroke="2.2" />
+      {{ fav ? "已收藏" : "收藏" }}
+    </button>
     <button class="btn ghost sm" type="button" @click="toggleRead()">
       <Icon :name="isPlaying ? 'stop' : 'speakerLoud'" :size="16" />{{ isPlaying ? "停止朗读" : "朗读" }}
     </button>
@@ -170,3 +206,12 @@ watch(
     </div>
   </section>
 </template>
+
+<style scoped>
+/* 收藏星星的「已收藏」态：金黄底 + 深金字，一眼看得出这篇已经在收藏夹里 */
+.fav-btn.on {
+  background: #fff6dc;
+  border-color: #f1dfa8;
+  color: #c99000;
+}
+</style>

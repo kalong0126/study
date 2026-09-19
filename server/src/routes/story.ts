@@ -10,11 +10,19 @@
  */
 import { Router } from "express";
 import { loadConfig, resolveLlm } from "../config.js";
-import { addReadTitle, addStory, listReadTitles, listStories, storyOfDay } from "../db/repo/state.js";
+import {
+  addReadTitle,
+  addStory,
+  listReadTitles,
+  listStories,
+  listStoryFavs,
+  storyOfDay,
+  toggleStoryFav,
+} from "../db/repo/state.js";
 import { currentChildId } from "../services/child.js";
 import { chat } from "../services/llm.js";
 import { STORY_SYSTEM, buildStoryPrompt, parseStory } from "../services/prompts/storyPrompt.js";
-import { ah, handleLlmError, ok, qInt } from "./helpers.js";
+import { ah, fail, handleLlmError, ok, qInt } from "./helpers.js";
 
 export const storyRouter = Router();
 
@@ -106,14 +114,28 @@ storyRouter.get(
   }),
 );
 
+/** 收藏的故事列表（历史故事删了也能重读 —— 正文随收藏一起存） */
 storyRouter.get(
-  "/stories",
+  "/stories/favs",
+  ah(async (_req, res) => {
+    const childId = await currentChildId();
+    ok(res, { favs: await listStoryFavs(childId) });
+  }),
+);
+
+/** 收藏 / 取消收藏（幂等切换，按标题去重） */
+storyRouter.post(
+  "/stories/fav",
   ah(async (req, res) => {
     const childId = await currentChildId();
-    const limit = qInt(req.query.limit, 20, 1, 100);
-    ok(res, {
-      stories: await listStories(childId, limit),
-      readTitles: await listReadTitles(childId),
-    });
+    const id = Number(req.body?.id) || 0;
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    if (!title) {
+      fail(res, 400, "缺少故事标题，无法收藏", { kind: "story.fav.notitle" });
+      return;
+    }
+    const r = await toggleStoryFav(childId, { id, title, text });
+    ok(res, { fav: r.fav, favs: r.favs });
   }),
 );

@@ -20,9 +20,10 @@
  * 孩子不会用，只有误点的份（手滑点了「导入恢复」是要出事的）。
  * 家长请直接访问 /admin —— 孩子端不提供任何指向它的链接。
  */
-import { computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import Icon from "@/components/Icon.vue";
+import { api } from "@/api";
 import isleMath from "@/assets/islands/math.png";
 import isleDictation from "@/assets/islands/dictation.png";
 import isleReview from "@/assets/islands/review.png";
@@ -34,7 +35,6 @@ import isleVideo from "@/assets/islands/video.png";
 // 素材由 scripts/prepare-icons.py 从 AI 出的 2048px 大图抠底生成（源图不进 git）。
 import artChest from "@/assets/icons/chest.png";
 import artTree from "@/assets/icons/tree.png";
-import artTarget from "@/assets/icons/target.png";
 import artBook from "@/assets/icons/book.png";
 import { useMasteryStore } from "@/stores/mastery";
 import { TASK_DEFS, useProgressStore, type TaskDef } from "@/stores/progress";
@@ -189,7 +189,11 @@ function go(it: Isle): void {
 }
 
 /**
- * 学习小档案的三张卡。
+ * 学习小档案的三张卡 —— **都能点**，点进去看明细（2026-09-19 用户要求）：
+ *   · 已掌握生字 → /mastered：所有听写判对的生字按课文分组罗列
+ *   · 已掌握词语 → /words：语言强化训练里出现过的词语全部列出
+ *     （替换掉原来的「错题待复习」—— 错题该做的时候岛地图自然会引导，档案里放的是攒下的收获）
+ *   · 收藏的故事 → /favs：童话页里点了星星的那些，点开还能再读一遍
  *
  * 每张都有自己的 `bg`（浅色底）和 `c`（主色），数字、文字、边框都跟着 `c` 走 ——
  * 三块能一眼分开，靠的就是「颜色 + 图」这两件事，而不是三行长得一样的数字。
@@ -201,28 +205,44 @@ const stats = computed(() => [
   {
     n: mastery.masteredCount,
     l: "已掌握生字",
+    route: "/mastered",
     c: "#2FA37A",
     bg: "#E9FBF3",
     art: artTree,
-    tip: "继续加油，认识更多有趣的字吧！",
+    tip: "点开看看，都是你写对过的字！",
   },
   {
-    n: mastery.wrongTotal,
-    l: "错题待复习",
+    n: wordCount.value,
+    l: "已掌握词语",
+    route: "/words",
     c: "#D9557C",
     bg: "#FFEFF3",
-    art: artTarget,
-    tip: "把错题变成会做的题！",
+    art: isleLanguage,
+    tip: "点开看看，语言练习学过的词都在这！",
   },
   {
-    n: story.stories.length,
-    l: "读过的故事",
+    n: story.favCount,
+    l: "收藏的故事",
+    route: "/favs",
     c: "#7C68E0",
     bg: "#F3EFFF",
     art: artBook,
-    tip: "阅读让世界更大！",
+    tip: "点开再读一遍喜欢的故事吧！",
   },
 ]);
+
+/** 词语数量按需拉一次（首页只显示个数，明细在 /words 页） */
+const wordCount = ref(0);
+
+onMounted(() => {
+  void story.loadFavs();
+  api
+    .languageWords()
+    .then((words) => {
+      wordCount.value = words.length;
+    })
+    .catch(() => undefined);
+});
 </script>
 
 <template>
@@ -342,18 +362,28 @@ const stats = computed(() => [
       </div>
     </section>
 
-    <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励）。
+    <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励），
+         **整张卡是一个按钮**，点进去看对应的明细页（已掌握生字 / 已掌握词语 / 收藏的故事）。
          不再套一层白卡：套上之后这三块就只是「一张卡里的三个格子」，
          三行长得一样的数字；拆成独立卡、各自一色，才像三枚并列的徽章。 -->
     <section class="isle-stats">
-      <div v-for="s in stats" :key="s.l" class="stat-card" :style="{ background: s.bg, '--c': s.c }">
+      <button
+        v-for="s in stats"
+        :key="s.l"
+        class="stat-card"
+        type="button"
+        :style="{ background: s.bg, '--c': s.c }"
+        :aria-label="`${s.l}：${s.n}，点开查看`"
+        @click="router.push(s.route)"
+      >
         <span class="stat-ico"><img class="stat-art" :src="s.art" alt="" draggable="false" /></span>
         <div class="stat-body">
           <b class="stat-n">{{ s.n }}</b>
           <span class="stat-l">{{ s.l }}</span>
           <span class="stat-t">{{ s.tip }}</span>
         </div>
-      </div>
+        <span class="stat-arr" aria-hidden="true"><Icon name="chevRight" :size="16" :stroke="2.6" /></span>
+      </button>
     </section>
   </div>
 </template>

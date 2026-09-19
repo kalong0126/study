@@ -16,7 +16,7 @@ import path from "node:path";
 import { Router } from "express";
 import { loadConfig, resolveImagegen, resolveLlm } from "../config.js";
 import { todayStr } from "../db/index.js";
-import { getDaily, kvGet, kvSet, setTaskDone, TASK_KEYS, type DailyState } from "../db/repo/state.js";
+import { getDaily, kvGet, kvScan, kvSet, setTaskDone, TASK_KEYS, type DailyState } from "../db/repo/state.js";
 import { awardPoints, getBalance } from "../db/repo/points.js";
 import { currentChildId } from "../services/child.js";
 import { generateImage, imageExists, imageFileName } from "../services/imagegen.js";
@@ -342,6 +342,80 @@ languageRouter.get(
     });
   }),
 );
+
+/* ------------------------------------------------------------------ 历史词语 */
+
+/** 历史词语列表的一行（首页「已掌握词语」卡片点进去看的就是它） */
+export interface LearnedWord {
+  word: string;
+  meaning: string;
+  example: string;
+  theme: string;
+  /** 最近一次出现该词的日期（YYYY-MM-DD） */
+  date: string;
+  /** 一共出现过几次（按「哪天的题集」计，不是按题计） */
+  times: number;
+}
+
+/**
+ * 语言强化训练里**曾经出现过的词语**（跨天汇总）。
+ *
+ * 数据源就是按天存的题集（`language:<date>`）：把所有日期的键扫一遍，
+ * 收每道题的目标词（q.word）+ 释义 / 例句 / 主题，按词去重、按最近出现日期倒序。
+ * 不读 `languageRecent` —— 它有 40 条上限且只用于「避免重复」，不是完整清单。
+ */
+languageRouter.get(
+  "/language/words",
+  ah(async (_req, res) => {
+    const childId = await currentChildId();
+    const rows = await kvScan(childId, "language:");
+    const byWord = new Map<string, LearnedWord>();
+    for (const row of rows) {
+      const m = /^language:(\d{4}-\d{2}-\d{2})$/.exec(row.k);
+      if (!m) continue; // languageProgress: / languageImage: 等前缀相似但不是题集，跳过
+      const date = m[1] ?? "";
+      const set = parseJsonSet(row.v);
+      const theme = typeof set?.theme === "string" ? set.theme : "";
+      for (const q of Array.isArray(set?.questions) ? set!.questions : []) {
+        const word = typeof q?.word === "string" ? q.word.trim() : "";
+        if (!word) continue;
+        const prev = byWord.get(word);
+        if (prev) {
+          // 同一个词在更近的日期又出现了 → 保留更近的那份释义，次数 +1
+          if (date > prev.date) {
+            prev.date = date;
+            prev.theme = theme || prev.theme;
+            if (typeof q?.meaning === "string" && q.meaning.trim()) prev.meaning = q.meaning.trim();
+            if (typeof q?.example === "string" && q.example.trim()) prev.example = q.example.trim();
+          }
+          prev.times += 1;
+          continue;
+        }
+        byWord.set(word, {
+          word,
+          meaning: typeof q?.meaning === "string" ? q.meaning.trim() : "",
+          example: typeof q?.example === "string" ? q.example.trim() : "",
+          theme,
+          date,
+          times: 1,
+        });
+      }
+    }
+    const words = [...byWord.values()].sort((a, b) => (a.date === b.date ? b.times - a.times : b.date.localeCompare(a.date)));
+    ok(res, { words });
+  }),
+);
+
+/** 宽松解析题集 JSON：坏数据只丢当天，不影响别的日期 */
+function parseJsonSet(v: string): { theme?: string; questions?: { word?: unknown; meaning?: unknown; example?: unknown }[] } | null {
+  try {
+    const parsed = JSON.parse(v) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as { theme?: string; questions?: { word?: unknown; meaning?: unknown; example?: unknown }[] };
+  } catch {
+    return null;
+  }
+}
 
 /* ------------------------------------------------------------------ 配图 */
 

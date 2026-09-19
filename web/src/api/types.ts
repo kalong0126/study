@@ -100,6 +100,24 @@ export interface StoryRow {
   createdAt: string;
 }
 
+/** 收藏的故事（正文随收藏一起存，历史故事删了也还能重读） */
+export interface StoryFav {
+  id: number;
+  title: string;
+  text: string;
+  favAt: string;
+}
+
+/** 语言强化训练里出现过的词语（跨天汇总，按最近出现日期倒序） */
+export interface LearnedWord {
+  word: string;
+  meaning: string;
+  example: string;
+  theme: string;
+  date: string;
+  times: number;
+}
+
 /* ------------------------------------------------------------ 语言强化 */
 
 /** 交互方式：choice/fill/order 由系统自动判卷；open 由孩子口述 + 家长判定 */
