@@ -14,12 +14,14 @@
  *     已经被删掉的 chunk，直接白屏。后端也是为此把 index.html 设成 no-cache 的。
  *   · /api/** → **一律放行**，完全不碰。
  *     状态、判卷、语音都在这里；语音后端自己带 7 天强缓存，SW 再存一份纯属浪费空间。
- *   · /assets/** → cache-first。文件名带 hash，内容变了名字必变，缓存永远是安全的。
+ *   · /assets/** 和 /fonts/** → cache-first。文件名带 hash，内容变了名字必变，缓存永远是安全的。
+ *     字体（站酷快乐体 + Nunito）一共一百多个切片、近 1MB，虽然按 unicode-range 只下
+ *     真正用到的十来个，也仍然不该每次进页面都重发一遍请求。
  *   · 其余同源 GET（manifest / 图标）→ stale-while-revalidate。
  *
  * 改了下面的缓存清单或策略，记得把 VERSION 加一，否则老 SW 不会更新。
  */
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = `grade2-shell-${VERSION}`;
 
 /** app shell：只预缓存这几个，不带 hash 的入口文件 */
@@ -96,7 +98,11 @@ self.addEventListener("fetch", (event) => {
     (async () => {
       const cache = await caches.open(CACHE);
       if (req.mode === "navigate") return networkFirst(req, cache);
-      if (url.pathname.startsWith("/assets/")) return cacheFirst(req, cache);
+      // 字体文件名带内容哈希 → 内容不变、改了必改文件名，缓存优先最合适，
+      // 不必像 stale-while-revalidate 那样每次都发一次网络请求。
+      if (url.pathname.startsWith("/assets/") || url.pathname.startsWith("/fonts/")) {
+        return cacheFirst(req, cache);
+      }
       return staleWhileRevalidate(req, cache);
     })(),
   );

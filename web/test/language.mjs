@@ -304,12 +304,18 @@ try {
   const pts = await (await fetch(`${BASE}/api/points`)).json();
   ok("9 道全做完 → 加 20 分", pts.balance === 20, `balance=${pts.balance}`);
 
-  // 首页：语言练习现在是地图上的一座岛，做完要自动变成「已完成 / 已通关」
+  // 首页：语言练习现在是地图上的一座岛，做完要自动变成「已通关」
   await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
   const langCard = (await page.locator("button.isle", { hasText: "语言练习" }).first().innerText()).replace(/\s+/g, " ");
   ok("首页地图上有「语言练习」这一座", langCard.includes("语言练习"), langCard);
-  ok("做完 9 道后显示已完成 / 已通关", langCard.includes("已完成") && langCard.includes("已通关"), langCard);
+  // 判据是「岛带 done 类 + 状态胶囊写已通关」。别再找「已完成」——
+  // 岛上那一行小字已按产品要求删掉，只剩岛名 + 一颗状态胶囊（见 HomeView 的 isle-flag）。
+  const langDone = page.locator("button.isle.done", { hasText: "语言练习" });
+  const langFlag = (await langDone.count())
+    ? (await langDone.locator(".isle-flag").first().innerText()).replace(/\s+/g, " ")
+    : "(没找到处于已通关状态的语言练习岛)";
+  ok("做完 9 道后这座岛变成「已通关」", /已通关/.test(langFlag), langFlag);
   const cardCount = await page.locator("button.isle").count();
   ok("首页小岛地图共 6 座", cardCount === 6, `${cardCount} 座`);
   const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");

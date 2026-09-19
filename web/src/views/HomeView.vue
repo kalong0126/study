@@ -12,7 +12,7 @@
  *
  * 动画刻意压到最低：只有「当前这一关」的呼吸光圈、通关后的宝箱浮动。
  * 幅度都很小、周期都在 2.5 秒以上 —— 这是导航页，不是动画页。
- * 地图背景仍是那一整张静态海洋图（macaron.css 里的 isle-bg），不放动态装饰，
+ * 整块 hero（标题 + 六座岛）压的是同一张静态海洋图，不放动态装饰，
  * 避免和闯关路线抢注意力。
  *
  * 这一页是**孩子端**，只保留孩子会用、爱点的东西。
@@ -161,19 +161,48 @@ function go(it: Isle): void {
   void router.push(it.route);
 }
 
+/**
+ * 学习小档案的三张卡。
+ *
+ * 每张都有自己的 `bg`（浅色底）和 `c`（主色），数字、图标、边框都跟着 `c` 走 ——
+ * 三块能一眼分开，靠的就是「颜色 + 图标」这两件事，而不是三行长得一样的数字。
+ */
 const stats = computed(() => [
-  { n: mastery.masteredCount, l: "已掌握生字", c: "#3FBF8F", bg: "#E9FBF3" },
-  { n: mastery.wrongTotal, l: "错题待复习", c: "#C4486B", bg: "#FFEFF3" },
-  { n: story.stories.length, l: "读过的故事", c: "#8E7BEF", bg: "#F3EFFF" },
+  {
+    n: mastery.masteredCount,
+    l: "已掌握生字",
+    c: "#2FA37A",
+    bg: "#E9FBF3",
+    icon: "sprout",
+    tip: "继续加油，认识更多有趣的字吧！",
+  },
+  {
+    n: mastery.wrongTotal,
+    l: "错题待复习",
+    c: "#D9557C",
+    bg: "#FFEFF3",
+    icon: "target",
+    tip: "把错题变成会做的题！",
+  },
+  {
+    n: story.stories.length,
+    l: "读过的故事",
+    c: "#7C68E0",
+    bg: "#F3EFFF",
+    icon: "story",
+    tip: "阅读让世界更大！",
+  },
 ]);
 </script>
 
 <template>
   <section class="card isle-card">
+    <!-- 标题不是「卡片头」，而是这片海的一部分：绝对定位压在天空带上，
+         海铺在整块 .isle-card 上（见 macaron.css 的 .isle-card）。
+         太阳用 DOM 图标画 —— 背景图里原本也有一轮太阳，补天空时抹掉了：
+         那个位置正好是标题文字和第一座岛，两个太阳也会打架。 -->
     <div class="card-hd isle-hd">
-      <span class="ico" style="background: #FFF6E0; color: #C97F00">
-        <Icon name="sun" :size="19" />
-      </span>
+      <span class="ico isle-sun"><Icon name="sun" :size="30" /></span>
       <div>
         <h2>今天的学习小岛</h2>
         <span class="sub">{{ mapSub }}</span>
@@ -181,8 +210,8 @@ const stats = computed(() => [
       <span class="isle-cheer">加油！你一定可以的！</span>
     </div>
 
-    <!-- 地图：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
-         背景是静态海洋图，这里只有随进度走的虚线航线和六座可点的岛。 -->
+    <!-- 六座岛：宽屏是横排错落的一条航线，窄屏（见样式里的断点）自动转成竖向路线。
+         这块自己没有背景 —— 海是 .isle-card 上那张图，它从标题一直铺到卡片底。 -->
     <div class="isle-map">
       <svg class="isle-road" viewBox="0 0 600 100" preserveAspectRatio="none" aria-hidden="true">
         <path :d="roadPath" />
@@ -263,22 +292,22 @@ const stats = computed(() => [
     </div>
   </section>
 
-  <section class="card">
-    <div class="card-hd">
-      <span class="ico" style="background: #FBF0FF; color: var(--purple-d)">
-        <Icon name="star" :size="19" />
-      </span>
-      <div><h2>学习小档案</h2><span class="sub">你的成长看得见</span></div>
-    </div>
-    <div class="grid3">
-      <div v-for="s in stats" :key="s.l" :style="{ background: s.bg, borderRadius: '16px', padding: '14px', textAlign: 'center' }">
-        <div :style="{ fontSize: '30px', fontWeight: 900, color: s.c, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }">{{ s.n }}</div>
-        <div style="font-size: 13px; color: #6C8098; font-weight: 700; margin-top: 4px">{{ s.l }}</div>
+  <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励）。
+       不再套一层白卡：套上之后这三块就只是「一张卡里的三个格子」，
+       三行长得一样的数字；拆成独立卡、各自一色，才像三枚并列的徽章。 -->
+  <section class="isle-stats">
+    <div v-for="s in stats" :key="s.l" class="stat-card" :style="{ background: s.bg, '--c': s.c }">
+      <span class="stat-ico"><Icon :name="s.icon" :size="24" :stroke="2.1" /></span>
+      <div class="stat-body">
+        <b class="stat-n">{{ s.n }}</b>
+        <span class="stat-l">{{ s.l }}</span>
+        <span class="stat-t">{{ s.tip }}</span>
       </div>
     </div>
-    <p class="tip">
-      当前课文库共 {{ content.lessons.length }} 篇课文。家长可以登录内容后台继续录制新的篇章，孩子这边立刻就能选到。<br />
-      （内容后台与数据备份都在 <code>/admin</code>，只能靠网址打开，孩子端不放入口。）
-    </p>
   </section>
+
+  <p class="tip isle-note">
+    当前课文库共 {{ content.lessons.length }} 篇课文。家长可以登录内容后台继续录制新的篇章，孩子这边立刻就能选到。<br />
+    （内容后台与数据备份都在 <code>/admin</code>，只能靠网址打开，孩子端不放入口。）
+  </p>
 </template>

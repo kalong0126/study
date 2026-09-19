@@ -149,10 +149,12 @@ async function reloadWrong() {
 /** 错题本卡片右上角那个「重新挑战 x / y」的进度胶囊（别撞上顶栏的今日进度） */
 const reviewPill = () => page.locator("main.wrap .card .stat-pill").first();
 
-/** 首页「错题修理站」那座岛上的文字（岛名 + 状态 + 提示） */
-async function reviewCardText() {
+/** 回首页，返回「错题修理站」那座岛 */
+async function reviewIsle() {
   await gotoNav("今日");
-  return squash(await page.locator("button.isle", { hasText: "错题修理站" }).first().innerText());
+  const el = page.locator("button.isle", { hasText: "错题修理站" }).first();
+  await el.waitFor({ timeout: 15000 });
+  return el;
 }
 
 /** 轮询直到 fn() 返回真值 */
@@ -225,8 +227,15 @@ try {
   ok("服务端 reviewTarget 仍是 null（没开闸）", dClosed.reviewTarget === null, String(dClosed.reviewTarget));
   ok("页面上出现「先做完口算和听写」提示条", (await page.locator(".wb-lock").count()) === 1);
   ok("输入框是禁用的", await page.locator(".wb-item input.m-in").first().isDisabled());
-  const cardClosed = await reviewCardText();
-  ok("首页错题修理站提示先做前置任务", cardClosed.includes("先做口算和听写"), cardClosed);
+  // 首页那座岛只写岛名 + 一颗状态胶囊（第二行小字已按产品要求删掉）。
+  // 错题修理站是「随时能去的工具站」，所以闸没开时这里也不上锁：
+  // 胶囊写「去看看」，而不是「待解锁」—— 孩子照样能进去看错题，只是还不能改。
+  const isleClosed = await reviewIsle();
+  const closedCls = (await isleClosed.getAttribute("class")) || "";
+  ok("闸没好时错题修理站也不上锁（随时能进去看）", !closedCls.includes("locked"), closedCls);
+  const closedGo = squash(await isleClosed.locator(".isle-go").first().innerText());
+  ok("胶囊写「去看看」而不是「待解锁」", closedGo.includes("去看看"), closedGo);
+  ok("岛上只有岛名（没有「先做口算和听写」这类第二行小字）", squash(await isleClosed.innerText()).startsWith("错题修理站"), squash(await isleClosed.innerText()));
   await page.goto(`${BASE}/wrong`, { waitUntil: "networkidle" });
   await page.waitForSelector(".wb-item", { timeout: 15000 });
   await page.screenshot({ path: path.join(shotDir, "review-locked.png"), fullPage: true });
@@ -257,8 +266,13 @@ try {
   ok("重新挑战计数 = 1", counted === true, String((await dailyOf()).reviewCount));
   const dDone = await dailyOf();
   ok("「错题复习」任务已打勾", dDone.tasks?.review === true, JSON.stringify(dDone.tasks));
-  const cardDone = await reviewCardText();
-  ok("首页任务卡显示 已完成 1 / 1 道", cardDone.includes("已完成1/1道"), cardDone);
+  // 首页那座岛的状态胶囊换成「已通关」（岛上不再有「已完成 1 / 1 道」那种进度小字，
+  // 进度改在错题本页顶部那颗 pill 上看 —— 上面第 4 步已经断言过页面上的计数）
+  const isleDone = await reviewIsle();
+  const doneCls = (await isleDone.getAttribute("class")) || "";
+  ok("首页错题修理站变成已通关状态", doneCls.includes("done"), doneCls);
+  const doneFlag = squash(await isleDone.locator(".isle-flag").first().innerText());
+  ok("状态胶囊写「已通关」", /已通关/.test(doneFlag), doneFlag);
 
   /* ————————————————————————— 5. 错 5 道 → 封顶 3，做完 3 道才完成 */
   step("5. 错 5 道 → 目标封顶 3；且中途错题本变长，分母不跟着变");
@@ -309,8 +323,16 @@ try {
   ok("错题本空 → 目标 0", d6.reviewTarget === 0, String(d6.reviewTarget));
   const autoDone = await waitFor(async () => (await dailyOf()).tasks?.review === true, 8000);
   ok("任务自动打勾（没有要复习的）", autoDone === true, JSON.stringify(await dailyOf()));
-  const cardEmpty = await reviewCardText();
-  ok("首页任务卡说明「错题本是空的」", cardEmpty.includes("错题本是空的"), cardEmpty);
+  // 「错题本是空的」这句提示现在只活在错题本页里（首页那座岛只有岛名一行）
+  await reloadWrong();
+  const emptyText = squash(await page.locator(".wb-empty").first().innerText());
+  ok("错题本页说明「数学错题本是空的」", emptyText.includes("错题本是空的"), emptyText);
+  const isleEmpty = await reviewIsle();
+  ok(
+    "错题本空 → 那座岛也算通关",
+    ((await isleEmpty.getAttribute("class")) || "").includes("done"),
+    (await isleEmpty.getAttribute("class")) || "",
+  );
 
   /* ————————————————————————— 7. 控制台 */
   step("7. 控制台");

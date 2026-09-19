@@ -529,16 +529,6 @@ export const useProgressStore = defineStore("progress", () => {
     return t === 0 ? 0 : REVIEW_MAX;
   });
 
-  /** 首页任务卡 / 错题页顶部显示用的一句话 */
-  const reviewText = computed(() => {
-    // 做过就优先报成绩：不管它是「做满目标」「本来就没错题」还是「家长把错题清空了」完成的。
-    // 否则擦掉最后一道的瞬间会从「已完成 3/3」掉成「错题本是空的」，孩子看着像白做了。
-    if (reviewCount.value > 0) return `已完成 ${reviewCount.value} / ${reviewTotal.value} 道`;
-    if (isDone("review")) return "错题本是空的，没有要复习的";
-    if (!canReview.value) return "先完成口算和听写，再来复习错题";
-    return `已完成 0 / ${reviewTotal.value} 道`;
-  });
-
   let reviewSyncing = false;
 
   /**
@@ -870,7 +860,6 @@ export const useProgressStore = defineStore("progress", () => {
     reviewRemaining,
     reviewDone,
     canReview,
-    reviewText,
     syncReview,
     mathTotal,
     mathAnswered,

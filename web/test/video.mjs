@@ -367,7 +367,13 @@ try {
   await page.waitForTimeout(1200);
   const card = (await page.locator("button.isle", { hasText: "英文小屋" }).first().innerText()).replace(/\s+/g, " ");
   ok("首页地图上有「英文小屋」这一座", card.includes("英文小屋"), card);
-  ok("做完后显示已完成 / 已通关", card.includes("已完成") && card.includes("已通关"), card);
+  // 判据是「岛带 done 类 + 状态胶囊写已通关」。别再找「已完成」——
+  // 岛上那一行小字已按产品要求删掉，只剩岛名 + 一颗状态胶囊（见 HomeView 的 isle-flag）。
+  const done = page.locator("button.isle.done", { hasText: "英文小屋" });
+  const flag = (await done.count())
+    ? (await done.locator(".isle-flag").first().innerText()).replace(/\s+/g, " ")
+    : "(没找到处于已通关状态的英文小屋)";
+  ok("做完后这座岛变成「已通关」", /已通关/.test(flag), flag);
   const cardCount = await page.locator("button.isle").count();
   ok("首页小岛地图共 6 座", cardCount === 6, `${cardCount} 座`);
   const headPill = (await page.locator(".stat-pill").first().innerText()).replace(/\s+/g, " ");

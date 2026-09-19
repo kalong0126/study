@@ -48,8 +48,19 @@ const TEST_DB = path.join(SERVER, "data", "_pwatest.db");
 const NODE = "C:/Users/kalon/.workbuddy/binaries/node/versions/22.22.2-3/node.exe";
 const CHROME = "C:/Users/kalon/AppData/Local/ms-playwright/chromium-1234/chrome-win64/chrome.exe";
 
-/** SW 里 CACHE 的名字，改 sw.js 的 VERSION 时这里要跟着改 */
-const CACHE_NAME = "grade2-shell-v1";
+/**
+ * SW 缓存的名字，直接从 public/sw.js 里读 VERSION 拼出来。
+ *
+ * 以前这里是硬编码的 `grade2-shell-v1`（还留了句「改 sw.js 时记得同步」的注释）。
+ * 那种约定迟早会漏：本轮把 VERSION 提到 v2 就是为了让 /fonts/ 走 cache-first，
+ * 结果这条断言立刻假失败了一次。能从源码算出来的东西就别手抄。
+ */
+const CACHE_NAME = (() => {
+  const src = fs.readFileSync(path.join(REPO, "web", "public", "sw.js"), "utf8");
+  const v = /const VERSION = "([^"]+)"/.exec(src)?.[1];
+  if (!v) throw new Error("读不到 public/sw.js 里的 VERSION");
+  return `grade2-shell-${v}`;
+})();
 
 let pass = 0;
 const failures = [];

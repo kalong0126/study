@@ -17,6 +17,30 @@ const SERVER_ROOT = path.resolve(HERE, "..");
 const NODE = process.execPath;
 const TSX = path.join(SERVER_ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 
+// ⚠️ 8798 与 8799 是服务端测试**独占**的端口，web/test 下的脚本不许再用。
+// 两边撞端口的后果很隐蔽：后来者 bind 失败但不报错，请求打到先起来的那个实例上，
+// 于是「生成成功但标题是 undefined」这类莫名其妙的断言失败就冒出来了
+// （真的踩过：把 web/test/nav.mjs 和 npm test 放在同一个终端里并行跑）。
+//
+// 当前端口分配（改动任何一个都要整表复查，别只看自己那一个文件）：
+//   服务端  api.test.ts          8798（app） + 8799（mock LLM）
+//           auth.test.ts         8810 / 8811
+//           mock-llm.ts          8799（由 MOCK_PORT 传入，默认值同上）
+//   前端    pwa.mjs              8794
+//           language.mjs         8796 + mock 8795
+//           review-gate.mjs      8796
+//           isle-map / wrong-answer / dictation-continue  8797
+//           font.mjs             8800
+//           video.mjs            8801 + mock 8802
+//           math-timer.mjs       8803
+//           nav.mjs              8804
+//           real-mark.mjs        8805
+//   其余脚本（smoke / layout）直接打 8788 上跑着的开发实例，不起新实例。
+//
+// ⚠️ 除了端口，这些「隔离实例」测试还不能**并行**跑。它们都要 spawn 一份
+//    `tsx src/index.ts`，共用同一份 tsx 转换缓存与 server/data 目录；两个一起跑会
+//    互相踩（实测：video.mjs 与 language.mjs 并行时，视频流那 5 条按字节数比对的断言
+//    集体失败，单独重跑 56/56 全过）。要一次跑多个，就在 shell 里串行 `&&`，别开多终端。
 const MOCK_PORT = 8799;
 const APP_PORT = 8798;
 const BASE = `http://127.0.0.1:${APP_PORT}`;

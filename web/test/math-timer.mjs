@@ -1,9 +1,11 @@
 /**
  * 「每日口算自动计时」端到端回归测试
  *
- * 需求：进口算页自动开始计时，20 题做完后统计一个用时，显示在首页。
+ * 需求：进口算页自动开始计时，20 题做完后统计一个用时。
+ *       ⚠️ 用时**只在口算页**展示。首页小岛地图上每座岛只留岛名一行，
+ *       曾经的「用时 1:32」第二行小字已按产品要求删掉 —— 这一条也一并守住。
  *
- * 为什么要用隔离实例（端口 8798 + 独立 DB）：
+ * 为什么要用隔离实例（端口 8803 + 独立 DB）：
  *   这个测试会把当天 20 道口算全部填上答案（= 真的会完成任务、写错题本）。
  *   跑在孩子的真实库上会污染他的学习数据，所以单开一份临时 DB，跑完即删。
  *
@@ -12,7 +14,7 @@
  *   2. 「换一批题目」→ 计时归零
  *   3. 离开页面自动暂停（离开的那几分钟不算用时）
  *   4. 20 题做完 → 计时停住，不再增长
- *   5. 首页「每日口算」任务卡上显示用时，且与计时器一致
+ *   5. 首页那座岛**只有岛名**（用时不上岛，第二行小字是刻意删掉的）
  *   6. 刷新后用时还在（说明确实存到了服务端，不是只活在内存里）
  *   7. 服务端对用时值做了校验（负数拒绝、超大值钳住）
  *
@@ -33,7 +35,7 @@ const {
 // 仓库根用「脚本自身位置」推，而不是 cwd —— `npm run` 时 cwd 是 web/，用 cwd 会推成 web/server
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SERVER = path.join(REPO, "server");
-const PORT = 8798;
+const PORT = 8803;
 const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_CONFIG = path.join(SERVER, "config", "config.mathtimer.yaml");
 const TEST_DB = path.join(SERVER, "data", "_mathtimer.db");
@@ -238,18 +240,30 @@ try {
   const timerBox = (await page.locator(".timer-box").first().innerText()).replace(/\s+/g, " ");
   ok("口算页上显示「用时」", /用时/.test(timerBox), timerBox.slice(0, 70));
 
-  /* ————————————————————————————— 5. 首页显示用时 */
-  step("5. 首页「口算岛」显示用时");
+  /* ————————————————————————————— 5. 首页那座岛只有岛名 */
+  step("5. 首页「口算岛」只写岛名（用时不上岛）");
   await gotoNav("今日");
-  const mathCard = (await page.locator("button.isle").first().innerText()).replace(/\s+/g, " ");
-  ok("首页口算岛上出现「用时」", /用时/.test(mathCard), mathCard);
-  const homeSec = parseDuration(mathCard);
+  // 只取 .isle-tag（岛名胶囊）：整个 button.isle 里还挂着奖励星标「+10」和状态胶囊
+  // （「出发」/「待解锁」/「已通关」），拿整颗按钮的文本会把它们一起读进来。
+  const isleTag = (
+    await page.locator("button.isle").first().locator(".isle-tag").innerText()
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+  // 岛名下面那行小字（曾经是「用时 1:32」「0 / 20」）按产品要求删掉了：
+  // 一行岛名 + 一颗状态胶囊，扫一眼就知道该去哪一关，不再被进度数字切碎。
+  ok("岛上只有岛名，没有「用时」这类第二行小字", !/用时/.test(isleTag), isleTag);
+  ok("岛名就是「口算岛」，没有多余文字", isleTag === "口算岛", JSON.stringify(isleTag));
+  ok("岛上没有进度数字（0 / 20 之类）", !/\d/.test(isleTag), isleTag);
+  // 但用时本身必须还在口算页上，且与停住的计时器对得上 —— 别把功能一起删掉。
+  // 页面上的写法是「这一轮做完啦，用时 0 分 3 秒。」，同一段里还有 mm:ss 的时钟，
+  // 所以用 parseDuration 从文本里取，而不是直接读时钟。
+  const shownSec = parseDuration(timerBox);
   ok(
-    "首页用时与口算页计时一致",
-    homeSec >= 0 && Math.abs(homeSec - t3) <= 2,
-    `首页 ${homeSec}s vs 计时器 ${t3}s`,
+    "口算页仍显示用时，且与停住的计时器一致",
+    shownSec >= 0 && Math.abs(shownSec - t3) <= 2,
+    `页面显示 ${shownSec}s vs 计时器 ${t3}s`,
   );
-
   /* ————————————————————————————— 6. 刷新后仍在（服务端持久化） */
   step("6. 刷新后用时仍在（说明存在服务端）");
   // 回写是异步的，给它最多 6 秒落地（正常情况 1 次就够）

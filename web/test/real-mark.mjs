@@ -6,7 +6,7 @@
  *   这个脚本证明「真模型真的能认出手写、并且判对/判错都对」。
  *
  * 做法：
- *   1. 起一个隔离实例（独立 DB / 独立端口 8799），不碰孩子的真实数据
+ *   1. 起一个隔离实例（独立 DB / 独立端口 8805），不碰孩子的真实数据
  *   2. 用真实 Chromium 画布，按前端 sheetDataUrl 的版式生成「田字格 + 红色序号」合成图
  *   3. POST /api/mark → 轮询 /api/mark/:taskId → 核对每个字的判定
  *
@@ -28,7 +28,7 @@ const { chromium } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/
 // 仓库根用「脚本自身位置」推，而不是 cwd —— `npm run` 时 cwd 是 web/，用 cwd 会推成 web/server
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SERVER = path.join(REPO, "server");
-const PORT = 8799;
+const PORT = 8805;
 const BASE = `http://127.0.0.1:${PORT}`;
 const TEST_CONFIG = path.join(SERVER, "config", "config.realmark.yaml");
 const TEST_DB = path.join(SERVER, "data", "_realmark.db");
@@ -228,7 +228,7 @@ backup:
 let server;
 let browser;
 try {
-  console.log("\n=== 准备隔离实例（端口 8799，独立 DB）===");
+  console.log("\n=== 准备隔离实例（端口 8805，独立 DB）===");
   fs.writeFileSync(TEST_CONFIG, TEST_CONFIG_YAML, "utf8");
   for (const f of [TEST_DB, `${TEST_DB}-wal`, `${TEST_DB}-shm`]) {
     if (fs.existsSync(f)) fs.unlinkSync(f);

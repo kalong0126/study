@@ -172,16 +172,38 @@ try {
     ok("航线连了 6 个点（5 段曲线）", ((d || "").match(/ C /g) || []).length === 5, String(d).slice(0, 60));
     ok("每座岛都挂着通关奖励", (await page.locator(".isle-star").count()) === 5, "错题修理站不发分，所以是 5");
 
-    // 底色仍是那张 3.56:1 的 3D 蓝色海洋场景图（天空/远岛/灯塔/帆船/沙滩都画在图里），
-    // 兜底底色取海面主色 —— 图没加载出来的一瞬间也不能闪白块
-    const mapBg = await page.locator(".isle-map").evaluate((el) => {
+    // 海洋铺在**整块 hero** 上（标题 + 六座岛），不是只铺地图那一格 ——
+    // 标题必须是「场景里的一部分」，而不是卡片外面孤零零的一行字。
+    // 兜底底色取海色：图没到位的一瞬间也不能闪白块。
+    const cardBg = await page.locator(".isle-card").evaluate((el) => {
       const s = getComputedStyle(el);
       return { img: s.backgroundImage, color: s.backgroundColor };
     });
     ok(
-      "地图铺着蓝色海洋背景图（含兜底海色）",
-      /url\(/.test(mapBg.img) && /isle-bg/.test(mapBg.img) && mapBg.color === "rgb(169, 220, 246)",
-      JSON.stringify(mapBg).slice(0, 160),
+      "海洋背景铺在整块 hero 上（含兜底海色）",
+      /url\(/.test(cardBg.img) && /isle-bg-hero/.test(cardBg.img) && cardBg.color === "rgb(203, 230, 248)",
+      JSON.stringify(cardBg).slice(0, 170),
+    );
+    // 图按卡片比例（2048:745）定高，cover 进来零裁切 —— 灯塔、帆船、沙滩都留在画面里
+    const hero = await page.locator(".isle-card").boundingBox();
+    ok(
+      "hero 按背景图比例定高（cover 零裁切）",
+      Math.abs(hero.width / hero.height - 2048 / 745) < 0.03,
+      `${hero.width.toFixed(0)}x${hero.height.toFixed(0)} = ${(hero.width / hero.height).toFixed(3)}（目标 ${(2048 / 745).toFixed(3)}）`,
+    );
+    // 标题真的压在图上：它的顶边贴着卡片顶边，底边仍在卡片内
+    const hdBox = await page.locator(".isle-hd").boundingBox();
+    ok(
+      "标题压在海洋图上（不是卡片外的一行字）",
+      hdBox.y >= hero.y - 1 && hdBox.y + hdBox.height < hero.y + hero.height * 0.45,
+      `hero ${hero.y.toFixed(0)}..${(hero.y + hero.height).toFixed(0)}，标题 ${hdBox.y.toFixed(0)}..${(hdBox.y + hdBox.height).toFixed(0)}`,
+    );
+    // 标题不能压到第一座岛（窄一点的窗口上最容易出这个问题）
+    const firstIsle = await page.locator("button.isle").first().boundingBox();
+    ok(
+      "标题与第一座岛不重叠",
+      hdBox.y + hdBox.height <= firstIsle.y + 1,
+      `标题底 ${(hdBox.y + hdBox.height).toFixed(0)} vs 岛顶 ${firstIsle.y.toFixed(0)}`,
     );
     const roadStroke = await page
       .locator(".isle-road path")
@@ -203,6 +225,49 @@ try {
       return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
     });
     ok("岛名对比度 ≥ 4.5:1（WCAG AA）", contrast >= 4.5, `${contrast}:1`);
+
+    // 学习小档案：三张各自成卡（图标 + 数字 + 标签 + 一句鼓励），不再套一层白卡 ——
+    // 套上之后这三块就只是「一张卡里的三个格子」，三行长得一样的数字。
+    const statCards = page.locator(".isle-stats .stat-card");
+    ok("学习小档案是三张独立卡", (await statCards.count()) === 3, `${await statCards.count()} 张`);
+    // 图标名写错时 Icon 会渲染一个空 <svg>，count() 照样是 1 —— 断言图形条数才堵得住假通过
+    const statGlyphs = await page
+      .locator(".isle-stats .stat-ico svg path, .isle-stats .stat-ico svg circle")
+      .count();
+    ok("每张卡都画出了图标", statGlyphs >= 6, `图形 ${statGlyphs} 条`);
+    const statTips = await page.locator(".isle-stats .stat-t").allInnerTexts();
+    ok(
+      "每张卡都带一句鼓励",
+      statTips.length === 3 && statTips.every((t) => t.trim().length >= 4),
+      statTips.map((t) => t.trim()).join(" | "),
+    );
+    // 三张卡底色各不相同 —— 靠颜色 + 图标区分，而不是三行一样的数字
+    const statBg = await statCards.evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).backgroundColor),
+    );
+    ok("三张卡底色各不相同", new Set(statBg).size === 3, statBg.join(" | "));
+
+    // 字体：界面用站酷快乐体（自托管），识字内容用楷体。
+    // 分两条守：一条守「声明写对了」，一条守「文件真的加载进来了」——
+    // 只判前一条的话，字体 404 了照样全绿。
+    const bodyFont = await page.locator("body").evaluate((el) => getComputedStyle(el).fontFamily);
+    ok("界面字体是站酷快乐体", /ZCOOL KuaiLe/.test(bodyFont), bodyFont.slice(0, 64));
+    const fontLoaded = await page.evaluate(async () => {
+      await document.fonts.ready;
+      return [...document.fonts].some((f) => f.family.includes("ZCOOL") && f.status === "loaded");
+    });
+    ok("字体切片真的加载成功（不是只剩一句声明）", fontLoaded === true, String(fontLoaded));
+    // 课文 / 童话是「要照着认的字」，必须楷体。这条以前踩过坑：
+    // 字体列表里混进 `inherit` 这种 CSS-wide 关键字会让整条声明判无效，楷体白设、悄悄退回黑体。
+    const kaiFont = await page.evaluate(() => {
+      const d = document.createElement("div");
+      d.className = "story-text";
+      document.body.appendChild(d);
+      const f = getComputedStyle(d).fontFamily;
+      d.remove();
+      return f;
+    });
+    ok("课文 / 童话用楷体（识字用规范字形）", /Kaiti|KaiTi|楷体/.test(kaiFont), kaiFont.slice(0, 64));
   }
 
   /* ————————————————————————————— 2. 开局：只有第一关能走 */

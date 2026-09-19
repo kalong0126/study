@@ -12,7 +12,7 @@
  *   回调 → isLeaving 卡在 true → 新视图不挂载，URL 变了但页面全白，必须手刷。
  *   修复：RouterView 外包一层带 key 的单根 div。
  *
- * 默认起隔离实例（端口 8798 + 独立 DB）：首页那张小岛地图是「闯过一关才解锁下一关」的，
+ * 默认起隔离实例（端口 8804 + 独立 DB）：首页那张小岛地图是「闯过一关才解锁下一关」的，
  * 要跑遍所有页面就得先把今日六项置为完成 —— 这种事绝不能做在孩子的真实库上。
  * 传了 baseUrl 就用外部服务（此时解锁那一步会改那份库，自己掂量）。
  *
@@ -36,7 +36,7 @@ mkdirSync(OUT, { recursive: true });
 /* --------------------------------------------------- 隔离实例（默认走这条） */
 
 const SERVER = path.join(REPO, "server");
-const PORT = 8798;
+const PORT = 8804;
 const EXTERNAL = process.argv[2];
 const BASE = EXTERNAL ?? `http://127.0.0.1:${PORT}`;
 const TEST_CONFIG = path.join(SERVER, "config", "config.islenav.yaml");
@@ -134,7 +134,7 @@ const ROUTES = [
 
 // 起隔离实例（传了 baseUrl 就直接用外部服务）
 if (!EXTERNAL) {
-  step("准备隔离实例（端口 8798，独立 DB，不碰孩子的数据）");
+  step("准备隔离实例（端口 8804，独立 DB，不碰孩子的数据）");
   const healthy = await startIsolated();
   healthy ? pass("隔离实例已就绪") : fail("隔离实例没起来，看 server/logs/app-*.log");
   if (!healthy) {

@@ -2,6 +2,11 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import App from "@/App.vue";
 import { router } from "@/router";
+// 字体声明放在主题样式之前：@font-face 要先注册好，后面的 font-family 才认得出它。
+// 两份各管一段：Nunito 管数字/英文（站酷的数字是涂鸦风异形，不能拿来当界面数字），
+// 站酷快乐体管中文。拼接规则见 macaron.css 的 --font-round。
+import "@/styles/font-nunito.css";
+import "@/styles/font-zcool.css";
 import "@/styles/macaron.css";
 
 const app = createApp(App);

@@ -17,17 +17,47 @@
   --radius: 20px;
   --shadow: 0 8px 24px rgba(120, 160, 205, .14);
   --shadow-s: 0 3px 10px rgba(120, 160, 205, .10);
+
+  /* --font-round：界面字体。
+     第一位是 Nunito（拉丁，自托管，见 font-nunito.css）—— 它只管数字和英文。
+     font-family 是**逐字符回退**的：数字、字母在 Nunito 里有字形就用它，
+     汉字没有字形就落到第二位的站酷快乐体。所以这两份要按「拉丁在前、中文在后」排。
+
+     为什么数字不能交给站酷快乐体：它是展示型中文字体，数字与西文是手写涂鸦风的异形 ——
+     0 是歪斜的椭圆、1 像一撇、每个数字宽度都不一样，也没有 tabular-nums 特性。
+     而本站数字用量极大（积分、今天完成 x/6、题号、用时 1:32、+10 奖励），
+     用它渲染既读不准、宽度还会随着数字变化左右跳；叠上合成加粗后 30px/900 的 0
+     直接糊成实心块。站酷另外还缺 ÷ 和 ／ 两个字符（口算可能用到），Nunito 有。
+
+     后面那串是兜底：两份自托管字体都没覆盖到的字依次退回系统圆体、再到黑体，不能省。
+
+     --font-kai：识字字体。课文原文、生字、手写格这类「要照着认、照着写的字」必须用楷体 ——
+     楷体是识字教学的标准字形；卡通体的笔形是设计过的（末笔更圆、结构更松），
+     孩子照着它记笔画会记错。这条不参与上面的数字讨论：楷体的数字本身就是规整的。 */
+  --font-round: "Nunito", "ZCOOL KuaiLe", "Yuanti SC", "圆体-简", "YouYuan", "幼圆", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-kai: "Kaiti SC", "KaiTi", "STKaiti", "楷体", "FangSong", serif;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
+/* 全站字体走 --font-round（站酷快乐体）；识字内容单独用 --font-kai，见下面的 .story-text。
+   字重交给浏览器合成加粗：站酷快乐体只有真实 400 一档，标题/数字的 700-900
+   由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
+   不再合成，全站粗细会一样（详见 font-zcool.css 顶部说明）。 */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+  font-family: var(--font-round);
   color: var(--ink); font-size: 16px; line-height: 1.6;
   background: linear-gradient(165deg, var(--bg1) 0%, #F3F8FF 45%, var(--bg2) 100%);
   background-attachment: fixed; min-height: 100vh;
   overflow-x: hidden;
 }
+
+/* 这里曾经有一组 `-webkit-text-stroke: .6px currentColor` 的「描边补粗」，
+   给 .brand / .card-hd h2 / .stat-n / .tk-count b 手动加粗 —— 那是为了绕过
+   @font-face 声明 `100 900` 导致的「全站字重被压平」。现在字重声明已改回真实值 400，
+   浏览器会正常合成加粗，描边就成了多余的一层：它让笔画向外膨胀、字腔变窄，
+   13-18px 的字看起来发虚发糊（这正是当时误判成「合成加粗糊」的真凶）。整组删掉。
+   强调层级改由字号 + 字色 + 色块承担，这也是参考图的做法。 */
 button { font-family: inherit; }
 a { color: var(--blue-d); }
 
@@ -102,8 +132,39 @@ a { color: var(--blue-d); }
    定位用的是百分比刻度：left 按关数等分、top 由 --dy 错落；
    底下的 SVG 航线用的是同一套刻度（x=(i+.5)×100、y=50+dy），
    所以尺子只有一把 —— 岛屿挪了，航线一定跟着挪，不会从岛边上擦过去。 */
-.isle-card { overflow: hidden; }
-.isle-hd { align-items: flex-start; margin-bottom: 12px; }
+/* hero：标题和六座岛压在同一张海洋场景上 —— 图铺在卡片本身，而不是地图块上，
+   这样标题才是「场景里的一部分」，而不是卡片外面孤零零的一行字。
+   卡片按图的比例定高（2048×745），cover 进来零裁切，灯塔、帆船、沙滩都留在画面里；
+   高度随宽度等比缩放，所以标题和岛都用绝对定位 + 百分比挂上去。
+
+   选择器带上 `.card` 是有意的：通用 `.card` 在响应式区还有一条 `padding: 15px`，
+   特异性相同、位置靠后，会把这里的 `padding: 0` 盖掉 —— 图就铺不满卡边了。 */
+.card.isle-card {
+  position: relative;
+  padding: 0;
+  aspect-ratio: 2048 / 745;
+  overflow: hidden;
+  background-color: #CBE6F8;   /* 图还没到位时兜底的海色，不能用白（会闪一块白） */
+  background-image: url("../assets/isle-bg-hero.jpg");
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-size: cover;
+}
+
+/* 标题区叠在天空带上、不占流；下面的 .isle-map 从它下沿开始，
+   所以这里的高度就是「岛的垂直活动范围的上界」 */
+.isle-hd {
+  position: absolute; left: 22px; right: 22px; top: 15px;
+  z-index: 2;
+  align-items: flex-start; margin: 0;
+}
+/* 太阳：直接衬在天空上的一枚无底色图标，比通用 .ico 的小方框大一圈 */
+.isle-hd .ico { width: 38px; height: 38px; background: transparent; color: #F3A32B; }
+.isle-hd .ico svg { width: 34px; height: 34px; }
+/* 标题压在天空上，比普通卡片头的大一号 —— 它是整页的主标题，不是分区标题 */
+.isle-hd h2 { font-size: 23px; letter-spacing: .6px; }
+/* 副标题不能用最浅那档灰（--ink3）：浅蓝天空上对比度不够，换中间档 */
+.isle-hd .sub { font-size: 13.5px; color: var(--ink2); }
 .isle-cheer {
   position: relative; margin-left: auto; align-self: center;
   background: #fff; border: 1.5px solid #FFE3B0; border-radius: 14px;
@@ -117,18 +178,13 @@ a { color: var(--blue-d); }
   transform: rotate(45deg); border-radius: 0 0 0 3px;
 }
 
-/* 背景是一张 3.56:1 的软萌 3D 海洋场景图（太阳、远岛、灯塔、帆船、沙滩都画在图里），
-   容器比例与图一致（地图最大宽 1012 / 高 284 ≈ 3.56），最宽的桌面窗口几乎不裁切；
-   窗口变窄时 cover 从两侧等量收一点，装饰物都预先收在中央安全区内。
-   底色取海面主色兜住图片加载前的一瞬间，不能用白色（会闪白块）。 */
+/* 六座岛的活动范围：上沿给标题区留出 96px，下沿一直到底。
+   岛的 `top` 百分比以这块的高度为基准 —— 改这里等于整体挪岛。
+   max() 兜住「卡片被压矮」的情况：标题区不小于 96px，
+   否则标题文字会压进第一座岛的呼吸圈里。 */
 .isle-map {
-  position: relative; height: 284px;
-  border-radius: 18px; overflow: hidden;
-  background-color: #A9DCF6;
-  background-image: url("../assets/isle-bg.jpg");
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: cover;
+  position: absolute; left: 0; right: 0;
+  top: max(96px, 25.2%); bottom: 0;
 }
 
 /* 航线虚线：viewBox 与岛屿定位同一套刻度，preserveAspectRatio=none 让它随容器拉伸。
@@ -283,15 +339,40 @@ a { color: var(--blue-d); }
 }
 @keyframes chestFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 
+/* 学习小档案：三张并列的成绩徽章。图标和数字同色（--c），底色各自一浅色 ——
+   三块靠「颜色 + 图标」区分，而不是三行长得一样的数字。 */
+.isle-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 16px; }
+.stat-card {
+  display: flex; align-items: center; gap: 13px;
+  padding: 15px 18px; border-radius: 18px;
+  border: 1.5px solid rgba(255, 255, 255, .92);
+  box-shadow: 0 4px 14px rgba(120, 160, 205, .13);
+}
+.stat-ico {
+  width: 46px; height: 46px; flex: none; border-radius: 15px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, .8); color: var(--c);
+}
+.stat-body { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.stat-n { font-size: 27px; font-weight: 900; line-height: 1.12; color: var(--c); font-variant-numeric: tabular-nums; }
+.stat-l { font-size: 13px; font-weight: 800; color: var(--ink2); }
+.stat-t { font-size: 11.5px; color: var(--ink3); line-height: 1.45; }
+.isle-note { margin-top: 0; }
+
 /* 窄屏（平板竖屏 / 手机）：横排六座岛挤不下 —— 改成竖向路线，
    左边一列岛、右边文字；横排航线 SVG 收起，海洋背景图也换回浅蓝渐变
    （竖排地图高度是撑开的，固定比例的横幅图 cover 进来只会被放得巨大）。 */
 @media (max-width: 899px) {
   .isle-cheer { display: none; }
-  .isle-map {
-    height: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px;
+  /* 竖排时地图是撑开的（六座岛纵向排开），横幅海洋图 cover 进来会被放得巨大 ——
+     窄屏换回浅蓝渐变当底，卡片也不再按图的比例定高，改由内容撑开。 */
+  .card.isle-card {
+    aspect-ratio: auto;
+    padding: 14px 14px 12px;
     background: linear-gradient(180deg, #EAF6FF, #DCF0FC);
   }
+  .isle-hd { position: static; margin-bottom: 10px; }
+  .isle-map { position: static; display: flex; flex-direction: column; gap: 8px; }
   .isle-road { display: none; }
   .isle {
     position: static; transform: none; width: 100%;
@@ -360,7 +441,7 @@ a { color: var(--blue-d); }
 .zi { background: #FAFCFF; border: 1.5px solid var(--line2); border-radius: 18px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: .2s; }
 .zi.mastered { background: #F1FDF8; border-color: #B7EBD6; }
 .zi.failed { background: #FFF6F6; border-color: #FFD5D5; }
-.zi-face { width: 100%; min-height: 64px; border: none; border-radius: 14px; background: linear-gradient(160deg, #FFFFFF, #F1F8FF); color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: .2s; font-family: "Kaiti SC", "KaiTi", "STKaiti", inherit; line-height: 1; position: relative; padding: 4px 2px; gap: 3px; }
+.zi-face { width: 100%; min-height: 64px; border: none; border-radius: 14px; background: linear-gradient(160deg, #FFFFFF, #F1F8FF); color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: .2s; font-family: var(--font-kai); line-height: 1; position: relative; padding: 4px 2px; gap: 3px; }
 .zi-face .zi-char { font-size: 34px; font-weight: 800; }
 .zi-face .zi-py { font-size: 12px; font-weight: 700; color: var(--blue-d); letter-spacing: .3px; line-height: 1; }
 .zi-face:hover { background: linear-gradient(160deg, #EAF6FF, #E4F7EF); }
@@ -418,7 +499,7 @@ a { color: var(--blue-d); }
 .hw-cell.no { background: #FFF5F5; border-color: #FFD0D0; }
 .hw-cell.none { background: #FAFCFF; border-color: var(--line2); opacity: .78; }
 .hw-cell .hc-i { font-size: 11px; font-weight: 800; color: var(--ink3); }
-.hw-cell .hc-t { font-size: 30px; font-weight: 800; font-family: "Kaiti SC", "KaiTi", "STKaiti", inherit; line-height: 1.15; }
+.hw-cell .hc-t { font-size: 30px; font-weight: 800; font-family: var(--font-kai); line-height: 1.15; }
 .hw-cell .hc-w { font-size: 11.5px; color: var(--ink2); font-weight: 700; min-height: 17px; }
 .hw-cell .hc-s { font-size: 11px; font-weight: 800; }
 .hw-cell .hc-c { font-size: 11px; color: var(--ink3); line-height: 1.5; margin-top: 3px; }
@@ -430,7 +511,10 @@ a { color: var(--blue-d); }
 /* ---------- 故事 ---------- */
 .story-box { background: linear-gradient(160deg, #FFFDF7, #F6FBFF); border: 1.5px dashed #D8E8F6; border-radius: 18px; padding: 20px; min-height: 220px; }
 .story-title { font-size: 19px; font-weight: 800; color: var(--purple-d); margin: 0 0 12px; letter-spacing: .5px; }
-.story-text { font-size: 30px; line-height: 2.75; letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: "Kaiti SC", "KaiTi", "STKaiti", inherit; }
+/* 课文原文 / 童话正文：识字内容一律楷体（--font-kai）。
+   注意这条以前写的是 `..., "STKaiti", inherit` —— `inherit` 是 CSS-wide 关键字，
+   不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。 */
+.story-text { font-size: 30px; line-height: 2.75; letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: var(--font-kai); }
 .story-text p { margin: 0 0 14px; }
 .story-text ruby { ruby-position: over; ruby-align: center; margin: 0 2px; }
 .story-text rt { font-size: .42em; color: var(--blue-d); font-weight: 700; letter-spacing: 0; line-height: 1.15; }
@@ -467,7 +551,7 @@ a { color: var(--blue-d); }
 .wb-list { display: flex; flex-direction: column; gap: 10px; }
 .wb-item { padding: 13px 15px; border-radius: 15px; background: #FFFBFC; border: 1.5px solid #FFE4E9; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .wb-item .w-q { font-size: 18px; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
-.wb-item .w-char { width: 52px; height: 52px; flex: none; border-radius: 14px; background: #fff; border: 2px solid #FFE0E6; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; font-family: "Kaiti SC", "KaiTi", inherit; cursor: pointer; }
+.wb-item .w-char { width: 52px; height: 52px; flex: none; border-radius: 14px; background: #fff; border: 2px solid #FFE0E6; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; font-family: var(--font-kai); cursor: pointer; }
 .wb-item .w-meta { flex: 1; min-width: 120px; }
 .wb-item .w-lab { font-size: 11.5px; color: var(--ink3); font-weight: 700; }
 .wb-item .w-py { font-size: 13.5px; color: var(--blue-d); font-weight: 700; }
@@ -554,7 +638,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .voice-row .v-name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; font-weight: 700; color: var(--ink); word-break: break-all; }
 .voice-row .v-sub { font-size: 12px; color: var(--ink3); font-weight: 600; margin-top: 2px; }
 .row-edit { display: grid; grid-template-columns: 56px 1fr 1fr 66px; gap: 8px; align-items: center; margin-bottom: 8px; }
-.row-edit .re-ch { font-size: 26px; font-weight: 800; text-align: center; font-family: "Kaiti SC", "KaiTi", inherit; background: #FAFCFF; border: 1.5px solid var(--line2); border-radius: 11px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
+.row-edit .re-ch { font-size: 26px; font-weight: 800; text-align: center; font-family: var(--font-kai); background: #FAFCFF; border: 1.5px solid var(--line2); border-radius: 11px; min-height: 46px; display: flex; align-items: center; justify-content: center; }
 .row-edit .re-in { min-height: 46px; padding: 0 12px; border-radius: 11px; border: 1.5px solid var(--line); background: #fff; font-size: 15px; font-family: inherit; color: var(--ink); outline: none; width: 100%; }
 .row-edit .re-in:focus { border-color: var(--blue); }
 .row-edit .re-in.py { background: #F7FBFF; color: var(--blue-d); font-weight: 700; }
@@ -650,10 +734,10 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .lg-how { font-size: 13.5px; color: var(--ink2); font-weight: 600; background: #F8FBFF; border-left: 3px solid var(--blue); border-radius: 0 10px 10px 0; padding: 9px 12px; margin: 0 0 14px; line-height: 1.75; }
 .lg-how b { color: var(--blue-d); }
 .lg-big { font-size: 18px; font-weight: 800; line-height: 1.8; color: var(--ink); }
-.lg-sent { font-size: 19px; font-weight: 800; line-height: 1.9; color: var(--ink); font-family: "Kaiti SC", "KaiTi", "STKaiti", inherit; }
+.lg-sent { font-size: 19px; font-weight: 800; line-height: 1.9; color: var(--ink); font-family: var(--font-kai); }
 .lg-sent-bad { color: #B23B3B; }
 .lg-mark { display: inline-block; margin-right: 8px; font-family: -apple-system, sans-serif; font-size: 15px; color: var(--red-d); }
-.lg-word-big { font-size: 38px; font-weight: 900; color: var(--purple-d); text-align: center; letter-spacing: 3px; font-family: "Kaiti SC", "KaiTi", "STKaiti", inherit; margin: 6px 0 14px; }
+.lg-word-big { font-size: 38px; font-weight: 900; color: var(--purple-d); text-align: center; letter-spacing: 3px; font-family: var(--font-kai); margin: 6px 0 14px; }
 .lg-line { font-size: 15px; line-height: 1.95; color: var(--ink); }
 .lg-line b { display: inline-block; min-width: 44px; margin-right: 8px; color: var(--blue-d); font-weight: 800; }
 
@@ -747,6 +831,9 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .grid3 { grid-template-columns: 1fr; }
   .grid2 { grid-template-columns: 1fr; }
   .pre-split { grid-template-columns: 1fr; }
+  /* 三张成绩徽章在窄屏挤成一列：横排时每张只剩一百来 px，
+     「继续加油，认识更多有趣的字吧！」会被折成四行 */
+  .isle-stats { grid-template-columns: 1fr; }
 }
 @media (max-width: 819px) {
   .nav { max-width: none; margin: 0; padding: 7px 4px calc(7px + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, .97); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); justify-content: space-around; gap: 0; z-index: 60; box-shadow: 0 -4px 18px rgba(120, 160, 205, .10); }
