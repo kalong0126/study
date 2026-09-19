@@ -9,6 +9,12 @@
  * 现在的规则：start() 从「还没掌握的字」（状态 ≠ 1）里取字——写错(0)和没写到(undefined)
  * 都留下，已写对/已掌握(1)跳过；全部掌握后回退到全部，允许自由重练。
  *
+ * 2026-09-19 再改（用户要求「不交大模型判卷了，做成一轮全部写完，然后交由大人审核」）：
+ *   · 一轮＝这一轮要练的**全部**字，不再按 `ROUND_SIZE = 6` 切片（切轮本就是为迁就
+ *     多模态判卷「一次最多 6 格」）；
+ *   · 写到最后一个字点「全部写完了，交给大人」→ **直接进审核页**，
+ *     中间的「待提交」确认页已删，所以本测试不再点「交给大人审核」。
+ *
  * 为什么用隔离实例（端口 8797 + 独立 DB）：测试会写掌握度、走「大人审核」落库，
  * 跑在真实库上会污染数据。
  *
@@ -162,18 +168,34 @@ try {
   ok("听写中生字条遮上（.zi-strip.masked，字与拼音隐藏）", mask.masked && mask.charVisibility === "hidden", JSON.stringify(mask));
 
   const size1 = await page.locator(".hw-dots .hw-dot").count();
-  ok("第一轮目标字数 = min(6, 未掌握数)", size1 >= 1, `${size1} 个`);
+  ok(
+    "第一轮＝全部未掌握生字（不再按 6 个切片）",
+    size1 === chars.length - 1,
+    `本轮 ${size1} 个 / 整课 ${chars.length} 个（chars[0] 已掌握）`,
+  );
 
-  /* ————————————————————————— 4. 走到结果页（大人审核），读第一轮 targets */
-  step("4. 走到结果页，读第一轮字表");
+  /* ————————————————————————— 4. 写完最后一个字 → 直接进审核页，读第一轮 targets */
+  step("4. 写完最后一个字 → 直接进大人审核页，读第一轮字表");
   for (let i = 0; i < size1; i++) {
-    await page.locator("button", { hasText: /写好了，下一个|写完了，去提交/ }).click();
+    await page.locator("button", { hasText: /写好了，下一个|全部写完了，交给大人/ }).click();
     await page.waitForTimeout(130);
   }
-  await page.waitForSelector("button", { hasText: "交给大人审核" }, { timeout: 10000 });
-  await page.locator("button", { hasText: "交给大人审核" }).click();
+  // 没有中间「待提交」页：最后一击直接落到审核页
   await page.waitForSelector(".hw-cell .hc-t", { timeout: 10000 });
   await page.waitForTimeout(300);
+  ok(
+    "写完最后一个字直接进审核页（无中间提交页）",
+    (await page.locator("button", { hasText: "保存审核结果" }).count()) > 0,
+  );
+
+  // 这个测试从不落笔，所以每个格子都该是「（空着）」+ 一个「去补写」入口
+  const emptyCells = await page.locator(".hw-cell .hc-w").count();
+  const refillBtns = await page.locator(".hw-cell button", { hasText: "去补写" }).count();
+  ok(
+    "没写的字标「（空着）」并给「去补写」",
+    emptyCells === size1 && refillBtns === size1,
+    `${emptyCells} 个空 / ${refillBtns} 个补写按钮`,
+  );
 
   const t1 = await page
     .locator(".hw-cell .hc-t")
@@ -201,12 +223,11 @@ try {
   await page.waitForSelector(".hw-dots .hw-dot", { timeout: 10000 });
 
   const size2 = await page.locator(".hw-dots .hw-dot").count();
+  ok("第二轮也一次写完全部未掌握字", size2 >= 1 && size2 < size1, `第二轮 ${size2} 个（第一轮 ${size1} 个）`);
   for (let i = 0; i < size2; i++) {
-    await page.locator("button", { hasText: /写好了，下一个|写完了，去提交/ }).click();
+    await page.locator("button", { hasText: /写好了，下一个|全部写完了，交给大人/ }).click();
     await page.waitForTimeout(130);
   }
-  await page.waitForSelector("button", { hasText: "交给大人审核" }, { timeout: 10000 });
-  await page.locator("button", { hasText: "交给大人审核" }).click();
   await page.waitForSelector(".hw-cell .hc-t", { timeout: 10000 });
   await page.waitForTimeout(300);
 

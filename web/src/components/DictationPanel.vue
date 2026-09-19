@@ -1,18 +1,25 @@
 <script setup lang="ts">
 /**
- * 屏上听写 · 整轮写完交给大人审核
+ * 屏上听写 · 一轮全部写完，交给大人审核
  *
  * 2026-09-19 改版（用户要求）：**不再接大模型判卷**，只保留「大人审核」这一条路。
- *   ① 一轮最多 6 个字，逐字写，**不提交**
- *   ② 全部写完 → [交给大人审核]
+ *   ① 一轮 = 这一轮要练的**全部**字：首轮＝整课生字里还没掌握的（若全部已掌握则整课重练），
+ *      之后的轮次＝上一轮写错的 + 还没写到的。
+ *      —— 原来为了迁就多模态判卷「一次最多判 6 格」而切的 `ROUND_SIZE = 6` 已删，
+ *         既然不判卷，就没有理由再把一课生字切成好几轮写。
+ *   ② 逐字写（一块田字格一个字），写到最后一个字点「全部写完了，交给大人」
+ *      → **直接进审核页**。中间那个「待提交」确认页（`reviewing`）也删了，
+ *      用户要的是「全部写完 → 交由大人审核」两步，中间不再多一次点击。
  *   ③ 大人看着孩子写的字逐个点「写对 / 写错」，点完保存
- *      —— 不走大模型：不花 token、不用等，结果直接写进掌握度与错字本
- *   ④ 保存后按「还剩几个字没掌握」提示再来一轮，写错的字下一轮还会出现
+ *      —— 不走大模型：不花 token、不用等，结果直接写进掌握度与错字本。
+ *   ④ 审核页上没写的格子标「（空着）」并给「去补写」；补写回来先前判定的结果不丢
+ *      （`manual` 只在首次进审核页时初始化，见 `reviewStarted`）。
+ *   ⑤ 保存后按「还剩几个字没掌握」提示再来一轮，写错的字下一轮还会出现。
  *
- * 同一次改版的第二稿：本组件由父页面用 `v-if` 控制显隐（默认隐藏），
- * **挂载即 start()** —— 用户要求「点开始听写就直接打开屏上听写界面」，
- * 所以原来的 idle 落地页（一大段说明 + 「开始屏上听写」按钮）已删，
- * 阶段只剩 writing → reviewing → result；「结束本轮」会 emit("close") 让父页面收起。
+ * 本组件由父页面用 `v-if` 控制显隐（默认隐藏），**挂载即 start()** ——
+ * 用户要求「点开始听写就直接打开屏上听写界面」，所以原来那个 idle 落地页
+ * （一段说明 + 「开始屏上听写」按钮）已删；阶段只剩 writing → result，
+ * 「结束听写」会 emit("close") 让父页面收起。
  *
  * 原来那条 AI 链路（拼网格图 + 一次多模态请求 + 轮询 taskId + 数量序号校验 +
  * 自动降级逐字判 + 家长改判）整套已从本组件删除；后端 `/api/mark/*` 接口保留未动，
@@ -35,8 +42,8 @@ const mastery = useMasteryStore();
 const progress = useProgressStore();
 const ui = useUiStore();
 
-/** 三个阶段：逐字写 → 待提交 → 大人判定（idle 只是「还没开始」的初值，不渲染界面） */
-type Phase = "idle" | "writing" | "reviewing" | "result";
+/** 两个阶段：逐字写 → 大人审核（idle 只是「还没开始」的初值，不渲染界面） */
+type Phase = "idle" | "writing" | "result";
 
 const board = ref<InstanceType<typeof HandBoard> | null>(null);
 
@@ -47,11 +54,9 @@ const emit = defineEmits<{
 }>();
 
 const phase = ref<Phase>("idle");
-/** 每轮固定最多 6 个字（一轮 6 个孩子坐得住，也让判定的家长不至于点太久） */
-const ROUND_SIZE = 6;
 const roundNo = ref(0);
 const index = ref(0);
-/** 本轮字表 */
+/** 本轮字表（＝这一轮要练的全部字） */
 const targets = ref<{ ch: string; word: string; pinyin: string }[]>([]);
 /** 每字的笔迹，与 targets 同长 */
 const ink = ref<Stroke[][]>([]);
@@ -62,6 +67,8 @@ const manual = ref<Record<number, boolean | null>>({});
 const summary = ref("");
 
 let completedThisRound = false;
+/** 本轮是否已经进过审核页（决定 manual 要不要重新初始化——补写回来别把判定清掉） */
+let reviewStarted = false;
 
 const lesson = computed(() => content.current);
 const lessonChars = computed(() => content.chars);
@@ -69,7 +76,6 @@ const lessonChars = computed(() => content.chars);
 const current = computed(() => targets.value[index.value] ?? null);
 const isLast = computed(() => index.value >= targets.value.length - 1);
 const writtenCount = computed(() => written.value.filter(Boolean).length);
-const allWritten = computed(() => targets.value.length > 0 && writtenCount.value === targets.value.length);
 const canStart = computed(() => lessonChars.value.length > 0);
 
 /* ------------------------------------------------------------------ 生命周期 */
@@ -105,17 +111,17 @@ function start(): void {
   // 已写对/已掌握的（状态 1）跳过，不再从头重来。全部掌握后回退到全部，允许自由重练。
   const remaining = all.filter((c) => mastery.charState(les.id, c.ch) !== 1);
   const pool = remaining.length > 0 ? remaining : all;
-  const size = Math.max(1, Math.min(ROUND_SIZE, pool.length));
-  const win = pool.slice(0, size);
   roundNo.value += 1;
 
-  targets.value = win;
-  ink.value = win.map(() => []);
-  written.value = win.map(() => false);
+  // 一整轮＝pool 里全部的字（不再按 6 个切片）
+  targets.value = pool;
+  ink.value = pool.map(() => []);
+  written.value = pool.map(() => false);
   index.value = 0;
   manual.value = {};
   summary.value = "";
   completedThisRound = false;
+  reviewStarted = false;
   phase.value = "writing";
   emit("active", true);
 
@@ -154,7 +160,7 @@ function loadIndex(i: number): void {
   });
 }
 
-/** 「下一个 / 上一个 / 去写」统一走这里 */
+/** 「下一个 / 上一个 / 去补写」统一走这里 */
 function goTo(i: number): void {
   saveCurrent();
   if (i < 0) {
@@ -162,8 +168,8 @@ function goTo(i: number): void {
     return;
   }
   if (i >= targets.value.length) {
-    phase.value = "reviewing";
-    stopAudio();
+    // 整轮走完 → 直接交给大人（没有中间确认页）
+    handToParent();
     return;
   }
   loadIndex(i);
@@ -177,14 +183,30 @@ function clearBoard(): void {
 
 /* ---------------------------------------------------------- 交给大人审核 */
 
-function startParentReview(): void {
-  const init: Record<number, boolean | null> = {};
-  targets.value.forEach((_, i) => {
-    init[i] = null;
-  });
-  manual.value = init;
+/**
+ * 写完整轮 → 直接进审核页。
+ * `manual` 只在本轮**第一次**进审核页时初始化：从审核页点「去补写」再回来时，
+ * 先前已经点好的判定不能被清掉。
+ */
+function handToParent(): void {
+  stopAudio();
+  if (!reviewStarted) {
+    const init: Record<number, boolean | null> = {};
+    targets.value.forEach((_, i) => {
+      init[i] = null;
+    });
+    manual.value = init;
+    reviewStarted = true;
+    ui.toast("请大人看着孩子写的字，逐个点「写对 / 写错」");
+  }
   phase.value = "result";
-  ui.toast("请大人看着孩子写的字，逐个点「写对 / 写错」");
+}
+
+/** 审核页发现空字：点回书写阶段补上（写完最后一个字会再次进审核页） */
+function goBackWrite(i: number): void {
+  phase.value = "writing";
+  loadIndex(i);
+  speakCurrent();
 }
 
 async function saveParentReview(): Promise<void> {
@@ -253,6 +275,7 @@ function end(): void {
   manual.value = {};
   phase.value = "idle";
   summary.value = "";
+  reviewStarted = false;
   emit("active", false);
   emit("close");
 }
@@ -277,6 +300,17 @@ function cellClass(i: number): string {
 function pinyinOfCurrent(): string {
   return current.value?.pinyin || "请点「再听一遍」";
 }
+
+/** 审核页顶部那一句：还剩没写的字就提醒可以先补写 */
+const leadText = computed(() => {
+  const total = targets.value.length;
+  if (!total) return "";
+  const missing = total - writtenCount.value;
+  if (missing > 0) {
+    return `还有 ${missing} 个字没写（标着「（空着）」的那几格）：可以点「去补写」，也可以直接判。`;
+  }
+  return `这一轮 ${total} 个字都写完了！请大人看着孩子写的字，逐个点「写对 / 写错」，然后保存。`;
+});
 
 /** 本轮结束后还剩多少个字没掌握（下次「再来一轮」会练这些） */
 const remainingAfterRound = computed(() => {
@@ -311,8 +345,10 @@ function onImageError(e: Event): void {
     <div class="hw-hd">
       <span class="hw-ico"><Icon name="pen" :size="18" /></span>
       <div>
-        <span class="t">屏上听写 · 写完整轮交给大人看</span>
-        <span class="s">系统不判对错：一个字写一格，全部写完再交给大人逐个判定</span>
+        <span class="t">屏上听写 · 写完这一轮交给大人</span>
+        <span class="s">
+          系统不判对错：一个字写一格，这一轮的 {{ targets.length }} 个字全部写完，再交给大人逐个判定
+        </span>
       </div>
     </div>
 
@@ -342,48 +378,28 @@ function onImageError(e: Event): void {
           <Icon name="arrowLeft" :size="18" />上一个
         </button>
         <button class="btn green" type="button" @click="goTo(index + 1)">
-          <Icon name="arrowRight" :size="18" />{{ isLast ? "写完了，去提交" : "写好了，下一个" }}
+          <Icon name="arrowRight" :size="18" />{{ isLast ? "全部写完了，交给大人" : "写好了，下一个" }}
         </button>
       </div>
     </div>
 
-    <!-- -------------------------------------------------------- 待提交 -->
-    <div v-if="phase === 'reviewing'" class="hw-stage on">
-      <p style="font-size: 13.5px; font-weight: 700; color: var(--ink2); margin: 4px 0 0">
-        {{ allWritten ? "全部写完啦！确认一下，然后交给大人看：" : "还有没写的字，也可以直接交（空着的字会算没写对）：" }}
-      </p>
-
-      <div class="hw-cells">
-        <div v-for="(t, i) in targets" :key="`${t.ch}-${i}`" class="hw-cell" :class="written[i] ? 'ok' : 'none'">
-          <div class="hc-i">第 {{ i + 1 }} 个</div>
-          <img v-if="written[i]" class="hw-thumb" :src="thumbOf(i)" :alt="`第 ${i + 1} 个字的手写`" @error="onImageError" />
-          <div v-else class="hc-w">（空着）</div>
-          <button class="btn ghost sm" type="button" style="width: 100%; margin-top: 6px" @click="goTo(i)">
-            <Icon name="pen" :size="14" />去写
-          </button>
-        </div>
-      </div>
-
-      <div class="hw-tools">
-        <button class="btn green" type="button" @click="startParentReview()">
-          <Icon name="eye" :size="18" />交给大人审核
-        </button>
-        <button class="btn ghost sm" type="button" @click="end()">
-          <Icon name="stop" :size="16" />结束听写
-        </button>
-      </div>
-    </div>
-
-    <!-- ---------------------------------------------------- 结果 / 审核 -->
+    <!-- -------------------------------------------------- 大人审核 / 结果 -->
     <div v-if="phase === 'result'" class="hw-stage on">
+      <p class="hw-lead">{{ leadText }}</p>
+
       <div class="hw-cells">
         <div v-for="(t, i) in targets" :key="`${t.ch}-${i}`" class="hw-cell" :class="cellClass(i)">
           <div class="hc-i">第 {{ i + 1 }} 个</div>
           <div class="hc-t">{{ t.ch }}</div>
-          <div class="hc-w">
-            {{ manual[i] === true ? "大人判定：写对" : manual[i] === false ? "大人判定：写错" : "还没判定" }}
-          </div>
-          <img v-if="written[i]" class="hw-thumb" :src="thumbOf(i)" :alt="`第 ${i + 1} 个字的手写`" @error="onImageError" />
+          <template v-if="written[i]">
+            <img class="hw-thumb" :src="thumbOf(i)" :alt="`第 ${i + 1} 个字的手写`" @error="onImageError" />
+          </template>
+          <template v-else>
+            <div class="hc-w">（空着）</div>
+            <button class="btn ghost sm" type="button" style="width: 100%; margin: 4px 0 2px" @click="goBackWrite(i)">
+              <Icon name="pen" :size="14" />去补写
+            </button>
+          </template>
           <div class="hc-rev">
             <button type="button" :class="{ on: manual[i] === true }" @click="manual[i] = true">写对</button>
             <button type="button" :class="{ on: manual[i] === false }" @click="manual[i] = false">写错</button>
@@ -391,7 +407,7 @@ function onImageError(e: Event): void {
         </div>
       </div>
 
-      <div class="hw-sum on" style="display: block">{{ summary || "看完每个字，点「写对 / 写错」，确认后保存。" }}</div>
+      <div v-if="summary" class="hw-sum on">{{ summary }}</div>
 
       <div class="hw-tools">
         <button class="btn green" type="button" @click="saveParentReview()">
