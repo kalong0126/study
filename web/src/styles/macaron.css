@@ -168,7 +168,7 @@ a { color: var(--blue-d); }
 .pt-mid { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .pt-sp { flex: 1 1 12px; min-width: 12px; }
 /* 右段操作：内容多了自己折行（`.pt` 再放不下才是整组换行），永远靠右对齐 */
-.pt-act { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.pt-act { display: flex; align-items: center; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
 /* 标题右边那枚浅色小胶囊（「自动注音 · 读过不重复」这类说明） */
 .pt-pill {
   display: inline-flex; align-items: center; gap: 5px; flex: none;
@@ -184,7 +184,8 @@ a { color: var(--blue-d); }
 
 /* 工具栏里的控件高度统一收成 36px（含全局 `.btn` 的 44 / `.btn.sm` 的 38 / 窄屏的 46） */
 .pt .btn, .pt .btn.sm, .pt .sel, .pt .icon-btn { min-height: 36px; }
-.pt .btn.sm { padding: 0 13px; font-size: 13.5px; border-radius: 12px; }
+/* 按钮再收窄一档（平板上整行还是放不下）：水平内边距 13→10、右段间隙 8→6 */
+.pt .btn.sm { padding: 0 10px; font-size: 13.5px; border-radius: 12px; }
 .pt .btn svg { width: 16px; height: 16px; }
 .pt .sel { padding: 0 12px; font-size: 13.5px; border-radius: 12px; }
 /* 语文页的课文下拉（`.lesson-sel`）：宽度必须收着。

@@ -64,7 +64,6 @@ const storyNote = [
   `读满 ${timerMinutes} 分钟就完成今天的「阅读」任务。计时是自动开的：右边那枚胶囊在走就说明正在计时，点一下可以提前结束（读够 20 秒就算读完）。`,
   "点正文里的任意一句可以从那句开始朗读，正在读的句子会高亮。",
   "读到喜欢的一篇，点一下星星收进「收藏的故事」，以后随时从首页再读一遍。",
-  "「读过不重复」由后端按已读标题保证：写新的一篇时会避开以前读过的主题。",
 ].join("\n");
 
 /* ---------------------------------------------------------------- 故事收藏 */
@@ -144,9 +143,6 @@ watch(
     title="智能拼音童话"
     :note="storyNote"
   >
-    <template #head>
-      <span class="pt-pill">自动注音 · 读过不重复</span>
-    </template>
 
     <template #mid>
       <select v-if="storyOptions.length" v-model.number="pickedId" class="sel" aria-label="选择要读的童话">
