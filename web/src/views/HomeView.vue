@@ -33,7 +33,10 @@ import isleVideo from "@/assets/islands/video.png";
 // 3D 小图标（宝箱 / 树 / 箭靶 / 书）：原来这几处是线描 SVG 图标，
 // 和 3D 岛座摆在一起像两个画风。换成 3D 素材后整页是同一套渲染语言。
 // 素材由 scripts/prepare-icons.py 从 AI 出的 2048px 大图抠底生成（源图不进 git）。
-import artChest from "@/assets/icons/chest.png";
+// 宝箱两态素材：从「完成全部任务可获得积分奖励 / 今天的任务全部完成领取积分奖励吧」
+// 两张 AI 出图里抠的（去蓝天、去奶油底板、只留宝箱小岛），文字由前端渲染（见模板 tk-chest-txt）。
+import chestClosed from "@/assets/icons/chest-closed.png";
+import chestOpen from "@/assets/icons/chest-open.png";
 import artTree from "@/assets/icons/tree.png";
 import artBook from "@/assets/icons/book.png";
 import { burstBig } from "@/composables/useConfetti";
@@ -385,8 +388,10 @@ onMounted(() => {
         </li>
       </ol>
 
-      <!-- 宝箱整块是按钮：开了之后点一下 → 报今天的积分（彩带 + 号角 + 金横幅，
-           和口算满分同一套动画音效）。没开的时候点了没反应，只有悬停提示。 -->
+      <!-- 宝箱整块是按钮，**永远全彩**：没走完 → 关着的宝箱 + 「完成全部任务」；
+           六关走完 → 开着的宝箱 + 「领取积分奖励」，点一下报今天的积分
+           （彩带 + 号角 + 金横幅，和口算满分同一套动画音效）。
+           空间不够时前面的完成数/节点自己压缩（见 macaron.css 的 .isle-track）。 -->
       <button
         class="tk-chest"
         :class="{ on: cleared }"
@@ -395,8 +400,11 @@ onMounted(() => {
         :aria-label="cleared ? '宝箱已打开，点一下查看今天获得的积分' : '走完六座小岛就能打开宝箱'"
         @click="openChest()"
       >
-        <img class="tk-chest-art" :src="artChest" alt="" draggable="false" />
-        <span class="tk-chest-tip">{{ cleared ? "宝箱开了！" : "全部走完开宝箱" }}</span>
+        <img class="tk-chest-art" :src="cleared ? chestOpen : chestClosed" alt="" draggable="false" />
+        <span class="tk-chest-txt">
+          <template v-if="cleared">今天的任务全部完成<br />领取积分奖励吧</template>
+          <template v-else>完成全部任务<br />可获得积分奖励</template>
+        </span>
       </button>
     </section>
 

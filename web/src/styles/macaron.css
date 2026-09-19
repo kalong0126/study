@@ -527,23 +527,27 @@ button.timer-chip:disabled { cursor: default; }
 .tk-dots li.done .tk-name { color: #2E9C72; }
 .tk-dots li.current .tk-name { color: var(--blue-d); font-weight: 800; }
 
-/* 宝箱：3D 素材图（不再用线描图标）。底色块留着，但内边距收小了 ——
-   图本身有体积和投影，再垫一圈厚 padding 就成了一块空盒子。
-   没通关时整块压暗（filter 压亮度，而不是换一张灰图），
-   点亮时那层 filter 撤掉、换成暖色底 + 上浮，宝箱「打开」的对比才够强。 */
+/* 宝箱块：整块是按钮，**永远全彩**（不再有灰度遮罩态）——
+   没完成 = 关着的宝箱图，全部完成 = 开着的宝箱图（金底 + 浮动），
+   文字两行在图右侧（对照 AI 原图的气泡文案），点开着的宝箱报今天的积分。 */
 .tk-chest {
-  flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
-  padding: 7px 12px 8px; border-radius: 16px;
-  background: #F4F8FC; border: 1.5px solid #E6EEF7;
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px; border-radius: 16px;
+  background: transparent; border: 1.5px solid transparent;
   font-family: inherit; cursor: pointer;
 }
 .tk-chest:focus-visible { outline: 2.5px solid #F1C85F; outline-offset: 2px; }
 .tk-chest-art {
-  width: 44px; height: 44px; display: block; user-select: none; -webkit-user-drag: none;
-  filter: grayscale(.45) opacity(.62) drop-shadow(0 2px 4px rgba(90, 110, 140, .20));
+  width: clamp(72px, 7.5vw, 92px); height: auto; display: block;
+  user-select: none; -webkit-user-drag: none;
+  filter: drop-shadow(0 2px 4px rgba(90, 110, 140, .18));
   transition: filter .3s;
 }
-.tk-chest-tip { font-size: 10.5px; font-weight: 800; white-space: nowrap; color: #A9B8C7; }
+.tk-chest-txt {
+  display: flex; flex-direction: column; gap: 2px;
+  font-size: 12.5px; font-weight: 800; line-height: 1.5;
+  color: #2C4A7E; white-space: nowrap; text-align: left;
+}
 .tk-chest.on {
   background: linear-gradient(135deg, #FFF5D6, #FFE49E);
   border-color: #F1C85F;
@@ -551,8 +555,13 @@ button.timer-chip:disabled { cursor: default; }
   animation: chestFloat 3.4s ease-in-out infinite;
 }
 .tk-chest.on .tk-chest-art { filter: drop-shadow(0 4px 8px rgba(200, 140, 10, .38)); }
-.tk-chest.on .tk-chest-tip { color: #B8860B; }
+.tk-chest.on .tk-chest-txt { color: #B8860B; }
 @keyframes chestFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+/* 窄屏（手机）：宝箱块收成一张图，文案让位 —— 完成数 + 宝箱图一行放得下 */
+@media (max-width: 520px) {
+  .tk-chest-txt { display: none; }
+  .tk-chest-art { width: 64px; }
+}
 
 /* 学习小档案：三张并列的成绩徽章。图标和数字同色（--c），底色各自一浅色 ——
    三块靠「颜色 + 图标」区分，而不是三行长得一样的数字。
