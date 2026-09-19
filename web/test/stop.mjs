@@ -150,17 +150,43 @@ page.on("pageerror", (e) => consoleErrors.push(`pageerror: ${e.message}`));
 
 console.log(`朗读停止回归 → ${BASE}`);
 
-/* ———————————————————————————— 0. 载入示例故事（不花 token）
+/* ———————————————————————————— 0. 载入童话（接口打桩，不花 token）
  */
-step("0. 载入示例故事");
-await page.goto(`${BASE}/story`, { waitUntil: "networkidle" });
-await page.waitForTimeout(1200);
-await page.locator("button", { hasText: "试读示例故事" }).first().click();
-await page.waitForTimeout(800);
+// 「试读示例故事」已从产品里去掉了（孩子端一进童话页就自动生成今日童话）。
+// 这条测试只关心朗读队列，不该真去调大模型：花钱、慢、还不稳定 ——
+// 所以把 `/story/today` 打桩成一篇固定的小童话，页面照样自己渲染出句子。
+const STUB_STORY = {
+  id: 9001,
+  title: "《测试用小童话》",
+  text: [
+    "小水珠住在一朵软软的白云里。",
+    "有一天，它听见大地在喊渴。",
+    "它就和小伙伴们一起跳了下去。",
+    "它落进一条小溪，溪水叮叮咚咚地唱歌。",
+    "后来，它又回到了天上，变成一朵白云。",
+    "大家都笑了，说它是最爱帮忙的小水珠。",
+  ].join("\n"),
+};
+await page.route("**/api/story/today", (route) =>
+  route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ story: STUB_STORY }) }),
+);
+// 兜底：万一页面还是去生成了，也别真打到大模型
+await page.route("**/api/story/generate", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...STUB_STORY, charCount: 120, avoidCount: 0, ms: 0, model: "stub", cached: false }),
+  }),
+);
+
+step("0. 载入童话正文（接口打桩）");
+await page.goto(`${BASE}/story`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector(".story-text .sent", { timeout: 20000 });
+await page.waitForTimeout(1000);
 const base = await page.evaluate(PROBE);
-ok("示例故事已渲染出句子", base.total >= 5, `${base.total} 句`);
+ok("童话正文已渲染出句子", base.total >= 5, `${base.total} 句`);
 if (base.total < 5) {
-  console.log("\n示例故事没出来，后续断言无法进行。");
+  console.log("\n童话正文没出来，后续断言无法进行。");
   await browser.close();
   process.exit(1);
 }

@@ -138,10 +138,10 @@ async function clockSec() {
   return m ? Number(m[1]) * 60 + Number(m[2]) : -1;
 }
 const isRunning = () => page.locator(".timer-clock").first().evaluate((el) => el.classList.contains("run"));
-async function gotoNav(label) {
-  await page.locator("nav.nav a", { hasText: label }).first().click();
-  await page.waitForTimeout(1400);
-}
+import { goNav } from "./_kidnav.mjs";
+
+/** 切到某个功能页：底部导航已去掉，改成「回首页 → 点对应的小岛」（见 _kidnav.mjs） */
+const gotoNav = (label) => goNav(page, BASE, label, { wait: 1400 });
 
 try {
   console.log(`\n=== 准备隔离实例（端口 ${PORT}，独立 DB）===`);

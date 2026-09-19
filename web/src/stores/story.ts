@@ -5,6 +5,8 @@
  *   · 故事正文与「已读主题」都进数据库了（多设备共享，读过不再重复生成）
  *   · 计时状态也存后端，换设备打开还记得在计时
  *   · 朗读改为按句串行播放 + 逐句高亮（孩子能跟着高亮跟读）
+ *   · **「今日童话」由后端按天认定**：孩子端一进页面就 `ensureToday()`，
+ *     今天已经生成过就取那一篇（`cached`），不会重复调模型
  */
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
@@ -15,24 +17,14 @@ import { useUiStore } from "./ui";
 
 export const TIMER_SECONDS = 15 * 60;
 
-/** 没有大模型配置时的试读内容（原文来自单文件版，保留作为兜底） */
-export const SAMPLE_STORIES: { title: string; text: string }[] = [
-  {
-    title: "示例：小水珠的旅行",
-    text: "有一颗小水珠，住在软软的云朵妈妈怀里。一天，它听见大地在喊渴，就说：“妈妈，我要去帮帮它们！”云朵妈妈点点头，小水珠便和伙伴们一起跳了下去。\n它落进一条小溪，溪水叮叮咚咚地唱着歌，把小水珠送进荷塘。荷塘里，一朵粉荷花正低着头。小水珠问：“你怎么不高兴呀？”粉荷花说：“太阳太晒了，我好渴。”小水珠就滚到花瓣上，让粉荷花喝了个饱。粉荷花抬起头，笑得又香又甜。\n后来，太阳公公把它接回天上。小水珠发现，自己走过的地方，草更绿了，花开得更艳了。它开心地说：“原来帮助别人，自己也会变得亮晶晶的！”",
-  },
-  {
-    title: "示例：爱笑的铅笔",
-    text: "文具盒里住着一支短短的铅笔。别的笔都笑它太矮，写出来的字也不够漂亮。铅笔不生气，只是笑眯眯地说：“我还写得动呀。”\n有一天，小主人的作业本上出现了一道难题，钢笔写错了，橡皮擦破了纸。铅笔轻轻地说：“让我来试试吧。”它慢慢地、一笔一画地写，字虽然小，却端端正正。老师看了，在本子上画了一颗亮闪闪的星。\n从那以后，文具盒里再也没有人笑它矮了。铅笔说：“只要我们愿意帮忙，多短的铅笔也能写出漂亮的字。”",
-  },
-];
-
 export const useStoryStore = defineStore("story", () => {
   const stories = ref<StoryRow[]>([]);
   const readTitles = ref<string[]>([]);
   const current = ref<{ id: number; title: string; text: string } | null>(null);
   const generating = ref(false);
   const lastError = ref("");
+  /** 「今天有没有童话」这一问还在路上 —— 页面用它决定显示骨架还是空态 */
+  const loadingToday = ref(false);
 
   const timer = ref<{ running: boolean; endAt: number }>({ running: false, endAt: 0 });
   const now = ref(Date.now());
@@ -67,18 +59,42 @@ export const useStoryStore = defineStore("story", () => {
     readTitles.value = r.readTitles;
   }
 
-  async function generate(): Promise<StoryRow | null> {
+  /**
+   * 进童话页时调用：**今天的童话**要么取现成的、要么现在生成一篇。
+   *
+   * 幂等由后端保证（不带 force 的 `/story/generate` 在当天已有童话时原样返回），
+   * 这里再加一道「同一时刻只发一次」的闸：孩子端进来、路由切回来、
+   * 平板和手机同时开着，都不该把同一篇童话生成两遍（那是真金白银的 token）。
+   */
+  async function ensureToday(): Promise<void> {
+    if (loadingToday.value || generating.value) return;
+    loadingToday.value = true;
+    try {
+      const r = await api.storyToday();
+      if (r.story) {
+        current.value = { id: r.story.id, title: r.story.title, text: r.story.text };
+        // 历史列表 / 「读过 N 篇」也要跟着准：今天这篇可能还没在这台设备的列表里
+        if (!stories.value.some((s) => s.id === r.story!.id)) stories.value = [r.story, ...stories.value];
+        return;
+      }
+      await generate();
+    } finally {
+      loadingToday.value = false;
+    }
+  }
+
+  async function generate(force = false): Promise<StoryRow | null> {
     const ui = useUiStore();
     if (generating.value) return null;
     generating.value = true;
     lastError.value = "";
     try {
-      const r = await api.generateStory(readTitles.value);
+      const r = await api.generateStory(readTitles.value, force);
       const row: StoryRow = { id: r.id, title: r.title, text: r.text, createdAt: new Date().toISOString() };
-      stories.value = [row, ...stories.value];
+      stories.value = [row, ...stories.value.filter((s) => s.id !== row.id)];
       if (!readTitles.value.includes(r.title)) readTitles.value = [...readTitles.value, r.title];
       current.value = { id: row.id, title: row.title, text: row.text };
-      ui.toast(`新童话《${r.title}》来啦，一起读一读吧`);
+      ui.toast(r.cached ? `今天已经写过《${r.title}》啦，接着读吧` : `新童话《${r.title}》来啦，一起读一读吧`);
       return row;
     } catch (e) {
       lastError.value = e instanceof Error ? e.message : String(e);
@@ -90,11 +106,6 @@ export const useStoryStore = defineStore("story", () => {
 
   function load(story: StoryRow | { id: number; title: string; text: string }): void {
     current.value = { id: story.id, title: story.title, text: story.text };
-  }
-
-  function loadSample(index = 0): void {
-    const s = SAMPLE_STORIES[index % SAMPLE_STORIES.length];
-    current.value = { id: -1 - index, title: s.title, text: s.text };
   }
 
   async function remove(title: string): Promise<void> {
@@ -172,15 +183,16 @@ export const useStoryStore = defineStore("story", () => {
     readTitles,
     current,
     generating,
+    loadingToday,
     lastError,
     timer,
     timerClock,
     timerRemain,
     applySnapshot,
     refresh,
+    ensureToday,
     generate,
     load,
-    loadSample,
     remove,
     startTimer,
     stopTimer,

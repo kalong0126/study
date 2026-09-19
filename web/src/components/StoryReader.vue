@@ -7,8 +7,15 @@
  *   · 孩子能跟着高亮跟读
  *   · 单句可以重复听（点句子即从这句开始）
  *   · 缓存粒度是句子，长文也不会一次合成很久
+ *
+ * 正文是**滚动**阅读（不是翻页）：正文区高度固定成 5 行（`--story-lines`），
+ * 里面自己滚。翻页那版是按「量出来的句子坐标」切页的，可注音 ruby 的行高、
+ * 字体换入的时机、平板的实际宽度都会让换行变化 —— 量得再准也会在孩子翻到一半时错位
+ * （实测结论：翻页不够准确）。滚动没有这个问题：内容就是内容，读到哪里看哪里。
+ * 高度仍然锁 5 行，是为了让正文区和页面其它卡片一样是一块「面板」，
+ * 而不是被长文撑成一条长条。朗读时自动把当前句滚进视野（见下面的 watch）。
  */
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { playSequence, stopAudio, useAudioState } from "@/composables/useAudio";
 import { useContentStore } from "@/stores/content";
 import { isSpeakable, splitSentences } from "@/utils/sentences";
@@ -79,6 +86,28 @@ const textOf = (s: Sentence): string => s.tokens.map((tok) => tok.text).join("")
 
 const currentIdx = ref(-1);
 
+/** 正文滚动窗口（固定 5 行高、内部滚动） */
+const viewEl = ref<HTMLElement | null>(null);
+
+/**
+ * 朗读走到下一句时把那一句滚进视野。
+ * 只在它**已经看不见**的时候才滚 —— 每句都滚会让正文一直在动，孩子反而跟不住。
+ */
+watch(currentIdx, (idx) => {
+  const view = viewEl.value;
+  if (idx < 0 || !view) return;
+  const el = view.querySelector<HTMLElement>(`.sent[data-i="${idx}"]`);
+  if (!el) return;
+  const vr = view.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const visible = r.top >= vr.top - 2 && r.bottom <= vr.bottom + 2;
+  if (visible) return;
+  const want = view.scrollTop + (r.top - vr.top) - view.clientHeight * 0.3;
+  view.scrollTo({ top: Math.max(0, want), behavior: "smooth" });
+});
+
+/* ------------------------------ 朗读 ------------------------------ */
+
 async function playFrom(start: number): Promise<void> {
   // 只把「有字可读」的句子排进队列：纯标点片段（单独一行的 `……` 之类）跳过，
   // 但仍保留下标，让高亮落在正确的那一句上。
@@ -112,12 +141,15 @@ defineExpose({ start, stop });
 
 <template>
   <div v-if="title" class="story-title">{{ title }}</div>
-  <div class="story-text">
+
+  <!-- 正文区：高度固定 5 行，里面自己滚（不翻页 —— 理由见文件头注释） -->
+  <div ref="viewEl" class="story-text story-scroll">
     <p v-for="(line, li) in lines" :key="li">
       <span
         v-for="s in line.sentences"
         :key="s.index"
         class="sent"
+        :data-i="s.index"
         :class="{ cur: currentIdx === s.index }"
         @click="onSentenceClick(s.index)"
       >
@@ -128,6 +160,7 @@ defineExpose({ start, stop });
       </span>
     </p>
   </div>
+
   <p class="tip" style="margin-top: 14px">
     点任意一句可以从那句开始朗读，正在读的句子会高亮。
     <template v-if="isPlaying">正在朗读：{{ currentText }}</template>

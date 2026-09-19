@@ -2,15 +2,23 @@
 /**
  * 顶栏：品牌 + 今日完成数 + 能量值。
  * 注意这里**没有**家长入口 —— 家长后台是独立路由 /admin，与孩子的界面完全分开。
+ *
+ * 「回小岛」是各功能页回首页的入口：底部导航整体去掉之后，
+ * 孩子从岛上点进某一页，回来的路就是它（品牌 logo 虽然也回首页，但它更像标题）。
  */
 import { computed } from "vue";
+import { useRoute } from "vue-router";
+import Icon from "@/components/Icon.vue";
 import { TASK_DEFS, useProgressStore } from "@/stores/progress";
 
+const route = useRoute();
 const progress = useProgressStore();
 // 任务条数只认 TASK_DEFS，别再写死 4 —— 加一项任务（如语言强化）这里会自动跟上
 const total = TASK_DEFS.length;
 const pct = computed(() => Math.round((progress.completedCount / total) * 100));
 const full = computed(() => progress.completedCount >= total);
+/** 「回小岛」只在不在一页时出现（底部导航已按用户要求整体去掉） */
+const isHome = computed(() => route.path === "/");
 </script>
 
 <template>
@@ -24,6 +32,10 @@ const full = computed(() => progress.completedCount >= total);
           </svg>
         </span>
         <span>二年级快乐学习台</span>
+      </RouterLink>
+
+      <RouterLink v-if="!isHome" to="/" class="hd-back" aria-label="回到今天的学习小岛">
+        <Icon name="arrowLeft" :size="18" :stroke="2.6" /><span>回小岛</span>
       </RouterLink>
 
       <div class="spacer"></div>

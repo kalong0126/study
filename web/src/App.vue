@@ -3,17 +3,20 @@
  * 应用外壳
  *
  * 两条完全分开的壳：
- *   · 孩子端（/ /math /chinese /story /wrong）：固定视口外壳（顶栏 / 内容区 / 底栏 三段式）。
- *     整页高度锁死为视口高度，只有中间内容区内部滚动 —— 整页没有滚动条，顶栏底栏始终不动。
+ *   · 孩子端（/ /math /chinese /story /wrong）：固定视口外壳（顶栏 / 内容区 两段式）。
+ *     整页高度锁死为视口高度，只有中间内容区内部滚动 —— 整页没有滚动条，顶栏始终不动。
  *   · 家长后台（/admin/**）：独立版式，不出现任何孩子端的导航，且**不走固定视口** ——
  *     后台表单长，要能整页滚动。
  * 这样「孩子看不到后台入口」是靠结构保证的，不是靠藏按钮。
+ *
+ * **没有底部导航**（用户明确要求去掉）：平板上一整条底栏要吃掉一百多像素的正文高度，
+ * 而它承担的「去哪一页」首页那张小岛地图已经说得更清楚了。
+ * 离开首页后，顶栏那个「回小岛」按钮是唯一的路（/ 的地址栏与品牌 logo 也都通）。
  */
 import { computed, onMounted, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { setAuthRequiredHandler } from "@/api";
 import AppHeader from "@/components/AppHeader.vue";
-import AppNav from "@/components/AppNav.vue";
 import DiagDrawer from "@/components/DiagDrawer.vue";
 import FxLayer from "@/components/FxLayer.vue";
 import LockGate from "@/components/LockGate.vue";
@@ -105,8 +108,6 @@ onUnmounted(() => {
           </RouterView>
         </template>
       </main>
-
-      <AppNav />
     </div>
 
     <FxLayer />

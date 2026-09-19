@@ -19,6 +19,7 @@
     "test:wrong": "node test/wrong-answer.mjs",
     "test:review": "node test/review-gate.mjs",
     "test:isle": "node test/isle-map.mjs",
+    "test:story": "node test/story-scroll.mjs",
     "test:font": "node test/font.mjs",
     "test:dictation": "node test/dictation-continue.mjs",
     "test:sentences": "node ../server/node_modules/tsx/dist/cli.mjs test/sentences.test.ts",

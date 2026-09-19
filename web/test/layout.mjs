@@ -4,14 +4,16 @@
  * 目标：孩子端（/ /math /chinese /story /language /wrong）在任何视口下都满足
  *   1. 整页不滚动（document 高度 == 视口高度，没有整页滚动条）
  *   2. .kid-shell 外壳高度 == 视口高度
- *   3. 顶栏、底栏都在视口内（不被推出屏幕）
+ *   3. 顶栏在视口内（不被推出屏幕）；「回小岛」按钮也在视口内
  *   4. 内容区 .wrap 是独立滚动容器（overflow-y: auto）
+ *   5. **没有底部导航**（已按用户要求整体去掉，把高度让给正文）
  * 反面：家长后台 /admin 不走外壳，保持普通文档流（内容长时可整页滚，不被裁掉）。
  *
  * 用法：node web/test/layout.mjs [baseUrl]
  * 依赖：playwright-core（在 workbuddy 的 node workspace 里）
  */
 import { createRequire } from "node:module";
+import { ISLE_OF_PATH } from "./_kidnav.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/node_modules/playwright-core");
@@ -68,7 +70,7 @@ async function measure(page) {
     const shell = document.querySelector(".kid-shell");
     const wrap = document.querySelector(".wrap");
     const topbar = document.querySelector(".topbar");
-    const nav = document.querySelector(".nav");
+    const back = document.querySelector(".hd-back");
     const rect = (el) => (el ? el.getBoundingClientRect() : null);
     return {
       pageOverflow: doc.scrollHeight - window.innerHeight,
@@ -78,7 +80,9 @@ async function measure(page) {
       wrapOverflowY: wrap ? getComputedStyle(wrap).overflowY : "",
       wrapScrollable: wrap ? wrap.scrollHeight - wrap.clientHeight : -1,
       topbarTop: topbar ? Math.round(rect(topbar).top) : null,
-      navBottom: nav ? Math.round(rect(nav).bottom) : null,
+      // 底部导航已去掉，改看「回小岛」按钮是否在视口里（它替代了底栏的回家功能）
+      backBottom: back ? Math.round(rect(back).bottom) : null,
+      hasNav: !!document.querySelector(".nav"),
     };
   });
 }
@@ -100,9 +104,10 @@ function checkViewport(m, label) {
   if (m.topbarTop !== null && m.topbarTop < -1) bad(`${label} 顶栏被推出视口 (top=${m.topbarTop})`);
   else if (m.topbarTop !== null) ok(`${label} 顶栏在视口内 (top=${m.topbarTop})`);
 
-  if (m.navBottom !== null && m.navBottom > m.innerH + 1)
-    bad(`${label} 底栏被推出视口 (bottom=${m.navBottom} > ${m.innerH})`);
-  else if (m.navBottom !== null) ok(`${label} 底栏在视口内 (bottom=${m.navBottom})`);
+  if (m.hasNav) bad(`${label} 又出现了底部导航（已按用户要求去掉）`);
+
+  if (m.backBottom !== null && m.backBottom > m.innerH + 1)
+    bad(`${label} 「回小岛」被推出视口 (bottom=${m.backBottom} > ${m.innerH})`);
 
   if (m.wrapScrollable > 0) note(`${label} 内容区可滚 ${m.wrapScrollable}px（内容比一屏长，属正常）`);
 }
@@ -128,16 +133,19 @@ for (const vp of VIEWPORTS) {
   }
 
   // 应用内点击切页：切完仍必须不滚动（整页加载不经过路由 Transition，会掩盖问题）
+  // 底部导航已去掉 → 出去靠「点小岛」，回来靠顶栏「回小岛」；整条链路都在应用内完成。
   console.log(`\n-- 应用内点击切页（${vp.name}）--`);
   await unlockAll(`点击前（${vp.name}）`);
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(".kid-shell", { timeout: 8000 }).catch(() => {});
-  await page.waitForTimeout(300);
-  for (const route of ["/math", "/chinese", "/story", "/language", "/video", "/wrong", "/"]) {
-    await page.click(`.nav a[href="${route}"]`);
-    await page.waitForTimeout(420);
-    const m = await measure(page);
-    const url = new URL(page.url()).pathname;
+  await page.waitForSelector("button.isle", { timeout: 8000 }).catch(() => {});
+  await page.waitForTimeout(350);
+
+  for (const route of ["/math", "/chinese", "/story", "/language", "/video", "/wrong"]) {
+    const isle = ISLE_OF_PATH[route];
+    await page.locator("button.isle", { hasText: isle }).first().click();
+    await page.waitForTimeout(480);
+    let m = await measure(page);
+    let url = new URL(page.url()).pathname;
     if (url !== route) {
       // 被守卫拦下时 URL 不变、只会弹 toast —— 把 toast 一起打出来，
       // 否则「点不动」和「点错了」在日志里长得一模一样。
@@ -145,9 +153,22 @@ for (const vp of VIEWPORTS) {
         .locator("#toast")
         .innerText()
         .catch(() => "");
-      bad(`点击 ${route} 后 URL 是 ${url}${toast ? `（提示：${toast.replace(/\s+/g, " ")}）` : ""}`);
+      bad(`点小岛「${isle}」后 URL 是 ${url}${toast ? `（提示：${toast.replace(/\s+/g, " ")}）` : ""}`);
     }
-    checkViewport(m, `点击→${route}`);
+    checkViewport(m, `点小岛→${route}`);
+
+    const back = page.locator(".hd-back").first();
+    if (!(await back.count())) {
+      bad(`${route} 页找不到「回小岛」按钮（底栏去掉后就没路回首页了）`);
+      await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+      continue;
+    }
+    await back.click();
+    await page.waitForTimeout(480);
+    m = await measure(page);
+    url = new URL(page.url()).pathname;
+    if (url !== "/") bad(`从 ${route} 点「回小岛」后 URL 是 ${url}（期望 /）`);
+    checkViewport(m, `${route}→回小岛`);
   }
 
   await ctx.close();
@@ -185,5 +206,5 @@ if (problems.length) {
   for (const p of problems) console.log(`  - ${p}`);
   process.exit(1);
 } else {
-  console.log("布局回归通过：整页不滚动，三段式固定正常");
+  console.log("布局回归通过：整页不滚动，两段式固定正常");
 }

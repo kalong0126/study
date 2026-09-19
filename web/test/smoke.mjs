@@ -103,7 +103,10 @@ step("首页 / 渲染 + 引导完成");
 await goto("/", ".wrap");
 await page.waitForTimeout(1200);
 const navCount = await page.locator("nav.nav a").count();
-navCount >= 5 ? pass(`底部导航 ${navCount} 项`) : fail(`底部导航只有 ${navCount} 项`);
+// 底部导航已按用户要求整体去掉：孩子端只有首页小岛地图 + 顶栏「回小岛」两条路
+navCount === 0 ? pass("孩子端没有底部导航（已去掉，把高度让给正文）") : fail(`底部导航还在，有 ${navCount} 项`);
+const backLink = await page.locator(".hd-back").count();
+backLink === 0 ? pass("首页不显示「回小岛」（本来就在小岛上）") : fail("首页出现了「回小岛」按钮");
 const bodyText1 = await text("body");
 /今日/.test(bodyText1) ? pass("首页出现「今日」") : fail("首页没有「今日」字样");
 const fatal = await page.locator(".fatal-box").count();

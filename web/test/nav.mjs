@@ -23,6 +23,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ISLE_OF_PATH } from "./_kidnav.mjs";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require("C:/Users/kalon/.workbuddy/binaries/node/workspace/node_modules/playwright-core");
@@ -190,6 +191,36 @@ async function assertRoute(r, label) {
   }
 }
 
+// ————————————————————————————— 0a. 童话接口打桩
+// 孩子端现在**一进 /story 就自动生成今日童话**（ensureToday）。这份隔离实例的 llm.apiKey
+// 是假的，真打过去必失败 → 后端回 502 → 控制台多一条 error，把「控制台零错误」这条断言带崩。
+// 这里只测导航，不该花 token 也不该依赖外网，所以直接给 `/story/today` 一篇固定小童话。
+const STUB_STORY = {
+  id: 9001,
+  title: "《导航回归用小童话》",
+  text: [
+    "小水珠住在一朵软软的白云里。",
+    "有一天，它听见大地在喊渴。",
+    "它就和小伙伴们一起跳了下去。",
+    "它落进一条小溪，溪水叮叮咚咚地唱歌。",
+    "后来，它又回到了天上，变成一朵白云。",
+  ].join("\n"),
+};
+await page.route("**/api/story/today", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ story: STUB_STORY }),
+  }),
+);
+await page.route("**/api/story/generate", (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...STUB_STORY, charCount: 100, avoidCount: 0, ms: 0, model: "stub", cached: false }),
+  }),
+);
+
 // ————————————————————————————— 0. 前置：把今日六项任务置为已完成（全部解锁）
 // 首页那张小岛地图是「闯过一关才解锁下一关」的，未解锁的路由会被守卫弹回首页。
 // 这份测试的职责是「跑遍所有页面、都不白屏」，不是验证解锁本身（那由 isle-map.mjs 负责），
@@ -222,33 +253,41 @@ if (/占位|Transition|RouterView/.test(base.bodyText)) {
   fail("页面正文里出现了模板注释文本（HTML 注释被提前闭合漏进 DOM）");
 }
 
-// ————————————————————————————— 2. 底部导航：跑遍全部路由（应用内点击）
-step("底部导航逐条切换（应用内点击，不刷新）");
+// ————————————————————————————— 2. 首页小岛：跑遍全部路由（应用内点击）
+// 底部导航已按用户要求整体去掉 → 孩子端唯一的入口是首页那张小岛地图，
+// 回首页靠顶栏「回小岛」。两段都是应用内点击，Transition 那条链路照样测得到。
+step("首页小岛逐座切换 + 回小岛（应用内点击，不刷新）");
+await page.locator("button.isle").first().waitFor({ timeout: 20000 });
 for (const r of ROUTES) {
+  const label = r.path === "/" ? "首页" : `小岛「${ISLE_OF_PATH[r.path]}」`;
   if (r.path !== "/") {
-    await page.locator("nav.nav a", { hasText: r.nav }).first().click();
+    await page.locator("button.isle", { hasText: ISLE_OF_PATH[r.path] }).first().click();
     await page.waitForTimeout(1400);
   }
-  await assertRoute(r, `点导航「${r.nav}」`);
-}
+  await assertRoute(r, `点${label}`);
+  if (r.path === "/") continue;
 
-// ————————————————————————————— 3. 从每个页面回首页：验证「离开多根视图」不再卡死
-step("从各页点「今日」回首页（重点：离开多根视图）");
-for (const r of ROUTES.slice(1)) {
-  await page.locator("nav.nav a", { hasText: r.nav }).first().click();
-  await page.waitForTimeout(900);
-  await page.locator("nav.nav a", { hasText: "今日" }).first().click();
+  // 回首页：这一段同时守住「离开多根视图不再卡死」（原来那条 §3 的断言）
+  const back = page.locator(".hd-back").first();
+  if (!(await back.count())) {
+    fail(`${r.path} 页找不到顶栏「回小岛」按钮（底栏去掉后就没路回首页了）`);
+    await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(1200);
+    continue;
+  }
+  await back.click();
   await page.waitForTimeout(1200);
   const st = await viewState();
   st.path === "/" && st.childCount >= 1
-    ? pass(`「${r.nav}」→ 今日：正常切回`)
-    : fail(`「${r.nav}」→ 今日：白屏（childCount=${st.childCount}）`);
+    ? pass(`${label} → 回小岛：正常切回`)
+    : fail(`${label} → 回小岛：白屏（childCount=${st.childCount}，path=${st.path}）`);
 }
 
 // ————————————————————————————— 4. 首页小岛地图（孩子端唯一的入口）
 step("首页小岛地图 → 各功能页（应用内点击）");
-await page.locator("nav.nav a", { hasText: "今日" }).first().click();
-await page.waitForTimeout(1100);
+await page.goto(`${BASE}/`, { waitUntil: "domcontentloaded" });
+await page.waitForSelector("button.isle", { timeout: 20000 });
+await page.waitForTimeout(900);
 {
   // 地图上共 6 座岛，按闯关顺序排：口算岛 / 听写屋 / 错题修理站 / 故事树 / 语言练习 / 英文小屋。
   // 顺序即解锁顺序（错题修理站除外，它是随时能去的工具站），英文小屋刻意排在最后。
@@ -380,8 +419,8 @@ step("家长后台 /admin（结构隔离 + 数据安全已就位）");
 await page.goto(`${BASE}/admin`, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(1600);
 {
-  const navCnt = await page.locator("nav.nav").count();
-  navCnt === 0 ? pass("后台不出现孩子端导航（结构隔离仍生效）") : fail("后台渲染出了孩子端导航");
+  const shellCnt = await page.locator(".kid-shell").count();
+  shellCnt === 0 ? pass("后台不出现孩子端外壳 / 导航（结构隔离仍生效）") : fail("后台渲染出了孩子端外壳");
   const backLink = await page.locator("a", { hasText: /返回|回到|孩子端/ }).count();
   backLink > 0 ? pass("后台有「回到孩子端」的出口") : fail("后台找不到回到孩子端的出口");
   // 数据安全（原首页那张卡）现在必须在这里找得到

@@ -39,7 +39,8 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
-/* 全站字体走 --font-round（方正准圆简体）；识字内容单独用 --font-kai，见下面的 .story-text。
+/* 全站字体走 --font-round（方正准圆简体）；识字内容单独用 --font-kai，
+   见下面的 .lesson-text（语文课文原文）与 .zi-face / .hw-cell 等字卡。
    字重交给浏览器合成加粗：方正准圆简体只有真实 400 一档，标题/数字的 700-900
    由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
    不再合成，全站粗细会一样（详见 font-fzzhunyuan.css 顶部说明）。 */
@@ -85,29 +86,32 @@ a { color: var(--blue-d); }
 .icon-btn svg { width: 20px; height: 20px; }
 
 /* ---------- 导航 ---------- */
-.nav { max-width: 1080px; margin: 0 auto; display: flex; gap: 6px; justify-content: center; padding: 0 16px 10px; }
-.nav button, .nav a {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  min-width: 72px; min-height: 48px; padding: 7px 14px; border: none; border-radius: 15px;
-  background: transparent; color: var(--ink2); font-size: 12.5px; font-weight: 600;
-  cursor: pointer; transition: .22s; position: relative; text-decoration: none;
+/* 这里原来是一整条底部导航（7 项：今日 / 口算 / 语文 / 童话 / 语言 / 英文 / 错题本）。
+   用户要求整体去掉：平板上一整条底栏要吃掉一百多像素，而它承担的「去哪一页」
+   首页那张小岛地图说得更清楚 —— 地图上每一座岛就是一站，还带解锁顺序。
+   离开首页后回不来的问题由顶栏的「回小岛」解决（见 .hd-back）。
+   别在别处再写 `.nav`，它已经不存在了。 */
+
+/* 「回小岛」：功能页回到首页小岛地图的唯一按钮（品牌 logo 也回首页，但它是标题） */
+.hd-back {
+  display: inline-flex; align-items: center; gap: 4px; flex: none;
+  padding: 7px 15px 7px 12px; border-radius: 999px;
+  background: #fff; border: 1.5px solid var(--line2);
+  color: var(--blue-d); font-size: 14px; font-weight: 800;
+  text-decoration: none; white-space: nowrap;
+  box-shadow: var(--shadow-s); transition: .2s;
 }
-.nav button svg, .nav a svg { width: 22px; height: 22px; transition: .22s; }
-.nav button:hover, .nav a:hover { background: #F3F9FF; color: var(--blue-d); }
-.nav button.active, .nav a.active { background: linear-gradient(135deg, #DFF1FF, #E7FBF3); color: var(--blue-d); box-shadow: var(--shadow-s); }
-.nav button.active svg, .nav a.active svg { transform: translateY(-1px) scale(1.06); }
-.nav .badge { position: absolute; top: 4px; right: 12px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--red); color: #fff; font-size: 10.5px; font-weight: 800; line-height: 17px; text-align: center; display: none; }
-.nav .badge.on { display: block; }
+.hd-back:hover { background: #F3F9FF; transform: translateY(-1px); }
+.hd-back svg { width: 18px; height: 18px; }
 
 /* ---------- 孩子端固定视口外壳 ----------
-   顶栏 / 内容区 / 底栏 三段式：整页高度锁死为视口高度，
-   只有中间 .wrap 内部滚动，顶栏与底栏始终不动、整页没有滚动条。
+   顶栏 / 内容区 两段式：整页高度锁死为视口高度，
+   只有中间 .wrap 内部滚动，顶栏始终不动、整页没有滚动条。
    家长后台（/admin）不走这层壳，保持普通文档流（表单长，要能整页滚）。
    用 100dvh（动态视口高度）跟随移动端地址栏伸缩，再给 100vh 兜底老浏览器。 */
 .kid-shell { height: 100vh; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
 .kid-shell > .topbar { flex: none; }
 .kid-shell > .wrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-.kid-shell > .nav { flex: none; }
 
 /* ---------- 主体 ---------- */
 .wrap { width: 100%; max-width: 1080px; margin: 0 auto; padding: 16px; }
@@ -595,22 +599,65 @@ a { color: var(--blue-d); }
 /* ---------- 故事 ---------- */
 .story-box { background: linear-gradient(160deg, #FFFDF7, #F6FBFF); border: 1.5px dashed #D8E8F6; border-radius: 18px; padding: 20px; min-height: 220px; }
 .story-title { font-size: 19px; font-weight: 800; color: var(--purple-d); margin: 0 0 12px; letter-spacing: .5px; }
-/* 课文原文 / 童话正文：识字内容一律楷体（--font-kai）。
+/* 课文原文 / 童话正文：整段读的正文一律走站内圆体（--font-round），跟页面其它文字统一；
+   只有「单个要照着认、照着写的字」（字卡 / 手写格 / 生字表）才用楷体，见
+   .lesson-text（语文课文原文）、.zi-face、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
    注意这条以前写的是 `..., "STKaiti", inherit` —— `inherit` 是 CSS-wide 关键字，
-   不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。 */
-.story-text { font-size: 30px; line-height: 2.75; letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: var(--font-kai); }
+   不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。
+   `--lh` 是行高：下面的 `.story-scroll` 用它算「一屏 5 行有多高」，行高只写这一处。 */
+.story-text { --lh: 2.75; font-size: 30px; line-height: var(--lh); letter-spacing: .05em; color: #2F4257; word-break: break-word; font-family: var(--font-round); }
+/* 课文原文（语文页）单独走楷体：它是「照着认、跟着读」的教材正文，
+   楷体才是识字教学的标准字形；童话正文（.story-text 本体）走站内圆体，
+   两者共用版式但字体不同，所以在这里按用途分开，而不是在 body 上分。
+   ⚠️ 这条不能省：`.story-text` 现在是圆体，漏了它语文课文会跟着变圆。 */
+.lesson-text { font-family: var(--font-kai); }
 .story-text p { margin: 0 0 14px; }
 .story-text ruby { ruby-position: over; ruby-align: center; margin: 0 2px; }
 .story-text rt { font-size: .42em; color: var(--blue-d); font-weight: 700; letter-spacing: 0; line-height: 1.15; }
 .story-text .punct { color: #8FA6BD; }
 .story-text .sent { border-radius: 8px; transition: background .3s; cursor: pointer; padding: 1px 2px; }
 .story-text .sent.cur { background: #FFF3C4; box-shadow: 0 0 0 3px rgba(255, 217, 61, .35); }
+
+/* ---------- 故事正文：滚动阅读 ----------
+   正文区高度固定成 5 行（`--story-lines`），超出部分在**它自己内部**滚动：
+   平板上一屏 5 行正文刚刚好（用户实测的结论），长文不会被撑成一条长条。
+   曾经做过「翻页」版本 —— 按量出来的句子坐标切页、整块 translateY 平移 ——
+   但注音 ruby 会撑高行高、自托管字体换入的时机、平板的实际宽度都会让换行变化，
+   量得再准也会在孩子翻到一半时错位（用户结论：翻页不够准确），于是改回滚动。
+   末尾 +2px 是给取整留的余量：30px 字号 × 2.75 行高 = 82.5px，5 行带小数，
+   `clientHeight` 只能取整。 */
+.story-scroll {
+  --story-lines: 5;
+  height: calc(var(--story-lines) * var(--lh, 2.75) * 1em + 2px);
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; scrollbar-color: #CFE2F2 transparent;
+  padding-right: 6px;
+}
+.story-scroll::-webkit-scrollbar { width: 8px; }
+.story-scroll::-webkit-scrollbar-thumb { background: #CFE2F2; border-radius: 999px; }
+.story-scroll::-webkit-scrollbar-track { background: transparent; }
 .lesson-new { color: #E23B4E; font-weight: 800; }
 .story-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 30px 10px; color: var(--ink3); font-size: 14.5px; text-align: center; }
 .story-empty svg { width: 54px; height: 54px; opacity: .55; }
 .timer-box { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; background: #F7FBFF; border: 1.5px solid var(--line2); border-radius: 16px; padding: 12px 16px; margin-top: 14px; }
 .timer-clock { font-size: 30px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 2px; color: var(--blue-d); min-width: 120px; }
 .timer-clock.run { color: var(--green-d); }
+
+/* ---------- 童话页那一行：倒计时 + 换一篇 / 朗读 / 结束计时 ----------
+   用户要求「倒计时和生成童话放到一行上」：它们是同一件事的两个面 ——
+   「今天读这篇、读满 15 分钟」和「想换一篇」。分成上下两块要占两屏高度。 */
+.story-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.story-bar .btn { flex: none; }
+.timer-chip {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  padding: 5px 16px 5px 12px; border-radius: 999px;
+  background: #F2F8FF; border: 1.5px solid var(--line2); color: var(--ink2);
+}
+.timer-chip.run { background: #EAFBF4; border-color: #C6EEDD; color: var(--green-d); }
+.timer-chip svg { width: 20px; height: 20px; }
+/* 行内的计时器比数学页那枚小一号，且颜色交给胶囊（点击暂停态是绿的） */
+.story-bar .timer-clock { font-size: 26px; min-width: auto; letter-spacing: 1px; color: inherit; }
+.story-bar-tip { margin: 10px 0 0; font-size: 12.5px; color: var(--ink3); line-height: 1.6; }
 .hist { display: flex; flex-direction: column; gap: 8px; max-height: 230px; overflow-y: auto; }
 .hist-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 13px; background: #FAFCFF; border: 1px solid var(--line2); font-size: 13.5px; transition: .2s; }
 .hist-item:hover { background: #F3F9FF; }
@@ -884,7 +931,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 
 /* ---------- 提示 / 特效 ---------- */
 #fxCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 9999; }
-#toast { position: fixed; left: 50%; bottom: 110px; transform: translate(-50%, 20px); background: rgba(55, 72, 92, .94); color: #fff; font-size: 14.5px; font-weight: 600; padding: 11px 20px; border-radius: 14px; opacity: 0; pointer-events: none; transition: .32s; z-index: 10000; max-width: 86vw; text-align: center; }
+#toast { position: fixed; left: 50%; bottom: 34px; transform: translate(-50%, 20px); background: rgba(55, 72, 92, .94); color: #fff; font-size: 14.5px; font-weight: 600; padding: 11px 20px; border-radius: 14px; opacity: 0; pointer-events: none; transition: .32s; z-index: 10000; max-width: 86vw; text-align: center; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 .banner { position: fixed; inset: 0; z-index: 10001; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 8px; pointer-events: none; }
 .banner.on { display: flex; animation: bannerIn .5s cubic-bezier(.2, 1.5, .5, 1) both; }
@@ -920,10 +967,10 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .isle-stats { grid-template-columns: 1fr; }
 }
 @media (max-width: 819px) {
-  .nav { max-width: none; margin: 0; padding: 7px 4px calc(7px + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, .97); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line); justify-content: space-around; gap: 0; z-index: 60; box-shadow: 0 -4px 18px rgba(120, 160, 205, .10); }
-  .nav button, .nav a { min-width: 0; flex: 1; padding: 6px 2px; border-radius: 13px; }
-  .nav .badge { right: calc(50% - 24px); }
   .hd { padding: 9px 12px; gap: 9px; }
+  /* 手机上顶栏本来就窄：回小岛按钮只留箭头（文字藏掉），但点击区仍 ≥44px */
+  .hd-back { padding: 0; width: 44px; height: 44px; justify-content: center; }
+  .hd-back span { display: none; }
   .brand { font-size: 16px; }
   .brand .logo { width: 33px; height: 33px; border-radius: 11px; }
   .energy { order: 5; flex: 1 1 100%; min-width: 0; }
@@ -935,7 +982,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .sel, .inp { min-height: 46px; }
   .icon-btn { width: 46px; height: 46px; }
   .m-list { grid-template-columns: 1fr; }
-  .story-text { font-size: 24px; line-height: 2.6; }
+  .story-text { --lh: 2.6; font-size: 24px; }
   .zi-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
   .zi-face { min-height: 56px; }
   .zi-face .zi-char { font-size: 29px; }
@@ -945,7 +992,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .hw-pin { font-size: 18px; }
   .timer-clock { font-size: 26px; min-width: 104px; }
   .redeem-grid { grid-template-columns: 1fr; }
-  #toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
+  #toast { bottom: calc(24px + env(safe-area-inset-bottom)); }
   .banner .b-t { font-size: 32px; }
   .banner.gold .b-t { font-size: 36px; letter-spacing: 3px; }
   .row-edit { grid-template-columns: 48px 1fr 1fr 36px; gap: 6px; }

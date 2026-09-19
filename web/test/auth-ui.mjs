@@ -195,8 +195,8 @@ try {
   ok("底部告诉孩子「口令由家长设置」", /家长/.test(await textOf(".lk-foot")), await textOf(".lk-foot"));
 
   // 这一条是安全断言：锁着的时候绝不能顺手把孩子端壳子画出来
-  const navLocked = await count("nav.nav a");
-  ok("未登录时看不到孩子端底部导航", navLocked === 0, `导航项=${navLocked}`);
+  const shellLocked = await count(".kid-shell");
+  ok("未登录时看不到孩子端外壳（顶栏与内容区都没画）", shellLocked === 0, `外壳=${shellLocked}`);
   ok("未登录时没有入口能点到家长后台", (await count('a[href*="/admin"]')) === 0);
 
   await page.screenshot({ path: path.join(SHOTS, "auth-01-locked.png") });
@@ -212,7 +212,7 @@ try {
   const errText = await textOf(".lk-msg");
   ok("报错文案来自后端（提到「口令不对」）", /口令不对/.test(errText), errText);
   ok("报错时口令位已清空（不会让人接着输成 9 位）", (await count(".lk-dots span.on")) === 0);
-  ok("报错时仍停在口令门，没有误放行", (await visible(".lk")) && (await count("nav.nav a")) === 0);
+  ok("报错时仍停在口令门，没有误放行", (await visible(".lk")) && (await count(".kid-shell")) === 0);
   await page.screenshot({ path: path.join(SHOTS, "auth-02-badpin.png") });
 
   /* --------------------------------------------- 3. 口令正确：进入孩子端 */
@@ -222,8 +222,10 @@ try {
   await page.waitForTimeout(1200);
 
   ok("口令门已消失", !(await visible(".lk")), "口令门还在");
-  const navAfter = await count("nav.nav a");
-  ok("孩子端底部导航渲染出来了（≥5 项）", navAfter >= 5, `导航项=${navAfter}`);
+  const shellAfter = await count(".kid-shell");
+  ok("孩子端外壳渲染出来了（顶栏 + 内容区，没有底栏）", shellAfter === 1, `外壳=${shellAfter}`);
+  const islesAfter = await count("button.isle");
+  ok("首页小岛地图渲染出来了（6 座）", islesAfter >= 6, `小岛=${islesAfter}`);
   const bodyText = await textOf("body");
   ok("首页出现「今日」", /今日/.test(bodyText));
   ok("没有落进致命错误页", (await count(".fatal-box")) === 0);
@@ -235,7 +237,7 @@ try {
   await page.waitForSelector(".wrap", { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(1000);
   ok("刷新后直接进孩子端，没再弹口令门", !(await visible(".lk")), "又被要求输口令了");
-  ok("刷新后导航仍在", (await count("nav.nav a")) >= 5);
+  ok("刷新后孩子端外壳仍在", (await count(".kid-shell")) === 1);
 
   /* ---------------------------------- 5. 公网深链家长页：后端拒、前端不白屏 */
   step("5. 公网直接敲 /admin → 后端 403，孩子端不被锁死");

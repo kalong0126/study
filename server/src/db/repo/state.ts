@@ -346,6 +346,28 @@ export async function listStories(childId: number, limit = 50): Promise<StoryRow
   return rows.map((r) => ({ id: Number(r.id), title: r.title, text: r.text ?? "", createdAt: r.created_at }));
 }
 
+/**
+ * 「今天」的童话（本地时区的那一天，取最新一条；没有就返回 null）。
+ *
+ * 为什么按时间范围查、而不是记一个 `storyDay` 键：
+ *   · `created_at` 本来就是这条记录自己的时间，不需要第二处状态去同步；
+ *   · 家长在后台把今天的童话删了，这里立刻查不到、当天可以重新生成 ——
+ *     记键的话就得记得在删除路径上一起清，漏一处就变成「今天永远生成不了」。
+ *
+ * `created_at` 是 `nowIso()` 写的 UTC ISO 串，所以边界也要换算成 UTC 再比较
+ * （直接用本地日期串去比会差 8 小时，早上生成的故事会被算成昨天的）。
+ */
+export async function storyOfDay(childId: number, day = new Date()): Promise<StoryRow | null> {
+  const d = db();
+  const from = new Date(day.getFullYear(), day.getMonth(), day.getDate());
+  const to = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+  const row = await d.get<{ id: number; title: string; text: string | null; created_at: string }>(
+    "SELECT id, title, text, created_at FROM stories WHERE child_id = ? AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 1",
+    [childId, from.toISOString(), to.toISOString()],
+  );
+  return row ? { id: Number(row.id), title: row.title, text: row.text ?? "", createdAt: row.created_at } : null;
+}
+
 export async function addStory(childId: number, title: string, text: string): Promise<number> {
   const d = db();
   return d.insert("INSERT INTO stories (child_id, title, text, created_at) VALUES (?, ?, ?, ?)", [

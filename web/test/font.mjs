@@ -306,8 +306,10 @@ try {
       ok(`${label} 用楷体而非圆体`, /Kaiti|KaiTi|楷体/.test(fam), String(fam).slice(0, 44));
     };
 
-    // 课文原文：直接用楷体渲染「要照着认的字」
-    await needKai("课文原文 .story-text", ".story-text");
+    // 课文原文：教材正文用楷体渲染「要照着认的字」。
+    // 选 `.lesson-text` 而不是 `.story-text`：童话正文（同一个 `.story-text`）已按用户要求
+    // 统一成站内圆体，语文课文原文另加 `.lesson-text` 走楷体（见 macaron.css）。
+    await needKai("课文原文 .lesson-text", ".lesson-text");
 
     // 听写字格与手写格都要点进去才出现 —— 而这两个正是本轮修的那个 bug
     // （`font-family: "Kaiti SC", "KaiTi", inherit` 整条声明被浏览器丢掉，
@@ -402,7 +404,7 @@ try {
     ["zoom-topbar", ".topbar"],
     ["zoom-track", ".isle-track"],
     ["zoom-stats", ".isle-stats"],
-    ["zoom-nav", ".nav"],
+    ["zoom-isles", ".isle-map"],
   ]) {
     const el = page.locator(sel).first();
     if (await el.count()) await el.screenshot({ path: path.join(SHOTS, `${name}.png`) }).catch(() => undefined);

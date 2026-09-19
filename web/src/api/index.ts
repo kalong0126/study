@@ -181,11 +181,21 @@ export const api = {
 
   /* ------------------------------------------------------------ 故事与计时 */
 
-  generateStory: (avoidTitles: string[] = []) =>
-    request<{ id: number; title: string; text: string; charCount: number; avoidCount: number; ms: number; model: string }>(
-      "/story/generate",
-      { method: "POST", body: JSON.stringify({ avoidTitles }) },
-    ),
+  generateStory: (avoidTitles: string[] = [], force = false) =>
+    request<{
+      id: number;
+      title: string;
+      text: string;
+      charCount: number;
+      avoidCount: number;
+      ms: number;
+      model: string;
+      /** true = 今天已经有童话，直接返回的那一篇（没花 token） */
+      cached: boolean;
+    }>("/story/generate", { method: "POST", body: JSON.stringify({ avoidTitles, force }) }),
+
+  /** 今天的童话（没有则 story: null）。孩子端一进来先问它，再决定要不要生成 */
+  storyToday: () => request<{ story: StoryRow | null }>("/story/today"),
 
   listStories: (limit = 30) =>
     request<{ stories: StoryRow[]; readTitles: string[] }>(`/stories${qs({ limit })}`),

@@ -130,10 +130,10 @@ let server;
 let browser;
 let page;
 
-async function gotoNav(label) {
-  await page.locator("nav.nav a", { hasText: label }).first().click();
-  await page.waitForTimeout(1200);
-}
+import { goNav } from "./_kidnav.mjs";
+
+/** 切到某个功能页：底部导航已去掉，改成「回首页 → 点对应的小岛」（见 _kidnav.mjs） */
+const gotoNav = (label) => goNav(page, BASE, label, { wait: 1200 });
 
 /** 轮询直到 fn() 返回真值，返回该真值；超时返回 null */
 async function waitFor(fn, timeoutMs = 8000) {

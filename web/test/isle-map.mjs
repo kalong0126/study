@@ -401,9 +401,19 @@ try {
       return [...document.fonts].some((f) => f.family.includes("方正准圆简体") && f.status === "loaded");
     });
     ok("字体切片真的加载成功（不是只剩一句声明）", fontLoaded === true, String(fontLoaded));
-    // 课文 / 童话是「要照着认的字」，必须楷体。这条以前踩过坑：
+    // 语文课文原文是「要照着认的字」，必须楷体（`.lesson-text`）。这条以前踩过坑：
     // 字体列表里混进 `inherit` 这种 CSS-wide 关键字会让整条声明判无效，楷体白设、悄悄退回黑体。
+    // 注意：童话正文（`.story-text`）**改成圆体**了（与全站统一），所以这里只能量 `.lesson-text`。
     const kaiFont = await page.evaluate(() => {
+      const d = document.createElement("div");
+      d.className = "story-text lesson-text";
+      document.body.appendChild(d);
+      const f = getComputedStyle(d).fontFamily;
+      d.remove();
+      return f;
+    });
+    ok("语文课文原文用楷体（识字用规范字形）", /Kaiti|KaiTi|楷体/.test(kaiFont), kaiFont.slice(0, 64));
+    const storyFont = await page.evaluate(() => {
       const d = document.createElement("div");
       d.className = "story-text";
       document.body.appendChild(d);
@@ -411,7 +421,7 @@ try {
       d.remove();
       return f;
     });
-    ok("课文 / 童话用楷体（识字用规范字形）", /Kaiti|KaiTi|楷体/.test(kaiFont), kaiFont.slice(0, 64));
+    ok("童话正文用站内圆体（不再用楷体）", /方正准圆简体/.test(storyFont), storyFont.slice(0, 64));
   }
 
   /* ————————————————————————————— 2. 开局：只有第一关能走 */
@@ -546,23 +556,37 @@ try {
     ok("提示里点名「口算岛」", t.includes("口算岛"), t);
   }
 
-  /* ————————————————————————————— 4. 底部导航同样受顺序锁约束 */
-  step("4. 底部导航点未解锁的页 → 同样被挡住");
+  /* ————————————————————————————— 4. 岛就是入口：能进的都要点得动
+     底部导航已按用户要求整体去掉，孩子端只剩小岛地图这一条路 + 顶栏「回小岛」。
+     所以「点得动」这件事比过去更要紧：已通关的、当前这一关、工具站都必须能进 ——
+     任何一座岛点了没反应，那个页面就等于没了。 */
+  step("4. 能进的岛都点得动（含已通关的），回首页靠顶栏「回小岛」");
   {
-    await page.locator("nav.nav a", { hasText: "童话" }).first().click();
-    await page.waitForTimeout(800);
-    ok("童话页没进去", (await herePath()) === "/", await herePath());
-    ok("同样给了提示", (await toastText()).includes("口算岛"));
+    // 先把口算做完，做出一座「已通关」的岛
+    await jpatch("/api/state/daily", { tasks: { math: true } });
+    await openHome();
 
-    // 已有的一关（口算岛自己）必须进得去 —— 锁不能把孩子自己那一步也挡住
-    await page.locator("nav.nav a", { hasText: "口算" }).first().click();
+    const doneIsle = page.locator("button.isle.done", { hasText: "口算岛" }).first();
+    ok("口算岛已是「已通关」", (await doneIsle.count()) === 1);
+    await doneIsle.click();
     await page.waitForTimeout(1200);
-    ok("点导航「口算」能进（它是当前这一关）", (await herePath()) === "/math", await herePath());
+    ok("点**已通关**的岛仍然进得去（不该变成点了没反应）", (await herePath()) === "/math", await herePath());
+
+    await page.locator(".hd-back").first().click();
+    await page.waitForTimeout(1000);
+    ok("顶栏「回小岛」能回首页", (await herePath()) === "/", await herePath());
+
+    // 当前这一关（口算做完 → 听写屋接棒）也要能进
+    await page.locator("button.isle", { hasText: "听写屋" }).first().click();
+    await page.waitForTimeout(1200);
+    ok("点「当前这一关」能进", (await herePath()) === "/chinese", await herePath());
+    await page.locator(".hd-back").first().click();
+    await page.waitForTimeout(1000);
 
     // 错题修理站不参与顺序锁，随时能进
-    await page.locator("nav.nav a", { hasText: "错题本" }).first().click();
+    await page.locator("button.isle", { hasText: "错题修理站" }).first().click();
     await page.waitForTimeout(1200);
-    ok("点导航「错题本」能进（工具站不上锁）", (await herePath()) === "/wrong", await herePath());
+    ok("点工具站「错题修理站」能进", (await herePath()) === "/wrong", await herePath());
   }
 
   /* ————————————————————————————— 5. 做完一关 → 下一关解锁 */

@@ -444,11 +444,17 @@ async function main(): Promise<void> {
     group("C. 故事生成（mock）");
     await resetMock();
     await setMockMode("ok");
+
+    // 今日童话：孩子端一进来就会问这个，拿到 null 才去生成
+    const ct0 = await api("GET", "/api/story/today");
+    eq("C0a 今天还没有童话时 story 为 null", ct0.json.story, null);
+
     const s1 = await api("POST", "/api/story/generate", {});
     eq("C1 生成成功", s1.status, 200);
     eq("C2 标题被正确解析（不再是正文前12字）", s1.json.title, "小水滴的旅行");
     ok("C3 正文不含标题行", !String(s1.json.text).includes("《小水滴的旅行》"));
     ok("C4 charCount 合理", Number(s1.json.charCount) > 10, String(s1.json.charCount));
+    eq("C4b 首次生成不是缓存", s1.json.cached, false);
 
     const stS = await api("GET", "/api/state");
     ok("C5 已读标题已记录", (stS.json.readTitles as string[]).includes("小水滴的旅行"));
@@ -457,9 +463,22 @@ async function main(): Promise<void> {
     ok("C6 首次生成时没有去重列表", !calls.calls[0].prompt.includes("请不要创作以下主题"), calls.calls[0].prompt.slice(-80));
     ok("C7 请求使用 storyModel", calls.calls[0].model === "mock-story", calls.calls[0].model);
 
+    // 今天已有童话 → 「今日」查得到，且不带 force 的生成请求**不再调模型**
+    //（孩子端每次进页面都会请求一次，刷新不重复花钱就是这条守住的）
+    const ct1 = await api("GET", "/api/story/today");
+    eq("C7b 今天已生成后 /story/today 能取到", ct1.json.story?.title, "小水滴的旅行");
+
     await resetMock();
-    const s2 = await api("POST", "/api/story/generate", {});
-    eq("C8 第二次生成仍成功", s2.status, 200);
+    const s2c = await api("POST", "/api/story/generate", {});
+    eq("C7c 当天重复请求直接返回已有童话", s2c.json.cached, true);
+    eq("C7d 当天重复请求不调模型", s2c.json.id, ct1.json.story?.id);
+    calls = await mockCalls();
+    eq("C7e 缓存命中时一次模型都没调", calls.count, 0);
+
+    await resetMock();
+    const s2 = await api("POST", "/api/story/generate", { force: true });
+    eq("C8 force 后重新生成仍然成功", s2.status, 200);
+    eq("C8b force 生成不是缓存", s2.json.cached, false);
     calls = await mockCalls();
     ok(
       "C9 再次生成时注入了「已读标题」去重列表",
@@ -469,19 +488,19 @@ async function main(): Promise<void> {
 
     await resetMock();
     await setMockMode("badjson");
-    const s3 = await api("POST", "/api/story/generate", {});
+    const s3 = await api("POST", "/api/story/generate", { force: true });
     eq("C10 模型不按格式返回时仍能兜底出标题", s3.status, 200);
     ok("C11 兜底标题取正文前 12 字", String(s3.json.title).startsWith("抱歉，这张图我看不"), String(s3.json.title));
 
     await resetMock();
     await setMockMode("notjson");
-    const s4 = await api("POST", "/api/story/generate", {});
+    const s4 = await api("POST", "/api/story/generate", { force: true });
     eq("C12 返回非 JSON 时状态码 502", s4.status, 502);
     eq("C13 错误分类为 parse（地址写错）", s4.json.kind, "parse");
 
     await resetMock();
     await setMockMode("http401");
-    const s5 = await api("POST", "/api/story/generate", {});
+    const s5 = await api("POST", "/api/story/generate", { force: true });
     eq("C14 401 返回 502", s5.status, 502);
     eq("C15 错误分类为 http", s5.json.kind, "http");
     calls = await mockCalls();
@@ -489,7 +508,7 @@ async function main(): Promise<void> {
 
     await resetMock();
     await setMockMode("slow");
-    const s6 = await api("POST", "/api/story/generate", {});
+    const s6 = await api("POST", "/api/story/generate", { force: true });
     eq("C17 超时返回 504", s6.status, 504);
     eq("C18 错误分类为 timeout", s6.json.kind, "timeout");
 
