@@ -2,35 +2,38 @@
 /**
  * 语文乐园 · 课文听写
  *
- * 三种玩法都在这一页：
- *   · 生字表：点字听读音（先读组词再读单字，用来消歧音近字），可标记已掌握/未掌握
- *   · 纸上听写：生字变「?」，听读音在纸上写，写完揭晓答案
- *   · 屏上听写：在田字格里手写，整轮写完交给大人逐个判定（见 DictationPanel；已不接大模型判卷）
+ * 两种玩法都在这一页（2026-09-19 改版，用户要求）：
+ *   · 课文朗读：全文分句朗读，课文里的生字红色标注
+ *   · 生字听写：
+ *       上方一条「生字条」——整课生字 + 注音一次排开、一行显示完（一般 ≤ 12 个），
+ *       纯展示：点一下听读音（先组词再单字），不再挂 ✓/✗ 判定按钮，也不再有统计行。
+ *       下方「屏上听写」——**默认隐藏**，点工具栏的「开始听写」才展开，
+ *       并且一展开就直接进书写（没有中间那个「点我开始」的空转页面）。
+ *
+ * 听写期间生字条会遮成「?」（还是不许偷看），但**系统不判对错**：
+ * 写完交给大人，大人点「写对 / 写错」才落库（掌握度 / 错字本）。
+ * 纸上听写（生字变 ? + 揭晓答案）那条路已删。
  */
 import { computed, ref, watch } from "vue";
 import Icon from "@/components/Icon.vue";
 import PageTool from "@/components/PageTool.vue";
 import DictationPanel from "@/components/DictationPanel.vue";
 import { dictationItems, playSequence, preloadMany, stopAudio, useAudioState } from "@/composables/useAudio";
-import { playBuzz, playDing } from "@/composables/useSound";
 import { useContentStore } from "@/stores/content";
 import { useMasteryStore } from "@/stores/mastery";
-import { useProgressStore } from "@/stores/progress";
 import { useUiStore } from "@/stores/ui";
 import { speakableSentences } from "@/utils/sentences";
 
 const content = useContentStore();
 const mastery = useMasteryStore();
-const progress = useProgressStore();
 const ui = useUiStore();
 const { playing: isPlaying } = useAudioState();
 
-/** 纸上听写是否遮住生字（开始听写 → 生字变「?」） */
-const paperMasked = ref(false);
-/** 屏上听写是否进行中（进行中同样要遮住下方生字，防止偷看答案） */
-const screenDictating = ref(false);
-/** 生字是否需要遮住：纸上听写 或 屏上听写进行中，任一为真就遮 */
-const masked = computed(() => paperMasked.value || screenDictating.value);
+/** 屏上听写是否展开（默认隐藏）——展开即听写进行中，生字条要遮上 */
+const dictating = ref(false);
+const panel = ref<InstanceType<typeof DictationPanel> | null>(null);
+/** 生字条是否需要遮住：听写全程都遮（不判对错，写好交给大人看） */
+const masked = computed(() => dictating.value);
 
 /** 两页式：text = 课文原文（朗读 + 生字红标）；dictation = 生字听写 */
 const tab = ref<"text" | "dictation">("text");
@@ -77,6 +80,7 @@ function switchTab(next: "text" | "dictation"): void {
   tab.value = next;
   stopAudio();
   lessonPlaying.value = false;
+  dictating.value = false; // 切页收起屏上听写（组件 v-if 卸载时会自己停音频）
 }
 
 /** 朗读整篇课文（分句串行，点一次读、再点停止） */
@@ -99,7 +103,6 @@ async function toggleLessonRead(): Promise<void> {
   );
   lessonPlaying.value = false;
 }
-const stat = computed(() => mastery.lessonStats(content.current?.id ?? 0, chars.value.map((c) => c.ch)));
 
 /** 备注（原「红色是本课生字…」那行小字 + 卡片底部那段提示），收进工具栏最右侧的 ⓘ */
 const cnNote = computed(() =>
@@ -110,10 +113,10 @@ const cnNote = computed(() =>
         "换课文用工具栏左边那个下拉（章节和课文在一起）。",
       ].join("\n")
     : [
-        "点击生字方块可以听读音：先读组词、再读单字，用来区分「睛 / 晴」这类音近字。",
-        "「开始听写」＝纸上听写：生字会变成「?」，写完再点一次揭晓答案。",
-        "下面那块屏上听写是在田字格里手写，写完整轮交给大人看，不经大模型；大人逐个点「写对 / 写错」。",
-        "每个字下面的 ✓ / ✗ 是大人的手动标记：点 ✓ 记掌握、点 ✗ 进错字本，再点一次取消。",
+        "上面那条是这一课的生字表，点一个字可以听读音（先读组词、再读单字，用来区分「睛 / 晴」这类音近字）。",
+        "点「开始听写」打开下面的田字格，听到读音就写下来；听写时生字表会遮住，写完再恢复。",
+        "系统不判对错：写完整轮交给大人，大人点「写对 / 写错」——写对的记掌握，写错的进错字本。",
+        "一块田字格写一个字，「清空重写」可以擦掉重来，每轮最多 6 个字。",
       ].join("\n"),
 );
 
@@ -122,68 +125,49 @@ function speakChar(ch: string, word: string): void {
   void playSequence(dictationItems(ch, word));
 }
 
-function toggleMask(): void {
-  paperMasked.value = !paperMasked.value;
-  if (paperMasked.value) {
-    const first = chars.value[0];
-    ui.toast("听写开始！音会念给你听，在纸上写下来吧");
-    if (first) void playSequence(dictationItems(first.ch, first.word));
-  } else {
-    stopAudio();
-    void progress.completeTask("dictation");
-    ui.toast("听写结束，来对对答案吧～");
+/** 开始 / 结束屏上听写（工具栏上唯一的那个主操作按钮） */
+function toggleDictation(): void {
+  if (dictating.value) {
+    panel.value?.end();
+    return;
   }
-}
-
-async function mark(ch: string, state: 0 | 1): Promise<void> {
-  const lesson = content.current;
-  if (!lesson) return;
-  try {
-    const r = await mastery.toggleChar(lesson.id, ch, state, lesson.title);
-    if (r === "cleared") {
-      ui.toast(`「${ch}」已取消标记`);
-      return;
-    }
-    if (state === 1) {
-      playDing();
-      ui.toast(`「${ch}」已标记为掌握`);
-    } else {
-      playBuzz();
-      ui.toast(`「${ch}」已加入错字本，多写几遍吧`);
-    }
-  } catch (e) {
-    ui.toast(e instanceof Error ? e.message : "标记失败");
+  if (!chars.value.length) {
+    ui.toast("这篇课文还没有生字表，请家长先到内容后台录入");
+    return;
   }
+  // 只置 true：面板挂载时自己 start()（见 DictationPanel 的 onMounted），
+  // 这里再调一次就会开两轮（roundNo 跳号、读音播两遍）。
+  dictating.value = true;
 }
 
-function onLessonChange(e: Event): void {
-  const id = Number((e.target as HTMLSelectElement).value);
-  stopAudio();
-  paperMasked.value = false;
-  content.selectLesson(id);
+/** 生字条上的掌握状态：只用于底色（写对的浅绿、写错的浅红），不再是可点的判定按钮 */
+function stateOf(ch: string): string {
+  const s = mastery.charState(content.current?.id ?? 0, ch);
+  return s === 1 ? "mastered" : s === 0 ? "failed" : "";
 }
 
-/** 屏上听写开始/结束时回调：进行中遮住下方生字，结束再恢复显示 */
-function onScreenDictation(active: boolean): void {
-  screenDictating.value = active;
-}
-
-/** 进入课文（或换课）时，后台把该课生字的音频拉进 Blob 缓存，点击即播 */
+/** 换课文时收起听写，并把该课生字的音频拉进 Blob 缓存，点击即播 */
 watch(
   () => content.current?.id,
   (id) => {
+    dictating.value = false;
     if (!id) return;
     const items = chars.value.flatMap((c) => dictationItems(c.ch, c.word));
     if (items.length) void preloadMany(items, 3);
   },
   { immediate: true },
 );
+
+function onLessonChange(e: Event): void {
+  const id = Number((e.target as HTMLSelectElement).value);
+  stopAudio();
+  content.selectLesson(id);
+}
 </script>
 
 <template>
   <!-- 详情页统一工具栏：标题（含当前模式）/ 章节下拉 / 两个模式的分段切换 /
-       主操作 / 轻量操作 / 备注图标，全在一条 53px 的行上。
-       以前是「卡片头 → 一排下拉 → 一排分区标签 → 一排按钮」四层竖排。 -->
+       主操作 / 备注图标，全在一条 53px 的行上。 -->
   <PageTool icon="chinese" tint="#FBEFEA" color="#D9714E" :note="cnNote">
     <template #title>
       <span>语文乐园</span>
@@ -215,8 +199,8 @@ watch(
       </button>
     </template>
     <template v-else>
-      <button class="btn green sm" type="button" @click="toggleMask()">
-        <Icon :name="paperMasked ? 'check' : 'play'" :size="16" />{{ paperMasked ? "结束听写" : "开始听写" }}
+      <button class="btn green sm" type="button" :disabled="!chars.length" @click="toggleDictation()">
+        <Icon :name="dictating ? 'stop' : 'play'" :size="16" />{{ dictating ? "结束听写" : "开始听写" }}
       </button>
     </template>
   </PageTool>
@@ -240,48 +224,28 @@ watch(
     </div>
   </section>
 
-  <!-- 第 2 页：生字听写 -->
+  <!-- 第 2 页：生字听写 —— 上：生字条（一行展示，听写时遮住）；下：屏上听写（默认隐藏） -->
   <section v-else class="card">
-    <DictationPanel @active="onScreenDictation" />
-
-    <div class="zi-grid" :class="{ masked }">
-      <div
+    <div v-if="chars.length" class="zi-strip" :class="{ masked }">
+      <button
         v-for="c in chars"
         :key="c.ch"
         class="zi"
-        :class="mastery.charState(content.current?.id ?? 0, c.ch) === 1 ? 'mastered' : mastery.charState(content.current?.id ?? 0, c.ch) === 0 ? 'failed' : ''"
+        :class="stateOf(c.ch)"
+        type="button"
+        :aria-label="masked ? '听写中' : `朗读 ${c.ch}`"
+        @click="speakChar(c.ch, c.word)"
       >
-        <button class="zi-face" type="button" :aria-label="`朗读 ${c.ch}`" @click="speakChar(c.ch, c.word)">
-          <span class="zi-char">{{ c.ch }}</span>
-          <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
-        </button>
-        <div class="zi-btns">
-          <button
-            class="zi-b"
-            :class="{ 'on-ok': mastery.charState(content.current?.id ?? 0, c.ch) === 1 }"
-            type="button"
-            title="已掌握"
-            @click="mark(c.ch, 1)"
-          >
-            <Icon name="check" :size="16" :stroke="2.6" />
-          </button>
-          <button
-            class="zi-b"
-            :class="{ 'on-no': mastery.charState(content.current?.id ?? 0, c.ch) === 0 }"
-            type="button"
-            title="未掌握，加入错字本"
-            @click="mark(c.ch, 0)"
-          >
-            <Icon name="cross" :size="16" :stroke="2.6" />
-          </button>
-        </div>
-      </div>
+        <span class="zi-char">{{ c.ch }}</span>
+        <span class="zi-py">{{ content.pinyinOf(c.ch, c) }}</span>
+      </button>
     </div>
+    <p v-else class="tip">这篇课文还没有生字表，家长可以在内容后台录入。</p>
 
-    <div class="zi-stat">
-      <span><span class="dot" style="background: #8FE0C2"></span>已掌握 <b>{{ stat.ok }}</b></span>
-      <span><span class="dot" style="background: #FFBDBD"></span>未掌握 <b>{{ stat.no }}</b></span>
-      <span><span class="dot" style="background: #DDE9F5"></span>未检查 <b>{{ stat.none }}</b></span>
-    </div>
+    <DictationPanel
+      v-if="dictating"
+      ref="panel"
+      @close="dictating = false"
+    />
   </section>
 </template>

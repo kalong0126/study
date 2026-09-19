@@ -149,9 +149,17 @@ try {
   await page.selectOption("select.sel", String(lesson.id)).catch(() => {});
   await page.waitForTimeout(400);
   await page.locator(".seg-btn", { hasText: "生字听写" }).click();
+  // 听写板默认隐藏：工具栏上的「开始听写」是唯一入口，点它直接进书写阶段（没有中间落地页）
+  await page.waitForSelector(".zi-strip .zi", { timeout: 15000 });
+  await page.locator(".pt button", { hasText: "开始听写" }).click();
   await page.waitForSelector(".hw-box", { timeout: 15000 });
-  await page.locator("button", { hasText: "开始屏上听写" }).click();
   await page.waitForSelector(".hw-dots .hw-dot", { timeout: 15000 });
+
+  const mask = await page.locator(".zi-strip").evaluate((el) => ({
+    masked: el.classList.contains("masked"),
+    charVisibility: getComputedStyle(el.querySelector(".zi-char")).visibility,
+  }));
+  ok("听写中生字条遮上（.zi-strip.masked，字与拼音隐藏）", mask.masked && mask.charVisibility === "hidden", JSON.stringify(mask));
 
   const size1 = await page.locator(".hw-dots .hw-dot").count();
   ok("第一轮目标字数 = min(6, 未掌握数)", size1 >= 1, `${size1} 个`);
@@ -212,8 +220,18 @@ try {
 
   await page.screenshot({ path: path.join(shotDir, "dictation-continue.png"), fullPage: true });
 
-  /* ————————————————————————— 7. 控制台 */
-  step("7. 控制台");
+  /* ————————————————————————— 7. 结束听写 → 面板收起、生字条恢复 */
+  step("7. 结束听写 → 面板收起、生字条恢复显示");
+  await page.locator(".pt button", { hasText: "结束听写" }).click();
+  await page.waitForTimeout(600);
+  ok("屏上听写面板收起（.hw-box 消失）", (await page.locator(".hw-box").count()) === 0);
+  ok(
+    "生字条恢复显示（.masked 已摘掉）",
+    await page.locator(".zi-strip").evaluate((el) => !el.classList.contains("masked")),
+  );
+
+  /* ————————————————————————— 8. 控制台 */
+  step("8. 控制台");
   ok("零未捕获异常", pageErrors.length === 0, pageErrors.slice(0, 3).join(" | "));
 } catch (e) {
   ok("执行过程无异常", false, e instanceof Error ? e.message : String(e));

@@ -353,8 +353,10 @@ const redCount = await page.locator(".lesson-new").count();
 redCount > 0 ? pass(`课文页生字红标 ${redCount} 处`) : fail("课文页没有生字红标（.lesson-new）");
 await page.locator(".seg-btn", { hasText: "生字听写" }).first().click();
 await page.waitForTimeout(800);
-const ziN = await page.locator(".zi-grid").count();
-ziN >= 1 ? pass(`切到听写页后生字格 ${ziN} 个`) : fail("切到听写页后生字格缺失（.zi-grid）");
+const ziN = await page.locator(".zi-strip").count();
+ziN >= 1 ? pass(`切到听写页后生字条 ${ziN} 条`) : fail("切到听写页后生字条缺失（.zi-strip）");
+const ziCells = await page.locator(".zi-strip .zi").count();
+ziCells >= 1 ? pass(`生字条里排出 ${ziCells} 个生字`) : fail("生字条里没有生字（.zi-strip .zi）");
 
 // ————————————————————————————— 4d. 顶栏积分入口 → 兑换历史页（分页 + 统计）
 step("顶栏积分入口 → 兑换历史页");

@@ -203,11 +203,14 @@ step("语文 /chinese 选课文 + 听写板");
 await goto("/chinese", ".wrap");
 const bodyText3 = await text("body");
 /天地人|课文|识字|第一/.test(bodyText3) ? pass("语文页出现课文内容") : note("语文页文案未匹配到课文名（可能是可选项）");
-const handBoxes = await page.locator(".hw-box, .zi, .hw-cell, .zi-grid > *").count();
+const handBoxes = await page.locator(".hw-box, .zi, .hw-cell, .zi-strip > *").count();
 note(`汉字/听写相关元素数=${handBoxes}`);
 
-// 尝试进入听写
-const dictBtn = page.locator("button", { hasText: /听写|开始/ }).first();
+// 尝试进入听写：先切到「生字听写」页，再点工具栏的「开始听写」把屏上听写板展开
+// （2026-09-19 起听写板默认隐藏，工具条上那个才是唯一的入口）
+await page.locator(".seg-btn", { hasText: "生字听写" }).first().click({ timeout: 4000 }).catch(() => {});
+await page.waitForTimeout(700);
+const dictBtn = page.locator(".pt button", { hasText: "开始听写" }).first();
 if (await dictBtn.count()) {
   await dictBtn.click({ timeout: 4000 }).catch(() => {});
   await page.waitForTimeout(1600);

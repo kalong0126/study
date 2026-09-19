@@ -42,7 +42,7 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
 /* 全站字体走 --font-round（方正准圆简体）—— 连成篇的正文（童话、语文课文）也是它；
-   只有「单个要照着认、照着写的字」才单独走 --font-kai，见 .zi-face / .hw-cell /
+   只有「单个要照着认、照着写的字」才单独走 --font-kai，见 .zi / .hw-cell /
    .lg-word-big / .wb-item .w-char / .row-edit .re-ch。
    字重交给浏览器合成加粗：方正准圆简体只有真实 400 一档，标题/数字的 700-900
    由浏览器描粗模拟。@font-face 里若声明成 `100 900` 区间，浏览器就认为字体自带全部字重、
@@ -658,35 +658,39 @@ button.timer-chip:disabled { cursor: default; }
 /* ---------- 生字 ---------- */
 .sel { min-height: 44px; padding: 0 14px; border-radius: 13px; border: 1.5px solid var(--line); background: #fff; font-size: 15px; font-family: inherit; font-weight: 600; color: var(--ink); outline: none; max-width: 100%; cursor: pointer; }
 .sel:focus { border-color: var(--blue); box-shadow: 0 0 0 4px rgba(142, 205, 245, .2); }
-.zi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 12px; margin-top: 16px; }
-.zi { background: #FAFCFF; border: 1.5px solid var(--line2); border-radius: 18px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; transition: .2s; }
+/* 生字条（语文页 · 生字听写）：整课生字 + 注音**一行排开**，点一下听读音。
+   2026-09-19 改版（用户要求「汉字及注音只做学习展示，一行显示完就行，并要求显示在上方」）：
+   原来是多行网格（auto-fill minmax(96px)），每个字底下还挂一对「✓ / ✗」判定按钮，
+   最下面再来一行「已掌握 / 未掌握 / 未检查」统计 —— 现在全删：
+     · 判定只留在下方「屏上听写」里由大人做（写对 / 写错），生字条只做展示；
+     · 位置从面板下面挪到**面板上面**（孩子先看字、再听写）；
+     · flex-wrap 必须 nowrap：一开就会换行成网格。排不下时整条横向滚（overflow-x:auto），
+       所以字格给 `flex: 1 1 0`（宽屏自动铺满一整行）＋ `min-width` 兜底（窄屏才滚）。
+   底色仍是掌握状态（绿 = 掌握 / 红 = 错字），但它现在来自大人的判定，只是展示。
+   ⚠️ 别再改回 grid + wrap，也别把 min-width 调大：12 个字在 1440 上刚好铺满一行。 */
+.zi-strip { display: flex; flex-wrap: nowrap; gap: 10px; overflow-x: auto; margin-top: 14px; padding: 2px 2px 6px; scrollbar-width: thin; }
+.zi { flex: 1 1 0; min-width: 62px; background: linear-gradient(160deg, #FFFFFF, #F1F8FF); border: 1.5px solid var(--line2); border-radius: 16px; padding: 10px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; transition: .2s; font-family: var(--font-kai); line-height: 1; position: relative; }
 .zi.mastered { background: #F1FDF8; border-color: #B7EBD6; }
 .zi.failed { background: #FFF6F6; border-color: #FFD5D5; }
-.zi-face { width: 100%; min-height: 64px; border: none; border-radius: 14px; background: linear-gradient(160deg, #FFFFFF, #F1F8FF); color: var(--ink); cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: .2s; font-family: var(--font-kai); line-height: 1; position: relative; padding: 4px 2px; gap: 3px; }
-.zi-face .zi-char { font-size: 34px; font-weight: 800; }
-.zi-face .zi-py { font-size: 12px; font-weight: 700; color: var(--blue-d); letter-spacing: .3px; line-height: 1; }
-.zi-face:hover { background: linear-gradient(160deg, #EAF6FF, #E4F7EF); }
-.zi-face:active { transform: scale(.95); }
-.zi-grid.masked .zi-face .zi-char, .zi-grid.masked .zi-face .zi-py { visibility: hidden; }
-.zi-grid.masked .zi-face::after { content: "?"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #8E7BEF; font-size: 34px; font-weight: 800; }
-.zi-btns { display: flex; gap: 6px; width: 100%; }
-.zi-b { flex: 1; min-height: 34px; border-radius: 10px; border: 1.5px solid var(--line); background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink3); transition: .18s; }
-.zi-b svg { width: 16px; height: 16px; }
-.zi-b:hover { transform: translateY(-1px); }
-.zi-b.on-ok { background: #DDFAEC; border-color: #8FE0C2; color: #1E8A61; }
-.zi-b.on-no { background: #FFE9E9; border-color: #FFBDBD; color: #D94848; }
-.zi-stat { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--ink2); font-weight: 700; margin-top: 12px; }
-.zi-stat .dot { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+.zi .zi-char { font-size: 34px; font-weight: 800; }
+.zi .zi-py { font-size: 12px; font-weight: 700; color: var(--blue-d); letter-spacing: .3px; line-height: 1; }
+.zi:hover { background: linear-gradient(160deg, #EAF6FF, #E4F7EF); }
+.zi:active { transform: scale(.95); }
+/* 听写进行中：字和拼音一起藏起来、盖一个「?」。读音照旧能点（等于「再听一遍」），
+   所以判定不靠这里 —— 是大人看着手写内容点「写对 / 写错」。 */
+.zi-strip.masked .zi-char, .zi-strip.masked .zi-py { visibility: hidden; }
+.zi-strip.masked .zi::after { content: "?"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #8E7BEF; font-size: 34px; font-weight: 800; }
 
-/* ---------- 屏上听写（手写 + AI 批改） ---------- */
+/* ---------- 屏上听写（手写 + 大人审核） ----------
+   2026-09-19：整条「拼网格图 → 多模态判卷 → 轮询 taskId」的 AI 链路已摘掉，
+   面板现在默认**隐藏**，由工具栏的「开始听写」挂载并立即开写（所以没有 idle 落地页，
+   `.hw-idle` 样式已删）。 */
 .hw-box { margin-top: 16px; border: 2px dashed #CFE3F7; border-radius: 18px; padding: 14px; background: linear-gradient(160deg, #FBFDFF, #F3FAFF); }
 .hw-hd { display: flex; align-items: center; gap: 10px; }
 .hw-ico { width: 32px; height: 32px; flex: none; border-radius: 11px; background: #EAF3FF; color: var(--blue-d); display: flex; align-items: center; justify-content: center; }
 .hw-ico svg { width: 18px; height: 18px; }
 .hw-hd .t { font-weight: 800; font-size: 15px; color: var(--ink); display: block; line-height: 1.35; }
 .hw-hd .s { font-size: 12.5px; color: var(--ink3); font-weight: 600; display: block; line-height: 1.4; }
-.hw-idle { padding: 14px 2px 4px; text-align: center; }
-.hw-idle p { margin: 0 0 13px; font-size: 13.5px; color: var(--ink2); line-height: 1.8; text-align: left; }
 .hw-stage { display: none; }
 .hw-stage.on { display: block; }
 .hw-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 14px 0 10px; }
@@ -734,7 +738,7 @@ button.timer-chip:disabled { cursor: default; }
 .story-title { font-size: 19px; font-weight: 800; color: var(--purple-d); margin: 0 0 12px; letter-spacing: .5px; }
 /* 课文原文 / 童话正文：整段读的正文一律走站内圆体（--font-round），跟页面其它文字统一；
    只有「单个要照着认、照着写的字」（字卡 / 手写格 / 生字表）才用楷体，见
-   .zi-face、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
+   .zi、.hw-cell、.lg-word-big、.wb-item .w-char、.row-edit .re-ch。
    注意这条以前写的是 `..., "STKaiti", inherit` —— `inherit` 是 CSS-wide 关键字，
    不能出现在字体列表里，整条声明会被判无效，楷体白设、字体悄悄退回黑体。
    `--lh` 是行高；窄屏（≤819px）会把它放小一档。 */
@@ -742,7 +746,7 @@ button.timer-chip:disabled { cursor: default; }
 /* 课文原文（语文页）与童话正文用同一套版式、同一套字体（都是 .story-text 本体）。
    听写屋的课文曾经单独走楷体，用户反馈「字体显示不对」→ 已统一回站内圆体，
    所以这里不再有 `.lesson-text` 这个例外。楷体只留给「单个要照着认、照着写的字」：
-   .zi-face / .hw-cell / .lg-word-big / .wb-item .w-char / .row-edit .re-ch。 */
+   .zi / .hw-cell / .lg-word-big / .wb-item .w-char / .row-edit .re-ch。 */
 .story-text p { margin: 0 0 14px; }
 .story-text ruby { ruby-position: over; ruby-align: center; margin: 0 2px; }
 .story-text rt { font-size: .42em; color: var(--blue-d); font-weight: 700; letter-spacing: 0; line-height: 1.15; }
@@ -1100,9 +1104,11 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .icon-btn { width: 46px; height: 46px; }
   .m-list { grid-template-columns: 1fr; }
   .story-text { --lh: 2.6; font-size: 24px; }
-  .zi-grid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
-  .zi-face { min-height: 56px; }
-  .zi-face .zi-char { font-size: 29px; }
+  /* 生字条窄屏：字格收小，仍然守一行（真排不下就整条横向滚，见上面 `.zi-strip`） */
+  .zi-strip { gap: 8px; }
+  .zi { min-width: 54px; padding: 8px 3px; border-radius: 14px; }
+  .zi .zi-char { font-size: 29px; }
+  .zi-strip.masked .zi::after { font-size: 29px; }
   .hw-box { padding: 12px; border-radius: 16px; }
   .hw-board { max-width: 100%; }
   .hw-tools .btn { flex: 1 1 100%; min-height: 48px; }

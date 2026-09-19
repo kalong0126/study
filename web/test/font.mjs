@@ -345,7 +345,7 @@ try {
     //   字形悄悄回落成圆体）。不真的走进去，这条回归就是空转。
     await page.locator(".seg-btn", { hasText: "生字听写" }).first().click();
     await page.waitForTimeout(900);
-    await needKai("听写字格 .zi-face", ".zi-grid .zi-face");
+    await needKai("听写字格 .zi", ".zi-strip .zi");
 
     // 手写格（.hw-cell .hc-t）要真的在画布上写满 6 个字、提交、再进审核页才出现，
     // 为一个字体断言拖这么长的流程不划算，而且会把这个测试和听写流程绑死。

@@ -9,11 +9,16 @@
  *      —— 不走大模型：不花 token、不用等，结果直接写进掌握度与错字本
  *   ④ 保存后按「还剩几个字没掌握」提示再来一轮，写错的字下一轮还会出现
  *
+ * 同一次改版的第二稿：本组件由父页面用 `v-if` 控制显隐（默认隐藏），
+ * **挂载即 start()** —— 用户要求「点开始听写就直接打开屏上听写界面」，
+ * 所以原来的 idle 落地页（一大段说明 + 「开始屏上听写」按钮）已删，
+ * 阶段只剩 writing → reviewing → result；「结束本轮」会 emit("close") 让父页面收起。
+ *
  * 原来那条 AI 链路（拼网格图 + 一次多模态请求 + 轮询 taskId + 数量序号校验 +
  * 自动降级逐字判 + 家长改判）整套已从本组件删除；后端 `/api/mark/*` 接口保留未动，
  * 前端不再调用。所以这一页现在没有任何「等待模型」的阶段，写完就能判。
  */
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { describeApiError } from "@/api";
 import HandBoard from "@/components/HandBoard.vue";
 import Icon from "@/components/Icon.vue";
@@ -30,18 +35,16 @@ const mastery = useMasteryStore();
 const progress = useProgressStore();
 const ui = useUiStore();
 
-/** 四个阶段：待开始 → 逐字写 → 待提交 → 大人判定 */
+/** 三个阶段：逐字写 → 待提交 → 大人判定（idle 只是「还没开始」的初值，不渲染界面） */
 type Phase = "idle" | "writing" | "reviewing" | "result";
 
 const board = ref<InstanceType<typeof HandBoard> | null>(null);
 
-/**
- * 对外通知「屏上听写进行中」的状态变化：
- *   · start() 开始一轮时 emit("active", true)
- *   · end() 结束本轮回到 idle 时 emit("active", false)
- * 父页面据此把下方生字网格遮住，避免孩子偷看答案。
- */
-const emit = defineEmits<{ (e: "active", v: boolean): void }>();
+const emit = defineEmits<{
+  (e: "active", v: boolean): void;
+  /** 本轮结束，请父页面把面板收起来（回到默认隐藏） */
+  (e: "close"): void;
+}>();
 
 const phase = ref<Phase>("idle");
 /** 每轮固定最多 6 个字（一轮 6 个孩子坐得住，也让判定的家长不至于点太久） */
@@ -70,6 +73,12 @@ const allWritten = computed(() => targets.value.length > 0 && writtenCount.value
 const canStart = computed(() => lessonChars.value.length > 0);
 
 /* ------------------------------------------------------------------ 生命周期 */
+
+// 父页面是 `v-if="dictating"` 挂载本组件的：一挂载就直接开写，
+// 不再有「先看到一段说明、再点一个按钮」的中间页。
+onMounted(() => {
+  start();
+});
 
 onBeforeUnmount(() => {
   stopAudio();
@@ -115,7 +124,6 @@ function start(): void {
     board.value?.resize();
   });
   speakCurrent();
-  ui.toast(`第 ${roundNo.value} 轮开始，听到读音就在格子里写下来吧`);
 }
 
 /* -------------------------------------------------------------- 逐字书写 */
@@ -236,6 +244,7 @@ function countCorrect(): number {
   return Object.values(manual.value).filter((v) => v === true).length;
 }
 
+/** 结束本轮：清干净并请父页面把面板收起（回到默认隐藏） */
 function end(): void {
   stopAudio();
   targets.value = [];
@@ -245,7 +254,11 @@ function end(): void {
   phase.value = "idle";
   summary.value = "";
   emit("active", false);
+  emit("close");
 }
+
+/** 父页面通过 ref 调这两个方法（开始听写 / 结束听写） */
+defineExpose({ start, end });
 
 /* ------------------------------------------------------------------ 展示辅助 */
 
@@ -298,25 +311,9 @@ function onImageError(e: Event): void {
     <div class="hw-hd">
       <span class="hw-ico"><Icon name="pen" :size="18" /></span>
       <div>
-        <span class="t">屏上听写 · 整轮写完交给大人看</span>
-        <span class="s">在田字格里逐字写，写完整轮一起交给大人判定对错</span>
+        <span class="t">屏上听写 · 写完整轮交给大人看</span>
+        <span class="s">系统不判对错：一个字写一格，全部写完再交给大人逐个判定</span>
       </div>
-    </div>
-
-    <!-- ---------------------------------------------------------- 待开始 -->
-    <div v-if="phase === 'idle'" class="hw-idle">
-      <p>
-        选好课文后点下面的按钮，听到读音就在格子里写下来 —— 一个字写一格，写错了点「清空重写」。
-        <b>一轮的字全部写完</b>，再交给大人看；写错的字会自动进错字本。
-      </p>
-      <p class="tip" style="text-align: center; margin-bottom: 12px">
-        课文共 {{ lessonChars.length }} 个生字，每轮最多写 6 个。
-      </p>
-      <button class="btn green wide" type="button" :disabled="!canStart" @click="start()">
-        <Icon name="pen" :size="18" />开始屏上听写
-      </button>
-      <p v-if="!canStart" class="tip" style="text-align: left">这篇课文还没有生字表，请家长先到内容后台录入生字。</p>
-      <p v-if="roundNo > 0" class="tip" style="text-align: left">已完成 {{ roundNo }} 轮，再开始会练还没掌握的字。</p>
     </div>
 
     <!-- ------------------------------------------------------ 逐字书写中 -->
@@ -329,7 +326,7 @@ function onImageError(e: Event): void {
           <Icon name="speaker" :size="16" />再听一遍
         </button>
         <button class="btn ghost sm" type="button" @click="end()">
-          <Icon name="stop" :size="16" />结束本轮
+          <Icon name="stop" :size="16" />结束听写
         </button>
       </div>
 
@@ -372,7 +369,7 @@ function onImageError(e: Event): void {
           <Icon name="eye" :size="18" />交给大人审核
         </button>
         <button class="btn ghost sm" type="button" @click="end()">
-          <Icon name="stop" :size="16" />结束本轮
+          <Icon name="stop" :size="16" />结束听写
         </button>
       </div>
     </div>
@@ -404,7 +401,7 @@ function onImageError(e: Event): void {
           <Icon name="arrowRight" :size="18" />{{ nextRoundHint }}
         </button>
         <button class="btn ghost sm" type="button" @click="end()">
-          <Icon name="stop" :size="16" />结束本轮
+          <Icon name="stop" :size="16" />结束听写
         </button>
       </div>
     </div>
