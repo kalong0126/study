@@ -36,6 +36,9 @@ import isleVideo from "@/assets/islands/video.png";
 import artChest from "@/assets/icons/chest.png";
 import artTree from "@/assets/icons/tree.png";
 import artBook from "@/assets/icons/book.png";
+import { burstBig } from "@/composables/useConfetti";
+import { playTada } from "@/composables/useSound";
+import { todayStr } from "@/utils/local";
 import { useMasteryStore } from "@/stores/mastery";
 import { TASK_DEFS, useProgressStore, type TaskDef } from "@/stores/progress";
 import { useStoryStore } from "@/stores/story";
@@ -234,6 +237,32 @@ const stats = computed(() => [
 /** 词语数量按需拉一次（首页只显示个数，明细在 /words 页） */
 const wordCount = ref(0);
 
+/**
+ * 点开已打开的宝箱：报出**今天真正攒到的积分**。
+ *
+ * 数字从积分流水里算（只合计今天的收入项），和「我的积分」页是同一份账，
+ * 口算/听写全对的 +10 也算在里面 —— 报少了孩子会来对账。
+ * 流水拿不到时才按「各关奖励分 + 全部完成 +10」兜底。
+ */
+async function openChest(): Promise<void> {
+  if (!cleared.value) return;
+  let gained = 0;
+  try {
+    const { ledger } = await api.listPoints();
+    const day = todayStr();
+    gained = ledger
+      .filter((e) => e.delta > 0 && e.createdAt.startsWith(day))
+      .reduce((s, e) => s + e.delta, 0);
+  } catch {
+    /* 积分流水拉不到就按关卡分合计兜底 */
+  }
+  if (!gained) gained = TASK_DEFS.reduce((s, d) => s + d.reward, 0) + 10;
+  // 和口算满分同一套：金色大横幅 + 双倍彩带 + 号角音
+  burstBig();
+  playTada();
+  ui.showBanner("恭喜你！🎉", `宝箱打开了，今天获得了 ${gained} 积分！`, true, 3800);
+}
+
 onMounted(() => {
   void story.loadFavs();
   api
@@ -356,10 +385,19 @@ onMounted(() => {
         </li>
       </ol>
 
-      <div class="tk-chest" :class="{ on: cleared }" :title="cleared ? '宝箱打开了！' : '走完六座小岛就能打开宝箱'">
+      <!-- 宝箱整块是按钮：开了之后点一下 → 报今天的积分（彩带 + 号角 + 金横幅，
+           和口算满分同一套动画音效）。没开的时候点了没反应，只有悬停提示。 -->
+      <button
+        class="tk-chest"
+        :class="{ on: cleared }"
+        type="button"
+        :title="cleared ? '点一下，看看今天攒了多少积分！' : '走完六座小岛就能打开宝箱'"
+        :aria-label="cleared ? '宝箱已打开，点一下查看今天获得的积分' : '走完六座小岛就能打开宝箱'"
+        @click="openChest()"
+      >
         <img class="tk-chest-art" :src="artChest" alt="" draggable="false" />
         <span class="tk-chest-tip">{{ cleared ? "宝箱开了！" : "全部走完开宝箱" }}</span>
-      </div>
+      </button>
     </section>
 
     <!-- 学习小档案：三张各自成卡的成绩徽章（图标 + 数字 + 标签 + 一句鼓励），

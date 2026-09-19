@@ -535,7 +535,9 @@ button.timer-chip:disabled { cursor: default; }
   flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px;
   padding: 7px 12px 8px; border-radius: 16px;
   background: #F4F8FC; border: 1.5px solid #E6EEF7;
+  font-family: inherit; cursor: pointer;
 }
+.tk-chest:focus-visible { outline: 2.5px solid #F1C85F; outline-offset: 2px; }
 .tk-chest-art {
   width: 44px; height: 44px; display: block; user-select: none; -webkit-user-drag: none;
   filter: grayscale(.45) opacity(.62) drop-shadow(0 2px 4px rgba(90, 110, 140, .20));
