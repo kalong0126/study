@@ -448,6 +448,9 @@ export async function toggleStoryFav(
   const kept = prev.filter((f) => f.title !== story.title);
   const wasFav = kept.length !== prev.length;
   if (wasFav) {
+    // ⚠️ 取消收藏也必须把删过的新列表写回去 —— 只返回不落库的话，
+    // 下次拉收藏列表还会是旧数据（用户报的「取消收藏不生效」就是这个）。
+    await kvSet(childId, FAV_KEY, kept);
     return { fav: false, favs: kept };
   }
   const next = [{ id: story.id, title: story.title, text: story.text, favAt: nowIso() }, ...kept].slice(0, FAVS_MAX);

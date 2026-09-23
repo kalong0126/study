@@ -512,6 +512,19 @@ async function main(): Promise<void> {
     eq("C17 超时返回 504", s6.status, 504);
     eq("C18 错误分类为 timeout", s6.json.kind, "timeout");
 
+    /* ------------------------- C+. 故事收藏 / 取消收藏 ------------------------- */
+    // 取消收藏必须**落库**：曾经只返回新列表不写回 KV，刷新后收藏又回来了。
+    group("C+. 故事收藏");
+    const f1 = await api("POST", "/api/stories/fav", { id: 9001, title: "收藏测试故事", text: "正文随便写" });
+    eq("F1 收藏成功返回 fav=true", f1.json.fav, true);
+    ok("F1b 返回的列表里有这篇", (f1.json.favs as { title: string }[]).some((f) => f.title === "收藏测试故事"));
+    const f2 = await api("GET", "/api/stories/favs");
+    ok("F2 重新拉取列表仍在（收藏已持久化）", (f2.json.favs as { title: string }[]).some((f) => f.title === "收藏测试故事"));
+    const f3 = await api("POST", "/api/stories/fav", { id: 9001, title: "收藏测试故事", text: "正文随便写" });
+    eq("F3 取消收藏返回 fav=false", f3.json.fav, false);
+    const f4 = await api("GET", "/api/stories/favs");
+    ok("F4 重新拉取后这篇已消失（取消已落库）", !(f4.json.favs as { title: string }[]).some((f) => f.title === "收藏测试故事"));
+
     /* ============================ L. 语言强化 ============================ */
     group("L. 语言强化（mock · 9 题型出题 / 作答 / 换题）");
     await resetMock();
