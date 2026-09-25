@@ -318,6 +318,46 @@ function fixStaleHowTo(set: LanguageSet): boolean {
   return changed;
 }
 
+/**
+ * 修正排序题「下标答案与正文对不上」的坏数据。
+ *
+ * 模型给的下标答案（answer）偶尔和它自己写的参考正文（fullParagraph）顺序不一致：
+ * 孩子照着参考答案排，却被判错（用户 2026-09-25 报的 bug）。正文是孩子唯一能看到的
+ * 顺序依据，所以把正文切成句、与 sentences 一一对应上时，就**以正文先后为准**重写
+ * answer。改完就地回写，孩子刷新页面直接重做即可，不用重新出一套题。
+ */
+function fixOrderAnswer(set: LanguageSet): boolean {
+  const strip = (s: string): string =>
+    s
+      .replace(/[\s\u3000]/g, "")
+      .replace(/[，。！？、；：“”‘’（）《》〈〉【】…—,.!?;:"'()[\]{}<>-]/g, "");
+  let changed = false;
+  for (const q of set.questions) {
+    if (q.mode !== "order") continue;
+    const sentences = Array.isArray(q.sentences) ? q.sentences : [];
+    const answer = Array.isArray(q.answer) ? q.answer : [];
+    const fp = typeof q.fullParagraph === "string" ? q.fullParagraph : "";
+    if (sentences.length < 2 || !fp) continue;
+
+    const byStrip = new Map<string, string>();
+    for (const s of sentences) {
+      const k = strip(s);
+      if (k && !byStrip.has(k)) byStrip.set(k, s);
+    }
+    const fpOrder: string[] = [];
+    for (const part of fp.split(/[。！？!?]/)) {
+      const hit = byStrip.get(strip(part));
+      if (hit && !fpOrder.includes(hit)) fpOrder.push(hit);
+    }
+    // 正文切不出完整的句子排列（缺句 / 对不上）→ 这题修不了，放着别动
+    if (fpOrder.length !== sentences.length) continue;
+    if (fpOrder.every((x, i) => x === answer[i])) continue;
+    q.answer = fpOrder;
+    changed = true;
+  }
+  return changed;
+}
+
 /** 当天的题集与作答进度（家长后台重置后前端刷新即用） */
 languageRouter.get(
   "/language/today",
@@ -325,7 +365,7 @@ languageRouter.get(
     const childId = await currentChildId();
     const date = normDate(req.query.date);
     const set = (await kvGet<LanguageSet>(childId, setKey(date))) ?? null;
-    if (set && fixStaleHowTo(set)) await kvSet(childId, setKey(date), set);
+    if (set && (fixStaleHowTo(set) || fixOrderAnswer(set))) await kvSet(childId, setKey(date), set);
     const progress = (await kvGet<LanguageProgress>(childId, progKey(date))) ?? {};
     const recent = await readRecent(childId);
     // 打开页面时顺手对一遍打卡标记：家长在别的设备上判定过 / 上次刷新过快没写进去，这里都能自愈

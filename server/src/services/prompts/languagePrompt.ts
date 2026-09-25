@@ -1364,24 +1364,56 @@ function normalizeQuestion(raw: Record<string, unknown>, index: number): Languag
     case 5: {
       const raw5 = asStrArr(raw.sentences);
       const answerRaw = Array.isArray(raw.answer) ? (raw.answer as unknown[]) : [];
+      const fullPara = pickStr(raw, "fullParagraph");
       let correct: string[] = [];
       let display: string[] = [];
 
+      /** 比对用的极简归一：去空白 + 去标点（和前端 norm 同一套口径） */
+      const stripCmp = (s: string): string =>
+        s.replace(/[\s\u3000]/g, "").replace(/[，。！？、；：“”‘’（）《》〈〉【】…—,.!?;:"'()[\]{}<>-]/g, "");
+
+      /**
+       * 权威口径：模型自己写的那段正文（fullParagraph）。
+       *
+       * 模型给的下标答案经常和它写的正文对不上（下标算错是高发毛病）——
+       * 孩子照着「参考答案」那段话排，却被下标判错。正文是孩子真正看着对答案的
+       * 东西，所以只要能把正文切成句、和 sentences 一一对应上，就以正文的先后为准。
+       */
+      const byStrip = new Map<string, string>();
+      for (const s of raw5) {
+        const k = stripCmp(s);
+        if (k && !byStrip.has(k)) byStrip.set(k, s);
+      }
+      const fpOrder: string[] = [];
+      for (const part of fullPara.split(/[。！？!?]/)) {
+        const hit = byStrip.get(stripCmp(part));
+        if (hit && !fpOrder.includes(hit)) fpOrder.push(hit);
+      }
+      const fpValid = fpOrder.length === raw5.length && raw5.length >= 2;
+
       const nums = answerRaw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n > 0);
-      if (nums.length === answerRaw.length && nums.length >= 2 && raw5.length >= 2) {
-        // 首选口径：answer 是从 1 开始的下标，sentences 是打乱后的句子
-        correct = nums.map((n) => raw5[n - 1]).filter((s): s is string => typeof s === "string" && !!s);
+      const numsValid =
+        nums.length === answerRaw.length && nums.length === raw5.length && nums.length >= 2 &&
+        new Set(nums).size === raw5.length && nums.every((n) => n <= raw5.length);
+
+      if (fpValid) {
+        // 首选：正文切句后与 sentences 一一对应 → 正文顺序就是正确顺序
+        correct = fpOrder;
+        display = shuffled(correct);
+      } else if (numsValid) {
+        // 兜底一：answer 是从 1 开始的下标，sentences 是打乱后的句子
+        correct = nums.map((n) => raw5[n - 1]);
         display = raw5;
       } else {
         const answerStr = asStrArr(raw.answer);
         const same = (a: string[], b: string[]): boolean =>
           a.length === b.length && a.every((x) => b.includes(x));
         if (answerStr.length >= 2 && same(answerStr, raw5)) {
-          // 兜底一：answer 直接给了正确顺序的整句，sentences 是打乱的
+          // 兜底二：answer 直接给了正确顺序的整句，sentences 是打乱的
           correct = answerStr;
           display = raw5;
         } else {
-          // 兜底二：模型把 sentences 按正确顺序给了 —— 自己打乱，答案取原顺序
+          // 兜底三：模型把 sentences 按正确顺序给了 —— 自己打乱，答案取原顺序
           correct = raw5;
           display = raw5.length > 1 ? shuffled(raw5) : raw5;
         }
@@ -1394,7 +1426,7 @@ function normalizeQuestion(raw: Record<string, unknown>, index: number): Languag
       base.answer = correct;
       base.mode = "order";
       base.howTo = "按事情发生的顺序，依次点下面的句子。";
-      base.reference = base.fullParagraph || correct.join("");
+      base.reference = fullPara || correct.join("");
       base.answerType = "standard";
       break;
     }
