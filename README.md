@@ -44,6 +44,72 @@
 
 错题修理站**不参与顺序锁**：错题本该是想看就能看的东西，它自己那层闸（口算 + 听写做完才能重做，随时可以查看）在错题本页里。
 
+### 界面实拍
+
+> 截图由 `web/test/shoot-douyin.mjs` 自动截取，存放在 `web/test/douyin-shots/`。
+
+**首页 —— 今天的学习小岛**：六项任务排成一条闯关路线，完成一座解锁下一座；顶栏是今日进度、星级和积分，全部完成可开宝箱拿积分奖励。
+
+![首页·学习小岛](web/test/douyin-shots/01-home.png)
+
+**口算岛**：每天 20 道 100 以内加减 / 表内乘法，自动计时、即时判对错，可一键换一批题目；错题自动收进错题本。
+
+![口算岛](web/test/douyin-shots/02-math.png)
+
+**语文乐园 —— 课文朗读**：内置 14 篇课文，要求会认会写的生字标红，点「朗读课文」整篇跟读。
+
+![课文朗读](web/test/douyin-shots/03-chinese.png)
+
+**语文乐园 —— 生字听写**：生字表一行展示汉字 + 注音，点字听读音；点「开始听写」进入屏上听写，孩子在田字格里手写，写完一轮交大人判对错（也可用 AI 批改）。
+
+| 生字表 | 屏上手写听写 |
+|:---:|:---:|
+| <img src="web/test/douyin-shots/dictation-tab.png" width="420" /> | <img src="web/test/douyin-shots/dictation-board.png" width="420" /> |
+
+**故事树 —— AI 注音童话**：每天一篇新童话，逐句注音、可朗读、可收藏，读满 15 分钟通关。
+
+![AI 注音童话](web/test/douyin-shots/04-story.png)
+
+**语言练习 —— 每日 9 题九宫格**：AI 按当天主题出一组题；口述题由大人判，选择题自动判，全部做完 +20 分。
+
+![语言强化训练九宫格](web/test/douyin-shots/05-language.png)
+
+九种题型一览：
+
+| 每日词语 | 词语搭配 | 扩句训练 |
+|:---:|:---:|:---:|
+| <img src="web/test/douyin-shots/lang-1.png" width="280" /> | <img src="web/test/douyin-shots/lang-2.png" width="280" /> | <img src="web/test/douyin-shots/lang-3.png" width="280" /> |
+| **病句修改** | **把话写具体** | **句子排序** |
+| <img src="web/test/douyin-shots/lang-4.png" width="280" /> | <img src="web/test/douyin-shots/lang-5.png" width="280" /> | <img src="web/test/douyin-shots/lang-6.png" width="280" /> |
+
+**看图观察 / 看图说话**：配图由文生图模型（qwen-image-plus）按当天主题现画一张并落盘，孩子按提示问题逐个观察、再成段表达。
+
+| 看图观察 | 看图说话 |
+|:---:|:---:|
+| <img src="web/test/douyin-shots/lang-7.png" width="420" /> | <img src="web/test/douyin-shots/lang-8.png" width="420" /> |
+
+**简短写作**：围绕主题词写 4~6 句话，提示问题帮孩子搭好表达框架。
+
+![简短写作](web/test/douyin-shots/lang-9.png)
+
+**英文小屋**：随机播一集共享目录里的英文故事，完整看完打卡 +10 分（每天一次，排在路线最后当奖励）。
+
+![英文故事](web/test/douyin-shots/06-video.png)
+
+**错题小本本**：数学错题 + 语文错字集中重练，做对一次自动消掉；错题卡上不出现正确答案，防止「看一眼就过」。
+
+![错题本](web/test/douyin-shots/07-wrong.png)
+
+**我的积分**：攒分与兑换（平板时间 / 零花钱），兑换记录留痕，家长线下兑现。
+
+![积分与兑换](web/test/douyin-shots/08-points.png)
+
+**家长内容后台（/admin，孩子端没有入口）**：课文管理支持增删改课文、批量粘贴生字自动拆字注音、AI 推荐组词；系统与数据页可查看模型配置、填写密钥、切换音色、备份恢复。
+
+| 课文管理 | 系统与数据 |
+|:---:|:---:|
+| <img src="web/test/douyin-shots/10-admin-lessons.png" width="420" /> | <img src="web/test/douyin-shots/11-admin-system.png" width="420" /> |
+
 ## 二、目录结构
 
 ```
@@ -54,7 +120,7 @@
 │  ├─ src/views/            孩子端各页面（今日/口算/语文/童话/语言/错题本/积分）+ /admin 后台
 │  ├─ src/components/       手写板、听写面板、故事阅读器、诊断抽屉…
 │  ├─ src/stores/           API 驱动的状态层（无 localStorage 业务数据）
-│  └─ test/smoke.mjs        真实浏览器端到端冒烟测试
+│  └─ test/                 真实浏览器端到端测试 + 界面截图（douyin-shots/）
 ├─ server/                  后端（Node + Express + TypeScript）
 │  ├─ .env.example          ← 本地配置模板（推荐从这里复制成 .env）
 │  ├─ config/config.yaml    细节配置（音色/超时/备份…）
