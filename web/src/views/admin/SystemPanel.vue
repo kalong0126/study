@@ -28,8 +28,8 @@ const busy = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
 
 /** 大模型配置表单（服务状态里可编辑保存）。model 预填生效值，key 留空表示不修改。
- *  出图模型不走这套运行时覆盖：Key 在 config.yaml / 环境变量里，模型在 imagegen.model。 */
-const llmForm = ref({ storyModel: "", storyApiKey: "" });
+ *  出图 Key 走运行时覆盖：保存即生效并持久化，不必再改 config.yaml / 环境变量。 */
+const llmForm = ref({ storyModel: "", storyApiKey: "", imageApiKey: "" });
 
 /** 积分余额与兑换记录（家长查看孩子攒了多少分、换了什么） */
 const pointsBalance = ref(0);
@@ -82,15 +82,17 @@ onMounted(() => {
   void loadPoints();
 });
 
-/** 保存故事模型的模型名与 API Key（留空字段不修改），保存即生效并持久化。 */
+/** 保存故事模型的模型名与 API Key、出图 API Key（留空字段不修改），保存即生效并持久化。 */
 async function saveLlm(): Promise<void> {
   busy.value = "llm";
   try {
     await adminApi.updateLlm({
       storyModel: llmForm.value.storyModel,
       storyApiKey: llmForm.value.storyApiKey,
+      imageApiKey: llmForm.value.imageApiKey,
     });
     llmForm.value.storyApiKey = "";
+    llmForm.value.imageApiKey = "";
     await loadHealth();
     ui.toast("模型配置已保存并生效");
   } catch (e) {
@@ -364,8 +366,17 @@ async function resetAll(): Promise<void> {
           </div>
         </div>
         <div style="margin-top: 6px; font-size: 12.5px; color: var(--ink3)">
-          密钥 {{ health.imagegen.apiKey }}（在 config.yaml 的 <code>imagegen.apiKey</code> 或环境变量
-          <code>IMAGEGEN_API_KEY</code> 里配置）。{{ health.imagegen.ok ? "孩子打开看图题时会自动画一张真图（约 7 秒），画好就存起来，不会再重复花钱。" : "没有可用密钥时，看图题会退回文字描述，不影响做题。" }}
+          模型 <code>{{ health.imagegen.model }}</code> 走阿里云百炼。{{ health.imagegen.ok ? "孩子打开看图题时会自动画一张真图（约 7 秒），画好就存起来，不会再重复花钱。" : "没有可用密钥时，看图题会退回文字描述，不影响做题。" }}
+        </div>
+        <div class="field" style="margin-top: 10px">
+          <label>出图 API Key · 阿里云百炼（保存即生效，留空则不修改）</label>
+          <input
+            v-model="llmForm.imageApiKey"
+            type="password"
+            class="inp"
+            autocomplete="off"
+            :placeholder="health.imagegen.apiKey !== '(未配置)' ? `已配置 ${health.imagegen.apiKey}，留空则不修改` : 'sk-…（百炼控制台创建的 API Key）'"
+          />
         </div>
       </div>
 

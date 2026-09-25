@@ -20,6 +20,7 @@ import {
   resolveAllLlm,
   resolveHttps,
   resolvedConfigPath,
+  setImagegenRuntimeKey,
   setLlmRuntimeOverride,
   startupWarnings,
   valueSource,
@@ -219,6 +220,13 @@ async function main(): Promise<void> {
       storyApiKey: savedLlm.storyApiKey,
     });
     logSys.info({ keys: Object.keys(savedLlm).join("、") }, "已恢复上次填写的模型配置");
+  }
+
+  // 恢复家长上次在后台填的文生图 API Key（同上，系统级）
+  const savedImageKey = await kvGet<string>(0, "imagegenKey");
+  if (savedImageKey) {
+    setImagegenRuntimeKey(savedImageKey);
+    logSys.info({ key: maskKey(savedImageKey) }, "已恢复上次填写的文生图 Key");
   }
 
   const childId = await currentChildId();

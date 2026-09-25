@@ -125,7 +125,7 @@ db:
 # ---------------------------------------------------------------------------
 llm:
   # —— 全局默认 provider：没单独配的用途都走它 ——
-  baseUrl: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+  baseUrl: ${LLM_BASE_URL:-https://api.deepseek.com}
   apiKey: ${LLM_API_KEY}
 
   # —— 各用途的模型名 ——
@@ -161,7 +161,10 @@ llm:
 imagegen:
   enabled: ${IMAGEGEN_ENABLED:-true}
   model: ${IMAGEGEN_MODEL:-qwen-image-plus}
-  baseUrl: ${IMAGEGEN_BASE_URL:-https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation}
+  # 百炼 BASE 地址。控制台给的专属域名（…maas.aliyuncs.com/compatible-mode/v1）
+  # 是 OpenAI 兼容层，程序会自动把它换成文生图原生路径 /api/v1/services/aigc/...；
+  # 填公共域名 dashscope.aliyuncs.com 或留空（走内置默认）也都可以。
+  baseUrl: ${IMAGEGEN_BASE_URL:-https://llm-qi0gc14qzvf6t6t2.cn-beijing.maas.aliyuncs.com/compatible-mode/v1}
   apiKey: ${IMAGEGEN_API_KEY}
   # 输出尺寸（宽*高）。1328*1328 是千问系列的 1:1 推荐档
   size: ${IMAGEGEN_SIZE:-1328*1328}

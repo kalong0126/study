@@ -87,7 +87,7 @@ const ConfigSchema = z.object({
 
   llm: z.object({
     // —— 默认 provider：下面两个用途没单独配时就都用它 ——
-    baseUrl: z.string().default("https://api.deepseek.com/v1"),
+    baseUrl: z.string().default("https://api.deepseek.com"),
     apiKey: z.string().default(""),
 
     // —— 各用途的模型名 ——
@@ -466,7 +466,7 @@ export function startupWarnings(cfg: AppConfig): string[] {
 /** 拼出 chat/completions 的完整地址（容忍 baseUrl 带不带 /v1、末尾带不带 /） */
 export function buildChatUrl(baseUrl: string): string {
   let base = (baseUrl || "").trim().replace(/\/+$/, "");
-  if (!base) base = "https://api.deepseek.com/v1";
+  if (!base) base = "https://api.deepseek.com";
   if (/\/chat\/completions$/.test(base)) return base;
   return `${base}/chat/completions`;
 }
@@ -521,7 +521,7 @@ export function getLlmRuntimeOverride(): LlmRuntimeOverride {
  * 则优先用显式值 —— 供测试 mock、自建网关等特殊场景覆盖。
  */
 const FIXED_BASE_URL: Partial<Record<LlmPurpose, string>> = {
-  story: "https://api.deepseek.com/v1",
+  story: "https://api.deepseek.com",
 };
 
 function runtimePick(purpose: LlmPurpose): { model?: string; apiKey?: string } {
@@ -572,9 +572,58 @@ export function resolveAllLlm(cfg: AppConfig): ResolvedLlm[] {
 
 /* ------------------------------------------------------------ 文生图 */
 
+/**
+ * 阿里云百炼「千问-文生图」同步接口的路径。
+ * 百炼专属域名（{WorkspaceId}.cn-beijing.maas.aliyuncs.com）与公共域名
+ * dashscope.aliyuncs.com 的原生 API 路径完全一致，只有 host 不同。
+ */
+export const IMAGEGEN_PATH = "/api/v1/services/aigc/multimodal-generation/generation";
+
 /** 阿里云百炼「千问-文生图」同步接口的默认地址（config 里没写时用） */
-export const DEFAULT_IMAGE_URL =
-  "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation";
+export const DEFAULT_IMAGE_URL = `https://dashscope.aliyuncs.com${IMAGEGEN_PATH}`;
+
+/**
+ * 把家长/配置里填的「百炼 BASE 地址」解析成实际要 POST 的文生图地址。
+ *
+ * 百炼控制台给的专属 BASE 是 OpenAI 兼容层的地址（…/compatible-mode/v1），
+ * 而文生图走的是原生同步接口（/api/v1/services/aigc/...），两者不能混用：
+ *   · 空值                          → 公共域名 + 原生路径（老配置零改动）
+ *   · 已是完整文生图地址            → 原样使用（测试 mock、显式配过全路径）
+ *   · 以 /compatible-mode/v1 结尾   → 剥掉兼容层，换成原生路径（专属域名场景）
+ *   · 裸域名（只有 scheme+host）    → 直接拼原生路径
+ *   · 带其它自定义路径的完整地址    → 原样使用（尊重显式配置 / 测试 mock）
+ */
+export function buildImageUrl(baseUrl: string): string {
+  let base = (baseUrl || "").trim().replace(/\/+$/, "");
+  if (!base) return DEFAULT_IMAGE_URL;
+  if (base.endsWith(IMAGEGEN_PATH)) return base;
+  const stripped = base.replace(/\/compatible-mode\/v\d+$/, "");
+  if (stripped !== base) return `${stripped}${IMAGEGEN_PATH}`;
+  // 没有任何路径（裸域名）才补原生路径；带了自定义路径的一律原样使用
+  let pathname = "";
+  try {
+    pathname = new URL(base).pathname;
+  } catch {
+    return base; // 地址不合法，原样返回，让调用时的报错来说话
+  }
+  return pathname === "/" || pathname === "" ? `${base}${IMAGEGEN_PATH}` : base;
+}
+
+/**
+ * 文生图 Key 的运行时覆盖（家长后台填写）。
+ * 与 setLlmRuntimeOverride 同一套路：进程内变量即时生效，重启后由 index.ts
+ * 从 app_kv（child_id=0，系统级）读回再 setImagegenRuntimeKey 恢复。
+ * 空串表示「不覆盖，回落 config.yaml / 环境变量」。
+ */
+let imagegenKeyOverride = "";
+
+export function setImagegenRuntimeKey(key: string): void {
+  imagegenKeyOverride = (key || "").trim();
+}
+
+export function getImagegenRuntimeKey(): string {
+  return imagegenKeyOverride;
+}
 
 export interface ResolvedImagegen {
   enabled: boolean;
@@ -592,17 +641,18 @@ export interface ResolvedImagegen {
 /**
  * 解析文生图该怎么调。
  *
- * Key 独立配置：config.yaml 的 imagegen.apiKey 或环境变量 IMAGEGEN_API_KEY。
- * 出图走阿里云百炼的同步文生图接口，与对话类模型不是一套 Key 体系。
+ * Key 来源（优先级高 → 低）：家长后台填的运行时 Key → config.yaml 的 imagegen.apiKey
+ * 或环境变量 IMAGEGEN_API_KEY。出图与对话类模型不是一套 Key 体系，但百炼的 Key 可以
+ * 直接在专属域名上调文生图，所以家长后台填一次即可，不必改 config.yaml。
  */
 export function resolveImagegen(cfg: AppConfig): ResolvedImagegen {
   const ig = cfg.imagegen;
-  const ownKey = (ig.apiKey || "").trim();
+  const ownKey = (imagegenKeyOverride || ig.apiKey || "").trim();
 
   return {
     enabled: ig.enabled,
     model: ig.model,
-    url: (ig.baseUrl || DEFAULT_IMAGE_URL).trim(),
+    url: buildImageUrl(ig.baseUrl),
     apiKey: ownKey,
     size: ig.size,
     dir: ig.dir,

@@ -5,7 +5,7 @@
  * 内网不鉴权，靠「不告诉孩子这个网址」做隔离；将来要上公网再开 auth.enabled。
  */
 import { Router } from "express";
-import { getLlmRuntimeOverride, loadConfig, resolveLlm, setLlmRuntimeOverride } from "../config.js";
+import { getLlmRuntimeOverride, loadConfig, resolveLlm, setImagegenRuntimeKey, setLlmRuntimeOverride } from "../config.js";
 import { todayStr } from "../db/index.js";
 import {
   bulkImportChars,
@@ -259,11 +259,11 @@ adminRouter.post(
 );
 
 /* ------------------------------------------------------------ 模型配置
- * 家长在后台「服务状态」里填故事/组词的模型名与 API Key，保存即生效。
- * 接口地址已固定（story→DeepSeek，suggest 回落全局 baseUrl），前端不再展示。
+ * 家长在后台「服务状态」里填故事/组词的模型名与 API Key、文生图的 API Key，
+ * 保存即生效。接口地址已固定（story→DeepSeek，suggest 回落全局 baseUrl），前端不再展示。
  * 字段留空 = 不修改（保留原覆盖或回落 config.yaml / 环境变量），
  * 所以「只改模型名不动 key」或「只补 key 不动模型名」都成立。
- * 文生图（出图模型）不在这里：Key 走 config.yaml / 环境变量，模型在 imagegen.model。 */
+ * 文生图 Key 存 app_kv 的 imagegenKey（系统级），重启后由 index.ts 恢复。 */
 adminRouter.post(
   "/admin/llm",
   ah(async (req, res) => {
@@ -278,6 +278,13 @@ adminRouter.post(
 
     setLlmRuntimeOverride(next);
     await kvSet(0, "llmRuntime", next);
+
+    const imageApiKey = bStr(body.imageApiKey).trim();
+    if (imageApiKey) {
+      setImagegenRuntimeKey(imageApiKey);
+      await kvSet(0, "imagegenKey", imageApiKey);
+    }
+
     ok(res, { saved: llmConfigSummary() });
   }),
 );
