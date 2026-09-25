@@ -26,21 +26,23 @@
 ┌── 家长后台（/admin，孩子端没有入口）───────────────┐
 │  · 课文管理：增删改课文与生字、AI 推荐组词         │
 │  · 批量粘贴生字表，自动拆字去重 + 注音             │
+│  · 模型配置：故事模型与密钥、文生图（qwen-image-   │
+│    plus）密钥，保存即生效不用重启                  │
 │  · 语音预热、缓存清理、备份与恢复                  │
 └──────────────────────────────────────────────────┘
 ```
 
 **闯关顺序**（首页地图从左到右，也是解锁顺序）：
 
-| # | 小岛 | 对应任务 | 通关奖励 |
-|---|------|----------|----------|
-| 1 | 口算岛 | 20 道口算全部作答 | +10（全对再 +10） |
-| 2 | 听写屋 | 任意一课完成一轮听写 | +10（全对再 +10） |
-| 3 | 错题修理站 | 把错题重做一遍 | 不发分，只清错题 |
-| 4 | 故事树 | 读一篇注音童话满 15 分钟 | +20 |
-| 5 | 语言练习 | 9 道题全做完 | +20 |
-| 6 | 英文小屋 | 完整看完一集英文故事 | +10 |
-| — | 全勤 | 六项全部完成 | +10 |
+| # | 小岛    | 对应任务           | 通关奖励         |
+| - | ----- | -------------- | ------------ |
+| 1 | 口算岛   | 20 道口算全部作答     | +10（全对再 +10） |
+| 2 | 听写屋   | 任意一课完成一轮听写     | +10（全对再 +10） |
+| 3 | 错题修理站 | 把错题重做一遍        | 不发分，只清错题     |
+| 4 | 故事树   | 读一篇注音童话满 15 分钟 | +20          |
+| 5 | 语言练习  | 9 道题全做完        | +20          |
+| 6 | 英文小屋  | 完整看完一集英文故事     | +10          |
+| — | 全勤    | 六项全部完成         | +10          |
 
 错题修理站**不参与顺序锁**：错题本该是想看就能看的东西，它自己那层闸（口算 + 听写做完才能重做，随时可以查看）在错题本页里。
 
@@ -60,10 +62,10 @@
 
 ![课文朗读](web/test/douyin-shots/03-chinese.png)
 
-**语文乐园 —— 生字听写**：生字表一行展示汉字 + 注音，点字听读音；点「开始听写」进入屏上听写，孩子在田字格里手写，写完一轮交大人判对错（也可用 AI 批改）。
+**语文乐园 —— 生字听写**：生字表一行展示汉字 + 注音，点字听读音；点「开始听写」进入屏上听写，孩子在田字格里手写，写完一轮交大人在屏幕上点「写对 / 写错」。
 
-| 生字表 | 屏上手写听写 |
-|:---:|:---:|
+|                                生字表                                |                                屏上手写听写                               |
+| :---------------------------------------------------------------: | :-----------------------------------------------------------------: |
 | <img src="web/test/douyin-shots/dictation-tab.png" width="420" /> | <img src="web/test/douyin-shots/dictation-board.png" width="420" /> |
 
 **故事树 —— AI 注音童话**：每天一篇新童话，逐句注音、可朗读、可收藏，读满 15 分钟通关。
@@ -76,16 +78,16 @@
 
 九种题型一览：
 
-| 每日词语 | 词语搭配 | 扩句训练 |
-|:---:|:---:|:---:|
+|                            每日词语                            |                            词语搭配                            |                            扩句训练                            |
+| :--------------------------------------------------------: | :--------------------------------------------------------: | :--------------------------------------------------------: |
 | <img src="web/test/douyin-shots/lang-1.png" width="280" /> | <img src="web/test/douyin-shots/lang-2.png" width="280" /> | <img src="web/test/douyin-shots/lang-3.png" width="280" /> |
-| **病句修改** | **把话写具体** | **句子排序** |
+|                          **病句修改**                          |                          **把话写具体**                         |                          **句子排序**                          |
 | <img src="web/test/douyin-shots/lang-4.png" width="280" /> | <img src="web/test/douyin-shots/lang-5.png" width="280" /> | <img src="web/test/douyin-shots/lang-6.png" width="280" /> |
 
 **看图观察 / 看图说话**：配图由文生图模型（qwen-image-plus）按当天主题现画一张并落盘，孩子按提示问题逐个观察、再成段表达。
 
-| 看图观察 | 看图说话 |
-|:---:|:---:|
+|                            看图观察                            |                            看图说话                            |
+| :--------------------------------------------------------: | :--------------------------------------------------------: |
 | <img src="web/test/douyin-shots/lang-7.png" width="420" /> | <img src="web/test/douyin-shots/lang-8.png" width="420" /> |
 
 **简短写作**：围绕主题词写 4~6 句话，提示问题帮孩子搭好表达框架。
@@ -106,8 +108,8 @@
 
 **家长内容后台（/admin，孩子端没有入口）**：课文管理支持增删改课文、批量粘贴生字自动拆字注音、AI 推荐组词；系统与数据页可查看模型配置、填写密钥、切换音色、备份恢复。
 
-| 课文管理 | 系统与数据 |
-|:---:|:---:|
+|                                 课文管理                                 |                                系统与数据                                |
+| :------------------------------------------------------------------: | :-----------------------------------------------------------------: |
 | <img src="web/test/douyin-shots/10-admin-lessons.png" width="420" /> | <img src="web/test/douyin-shots/11-admin-system.png" width="420" /> |
 
 ## 二、目录结构
@@ -125,7 +127,7 @@
 │  ├─ .env.example          ← 本地配置模板（推荐从这里复制成 .env）
 │  ├─ config/config.yaml    细节配置（音色/超时/备份…）
 │  ├─ src/routes/           REST 接口
-│  ├─ src/services/         LLM / TTS / 判卷 / 备份 / 日志
+│  ├─ src/services/         LLM / TTS / 文生图 / 备份 / 日志
 │  ├─ src/db/               双驱动（sqlite / mysql）+ 仓储层
 │  └─ test/api.test.ts      123 条断言的后端集成测试
 ├─ deploy/                  Docker 部署件（本地验证用不到）
@@ -153,7 +155,7 @@
 .\scripts\start.ps1 -Force        # 端口被占时不再询问，直接结束占用者
 ```
 
-> 脚本按约定**只使用托管安装的 Node**（`~/.workbuddy/binaries/node/versions/`），
+> 脚本按约定**只使用托管安装的 Node**（`~/.workbuddy/binaries/node/versions/`），  
 > 不会去用系统 PATH 或 nvm 里的 node —— 避免和你机器上其它项目的 Node 版本互相干扰。
 
 ### 方式二：手动起（开发时改代码用热更新）
@@ -165,7 +167,7 @@ cd web    ; npm run dev      # 前端 :5180，/api 自动代理到 8788
 
 浏览器开 `http://localhost:5180`（家长后台 `/admin`）。
 
-> 不想要 Vite 那一层就直接 `cd web ; npm run build`，产物落到 `web/dist`，
+> 不想要 Vite 那一层就直接 `cd web ; npm run build`，产物落到 `web/dist`，  
 > 后端发现它存在会自动托管，开 `http://localhost:8788` 一个端口就够。
 
 ### 关于 `.env`：它放在哪儿、谁读它
@@ -176,14 +178,14 @@ cd web    ; npm run dev      # 前端 :5180，/api 自动代理到 8788
 2. 仓库根目录 `.env`
 3. `deploy/.env` ← 原本给 docker compose 用的，本地也会顺带读
 
-真实环境变量永远优先于 `.env` 文件里的同名项。
+真实环境变量永远优先于 `.env` 文件里的同名项。  
 启动日志里会明确打出「已加载 .env 来源=…」，一眼能确认配置有没有被读到。
 
 模板：`server/.env.example`（本地版，注释最全）。
 
 ### 第一次用要做的事
 
-1. **填密钥**：至少有 `LLM_API_KEY`。手写判卷还需要一个**视觉模型**，见第五节。
+1. **填密钥**：至少有 `LLM_API_KEY`（来自 DeepSeek）；想让孩子看图题配真图，再填 `IMAGEGEN_API_KEY`（来自阿里云百炼平台，也可以在家长后台「系统与数据」里直接填，保存即生效）。
 2. **灌课文**：后端启动自动写入 14 篇课文 + 153 个生字（幂等，不会重复插）。
 3. **预热语音**：`/admin` → 点某篇课文 → 语音预热。之后孩子听写就是本地缓存，秒出。
 
@@ -214,12 +216,12 @@ docker compose restart app
 
 ### 数据放在哪
 
-| 内容 | 容器内路径 | 卷 |
-|---|---|---|
-| 数据库 | `/app/server/data/grade2.db` | `app-data` |
-| 语音缓存 | `/app/server/data/tts/` | `app-data` |
-| 自动备份 | `/app/server/data/backup/` | `app-data` |
-| 运行日志 | `/app/server/logs/` | `app-logs` |
+| 内容   | 容器内路径                        | 卷          |
+| ---- | ---------------------------- | ---------- |
+| 数据库  | `/app/server/data/grade2.db` | `app-data` |
+| 语音缓存 | `/app/server/data/tts/`      | `app-data` |
+| 自动备份 | `/app/server/data/backup/`   | `app-data` |
+| 运行日志 | `/app/server/logs/`          | `app-logs` |
 
 语音缓存是可再生的（删了会重新合成），真正不能丢的只有数据库。
 
@@ -234,48 +236,55 @@ docker compose restart app
 
 ### 多个模型怎么配
 
-程序把大模型用在 **3 个地方**，可以各用一个模型，甚至可以来自不同厂商：
+程序把模型用在 **3 个地方**，可以各用一个模型，甚至来自不同厂商：
 
-| 用途 | 变量 | 要求 |
-|---|---|---|
-| 生成童话 | `LLM_STORY_MODEL` | 纯文本模型即可，挑便宜的 |
-| 手写判卷 | `LLM_MARK_MODEL` | ⚠️ **必须支持看图（视觉/多模态）**，纯文本模型一定失败 |
-| 组词建议 | `LLM_SUGGEST_MODEL` | 纯文本 |
+| 用途   | 变量                  | 要求                              |
+| ---- | ------------------- | ------------------------------- |
+| 生成童话 | `LLM_STORY_MODEL`   | 纯文本模型即可，挑便宜的（默认 `deepseek-chat`） |
+| 组词建议 | `LLM_SUGGEST_MODEL` | 纯文本（默认跟随故事模型同一把 Key）             |
+| 文生图  | `IMAGEGEN_MODEL`    | 阿里云百炼 `qwen-image-plus`，配图专用，密钥独立（`IMAGEGEN_API_KEY`） |
+
+> 手写听写**不再接大模型判卷**：写完由家长在屏幕上逐字点「写对 / 写错」，不需要视觉模型。
 
 **场景 A：全都用 DeepSeek（默认）**
-什么都不用填。但注意 DeepSeek 目前没有视觉模型，判卷必须换别家 → 看场景 C。
+对话类（童话 / 组词）什么都不用填；文生图另配百炼的 `IMAGEGEN_API_KEY`。
 
 **场景 B：同一家厂商，只是不同模型**
 只填模型名，`baseUrl` 和 `apiKey` 继续共用全局值：
 
 ```dotenv
 LLM_STORY_MODEL=deepseek-chat
-LLM_MARK_MODEL=qwen-vl-max
+LLM_SUGGEST_MODEL=deepseek-chat
 ```
 
-**场景 C：不同厂商，各用各的密钥（最常见的真实需求）**
+**场景 C：不同厂商，各用各的密钥**
 给某个用途加 `LLM_<用途>_BASE_URL` 和 `LLM_<用途>_API_KEY`，留空就自动回落到全局值：
 
 ```dotenv
-# 故事走 DeepSeek
+# 故事走 DeepSeek，组词走月之暗面
 LLM_STORY_MODEL=deepseek-chat
+LLM_SUGGEST_MODEL=moonshot-v1-8k
+LLM_SUGGEST_BASE_URL=https://api.moonshot.cn/v1
+LLM_SUGGEST_API_KEY=sk-月之暗面的密钥
 
-# 判卷走阿里云百炼
-LLM_MARK_MODEL=qwen-vl-max
-LLM_MARK_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-LLM_MARK_API_KEY=sk-阿里的密钥
+# 文生图走阿里云百炼（Key 与对话类不是一套）
+IMAGEGEN_MODEL=qwen-image-plus
+IMAGEGEN_API_KEY=sk-百炼的密钥
+# BASE 可选：默认公共地址；也可填百炼专属域名（…maas.aliyuncs.com/compatible-mode/v1，
+# 程序会自动换算成文生图原生路径）
+# IMAGEGEN_BASE_URL=https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
 ```
 
-**厂商参数速查**
+**厂商 base_url 速查（对话类）**
 
-| 厂商 | 视觉模型 | base_url |
-|---|---|---|
-| DeepSeek | ✗ 无 | `https://api.deepseek.com/v1` |
-| 阿里云百炼 | ✓ `qwen-vl-max` | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| 智谱 GLM | ✓ `glm-4v-plus` | `https://open.bigmodel.cn/api/paas/v4` |
-| 月之暗面 | ✓ `moonshot-v1-8k-vision-preview` | `https://api.moonshot.cn/v1` |
-| 火山方舟 | ✓ `doubao-1.5-vision-pro` | `https://ark.cn-beijing.volces.com/api/v3` |
-| OpenAI | ✓ `gpt-4o` | `https://api.openai.com/v1` |
+| 厂商       | base_url                                            |
+| -------- | --------------------------------------------------- |
+| DeepSeek | `https://api.deepseek.com`                          |
+| 阿里云百炼    | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| 智谱 GLM   | `https://open.bigmodel.cn/api/paas/v4`              |
+| 月之暗面     | `https://api.moonshot.cn/v1`                        |
+| 火山方舟     | `https://ark.cn-beijing.volces.com/api/v3`          |
+| OpenAI   | `https://api.openai.com/v1`                         |
 
 **怎么确认配对了**：启动日志会逐个用途打印解析结果；页面里的「诊断」抽屉 → `GET /api/diag/llm` 会列出每个用途实际用的模型、走的是哪家、是「共享 provider」还是「独立 provider」，并可用 `POST /api/diag/llm-test` 真实调一次验证（消耗极少 token）。
 
@@ -292,14 +301,12 @@ DB_DRIVER=sqlite           # sqlite（默认，零运维）| mysql
 
 ## 六、孩子端几个关键行为
 
-**听写（语文页）**——这是改造中最核心的变化：
+**听写（语文页）**——不接大模型，全程家长把关：
 
-1. 选好课文，点「开始屏上听写」。
-2. 语音念一个字，孩子在田字格里手写；写错点「清空重写」。
-3. **一整轮全部写完**，再点「结束听写」一次性提交。
-4. 提交后有两种批改方式：
-   - **AI 批改**：N 个字拼成一张图，**一次**多模态请求判完（比逐字请求省约 8 倍成本）。返回结果会做严格的「数量 + 序号」校验，对不上就自动降级为逐字判，不会错位。
-   - **家长批改**：不调模型，家长在屏幕上逐字点 √ / ×。
+1. 选好课文，点「开始听写」。
+2. 系统逐个报字（可点「再听一遍」），孩子在田字格里手写；写错点「清空重写」。
+3. **一整轮全部写完**（一课生字一次写完，不切轮次），再点「结束听写」。
+4. 家长在屏幕上逐字点「写对 / 写错」落库 —— 系统不自动判对错。
 5. 写错的字自动进错题本，掌握了自动消掉。
 
 **口算**——20 题全部作答即视为「已完成」（不管错几道）；全对才给满分反馈和庆祝动效。
@@ -310,7 +317,6 @@ DB_DRIVER=sqlite           # sqlite（默认，零运维）| mysql
 
 - **自动**：后端每天凌晨 3 点写一份 JSON 快照到 `data/backup/`，保留 30 天。
 - **异地**：`deploy/backup.sh` 把快照和 `mysqldump` 一起挪到另一块盘 / NAS：
-
   ```bash
   ./deploy/backup.sh /mnt/nas/grade2
   # 加进 crontab：0 4 * * * /path/to/deploy/backup.sh /mnt/nas/grade2
@@ -318,24 +324,23 @@ DB_DRIVER=sqlite           # sqlite（默认，零运维）| mysql
 - **恢复**：`/admin` → 系统 → 导入备份。兼容两种格式：
   - 本服务导出的 **v2** 快照
   - **老单文件 HTML** 版本导出的 localStorage 备份（掌握度按课文标题映射回生字）
-
   导入可选「合并 / 覆盖」，默认跳过示例数据。
 
 ## 八、接口速览
 
-| 分组 | 说明 |
-|---|---|
-| `GET /api/health` | 版本、运行时长、数据库统计、脱敏后的模型配置 |
-| `/api/lessons*` | 课文与生字读取 |
-| `/api/story*` | 童话生成（可传已读标题避免重复出题） |
-| `/api/tts?text=` | 取语音 MP3（缓存未命中就现合成） |
-| `/api/mark*` | 听写判卷：POST 建任务返回 `taskId`，GET 轮询结果 |
-| `/api/state*` | 每日进度 / 口算 / 掌握度 / 错题 / 阅读计时 |
-| `/api/admin*` | 课文增删改、批量导字、AI 组词、预热、清缓存 |
-| `/api/backup*` | 导出 / 快照列表 / 立即备份 / 恢复 |
-| `/api/diag*` | 日志、模型连通性自检、TTS 自检 |
+| 分组                | 说明                                |
+| ----------------- | --------------------------------- |
+| `GET /api/health` | 版本、运行时长、数据库统计、脱敏后的模型配置            |
+| `/api/lessons*`   | 课文与生字读取                           |
+| `/api/story*`     | 童话生成（可传已读标题避免重复出题）                |
+| `/api/tts?text=`  | 取语音 MP3（缓存未命中就现合成）                |
+| `/api/language*`  | 语言强化：当日 9 题、作答保存、看图题配图（文生图）       |
+| `/api/state*`     | 每日进度 / 口算 / 掌握度 / 错题 / 阅读计时       |
+| `/api/admin*`     | 课文增删改、批量导字、AI 组词、模型配置、预热、清缓存      |
+| `/api/backup*`    | 导出 / 快照列表 / 立即备份 / 恢复             |
+| `/api/diag*`      | 日志、模型连通性自检、TTS 自检                 |
 
-判卷是**异步**的：POST 立刻返回 `taskId`，前端轮询。因为一次多模态请求可能几十秒，同步接口会超时。
+看图题的配图由文生图接口同步生成（约 7~15 秒）：拿到图片地址后立即下载落盘，前端只访问自己的 `/api/language/image/:date`，不会把厂商的 24 小时临时地址下发出去。
 
 ## 九、自检与排错
 
@@ -351,12 +356,13 @@ cd web && node test/smoke.mjs http://127.0.0.1:8788
 
 常见问题：
 
-| 现象 | 原因 / 处理 |
-|---|---|
-| 页面显示「学习台暂时打不开」 | 后端没起，或设备与服务器不在同一 Wi-Fi |
-| 判卷一直失败 | 判卷模型不支持视觉。换成 `qwen-vl-max` / `glm-4v-plus` / `gpt-4o` |
-| 故事生成超时 | 换国内厂商接口，或调大 `llm.timeoutMs.story` |
-| 点了朗读没声音 | 检查日志里的 TTS 段；浏览器策略要求首次交互后才能出声，点一下页面即可 |
+| 现象             | 原因 / 处理                                               |
+| -------------- | ----------------------------------------------------- |
+| 页面显示「学习台暂时打不开」 | 后端没起，或设备与服务器不在同一 Wi-Fi                                |
+| 看图题没有配图（退回文字描述） | 文生图 Key 未配置：在家长后台「系统与数据」里填 `IMAGEGEN_API_KEY`，或在 `.env` / config.yaml 里配置 |
+| 看图题报 401 / 画图失败 | Key 无效或不属于阿里云百炼北京地域；专属域名与 Key 必须同地域                   |
+| 故事生成超时         | 换国内厂商接口，或调大 `llm.timeoutMs.story`                     |
+| 点了朗读没声音        | 检查日志里的 TTS 段；浏览器策略要求首次交互后才能出声，点一下页面即可                 |
 | 改完 config.yaml 不生效 | 需要重启服务。容器里：`docker compose restart app` |
 | 在家里也要输口令、家长后台接口全 403 | 容器看到的来源地址被 Docker 改写了（公网 IPv6 走 userland docker-proxy 时必然如此）。先看接口日志里的 `ip` 字段：若是 `172.22.0.1` 这种**网桥网关**而不是你家的地址，就说明来源 IP 丢了 —— `deploy/docker-compose.yml` 的 app 必须用 `network_mode: host`（默认已是），且 `AUTH_LAN_CIDRS` 要覆盖你家的 IPv4 段和 IPv6 /64 |
 | 换了公信证书后，用内网 IP 访问反而报警 | 证书里只有域名。内网也改用域名访问（公信 CA 不给私有 IP 签证书） |
