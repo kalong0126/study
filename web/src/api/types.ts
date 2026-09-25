@@ -330,29 +330,6 @@ export interface StateSnapshot {
   language: { total: number; done: number };
 }
 
-export type MarkStatus = "pending" | "running" | "done" | "failed";
-
-export interface MarkItem {
-  index: number;
-  target: string;
-  correct: boolean | null;
-  written: string;
-  score: number | null;
-  comment: string;
-  reviewedBy: string;
-}
-
-export interface MarkTaskView {
-  taskId: number;
-  status: MarkStatus;
-  degraded: boolean;
-  error: string;
-  errorKind: string;
-  items: MarkItem[];
-  createdAt: string;
-  finishedAt: string | null;
-}
-
 export interface HealthInfo {
   version: string;
   uptimeMs: number;
@@ -361,21 +338,19 @@ export interface HealthInfo {
     baseUrl: string;
     apiKey: string;
     storyModel: string;
-    markModel: string;
     suggestModel: string;
     chatUrl: string;
     /** 生效密钥的脱敏形态（如 "sk-…abcd"），前端用于「已配置，留空则不修改」占位提示 */
     storyApiKeyMasked: string;
-    markApiKeyMasked: string;
   };
-  /** 文生图（语言强化看图题的配图） */
+  /** 文生图（语言强化看图题的配图）——唯一保留的 AI 出图模型 */
   imagegen: {
     enabled: boolean;
     model: string;
     url: string;
     size: string;
     timeoutMs: number;
-    /** 脱敏后的密钥来源说明 */
+    /** 脱敏后的密钥说明 */
     apiKey: string;
     ok: boolean;
     /** 磁盘上现存几张图 */

@@ -86,34 +86,29 @@ const ConfigSchema = z.object({
   }),
 
   llm: z.object({
-    // —— 默认 provider：下面三个用途没单独配时就都用它 ——
+    // —— 默认 provider：下面两个用途没单独配时就都用它 ——
     baseUrl: z.string().default("https://api.deepseek.com/v1"),
     apiKey: z.string().default(""),
 
     // —— 各用途的模型名 ——
     storyModel: z.string().default("deepseek-chat"),
-    markModel: z.string().default(""),
     suggestModel: z.string().default("deepseek-chat"),
 
     // —— 各用途可选的独立 provider（留空 = 回落到上面的默认值）——
-    // 典型场景：故事用便宜的纯文本模型，判卷用另一家的视觉模型，
+    // 典型场景：故事用便宜的纯文本模型，组词用另一家，
     // 两家的 baseUrl 和 key 都不一样，所以必须能各配一套。
     storyBaseUrl: z.string().default(""),
     storyApiKey: z.string().default(""),
-    markBaseUrl: z.string().default(""),
-    markApiKey: z.string().default(""),
     suggestBaseUrl: z.string().default(""),
     suggestApiKey: z.string().default(""),
 
     timeoutMs: z.object({
       story: z.number().int().default(60000),
-      mark: z.number().int().default(90000),
       suggest: z.number().int().default(45000),
     }),
     retries: z.number().int().min(0).max(5).default(1),
     temperature: z.object({
       story: z.number().default(0.9),
-      mark: z.number().default(0),
       suggest: z.number().default(0.5),
     }),
   }),
@@ -122,7 +117,7 @@ const ConfigSchema = z.object({
     enabled: z.boolean().default(true),
     model: z.string().default("qwen-image-plus"),
     baseUrl: z.string().default(""),
-    /** 留空 = 回落 mark（判卷）用途的 Key —— 都是阿里云百炼，一把 Key 通用 */
+    /** 阿里云百炼的 Key（文生图与对话不在同一类接口，Key 单独配） */
     apiKey: z.string().default(""),
     size: z.string().default("1328*1328"),
     dir: z.string().default("./data/images"),
@@ -397,16 +392,13 @@ export function startupWarnings(cfg: AppConfig): string[] {
       : "既没有环境变量 LLM_API_KEY，也没有在 .env 里填";
     const where = dotEnvSummary();
     w.push(
-      `llm.apiKey 未配置（${fromEnv}）→ 生成童话、手写判卷、组词建议都会失败。\n` +
+      `llm.apiKey 未配置（${fromEnv}）→ 生成童话、组词建议都会失败。\n` +
         (where.length ? `    已读取的 .env：${where.join("、")}\n` : "    没有找到任何 .env 文件\n") +
         `    修法：在下面任一文件里写一行 LLM_API_KEY=sk-xxxx，然后重启服务\n` +
         dotEnvCandidates()
           .map((p) => `      · ${p}`)
           .join("\n"),
     );
-  }
-  if (!cfg.llm.markModel) {
-    w.push("llm.markModel 未配置：手写判卷没有可用模型");
   }
   if (cfg.db.driver === "mysql" && !cfg.db.mysql.password) {
     w.push("db.driver=mysql 但 db.mysql.password 为空（环境变量 DB_PASSWORD 未设置）");
@@ -479,8 +471,8 @@ export function buildChatUrl(baseUrl: string): string {
   return `${base}/chat/completions`;
 }
 
-/** 三个用途：生成童话 / 手写判卷 / 组词建议 */
-export type LlmPurpose = "story" | "mark" | "suggest";
+/** 两个用途：生成童话 / 组词建议（文生图走 imagegen，不在这套体系里） */
+export type LlmPurpose = "story" | "suggest";
 
 export interface ResolvedLlm {
   purpose: LlmPurpose;
@@ -506,8 +498,6 @@ export interface ResolvedLlm {
 export interface LlmRuntimeOverride {
   storyModel?: string;
   storyApiKey?: string;
-  markModel?: string;
-  markApiKey?: string;
 }
 
 let runtimeOverride: LlmRuntimeOverride = {};
@@ -516,8 +506,6 @@ export function setLlmRuntimeOverride(o: LlmRuntimeOverride): void {
   runtimeOverride = {
     storyModel: o.storyModel?.trim() || undefined,
     storyApiKey: o.storyApiKey?.trim() || undefined,
-    markModel: o.markModel?.trim() || undefined,
-    markApiKey: o.markApiKey?.trim() || undefined,
   };
 }
 
@@ -528,19 +516,16 @@ export function getLlmRuntimeOverride(): LlmRuntimeOverride {
 /**
  * 各用途的默认固定接口地址（家长在后台看不到、也不用配）：
  *   · story → DeepSeek（纯文本，便宜）
- *   · mark  → 阿里云百炼（OpenAI 兼容模式，视觉模型 qwen-vl-* 在这里）
  *   · suggest 未固定，继续回落全局 baseUrl
- * 若 config.yaml 里显式配了某用途独立的 *BaseUrl（storyBaseUrl/markBaseUrl），
+ * 若 config.yaml 里显式配了某用途独立的 *BaseUrl（storyBaseUrl），
  * 则优先用显式值 —— 供测试 mock、自建网关等特殊场景覆盖。
  */
 const FIXED_BASE_URL: Partial<Record<LlmPurpose, string>> = {
   story: "https://api.deepseek.com/v1",
-  mark: "https://dashscope.aliyuncs.com/compatible-mode/v1",
 };
 
 function runtimePick(purpose: LlmPurpose): { model?: string; apiKey?: string } {
   if (purpose === "story") return { model: runtimeOverride.storyModel, apiKey: runtimeOverride.storyApiKey };
-  if (purpose === "mark") return { model: runtimeOverride.markModel, apiKey: runtimeOverride.markApiKey };
   return {};
 }
 
@@ -551,12 +536,11 @@ function runtimePick(purpose: LlmPurpose): { model?: string; apiKey?: string } {
  *   1. 运行时覆盖（家长后台填的模型名 / 密钥）
  *   2. 该用途独立的 *BaseUrl / *ApiKey / *Model
  *   3. 全局 baseUrl / apiKey（单厂商多模型场景）
- * story / mark 的接口地址被固定，不再受 config 影响。
+ * story 的接口地址被固定，不再受 config 影响。
  */
 export function resolveLlm(cfg: AppConfig, purpose: LlmPurpose): ResolvedLlm {
   const own = {
     story: { baseUrl: cfg.llm.storyBaseUrl, apiKey: cfg.llm.storyApiKey, model: cfg.llm.storyModel },
-    mark: { baseUrl: cfg.llm.markBaseUrl, apiKey: cfg.llm.markApiKey, model: cfg.llm.markModel },
     suggest: { baseUrl: cfg.llm.suggestBaseUrl, apiKey: cfg.llm.suggestApiKey, model: cfg.llm.suggestModel },
   }[purpose];
 
@@ -565,7 +549,7 @@ export function resolveLlm(cfg: AppConfig, purpose: LlmPurpose): ResolvedLlm {
   // 用 `||` 而不是 `??`：own.apiKey 是空字符串时要继续回落到全局 apiKey
   const apiKey = ov.apiKey || own.apiKey || cfg.llm.apiKey;
   // 接口地址：该用途独立 baseUrl 显式配置时优先（测试 / 换网关用），
-  // 否则 story/mark 用固定地址，suggest 回落全局 baseUrl。
+  // 否则 story 用固定地址，suggest 回落全局 baseUrl。
   const baseUrl = (own.baseUrl || FIXED_BASE_URL[purpose] || cfg.llm.baseUrl || "").trim();
 
   return {
@@ -581,9 +565,9 @@ export function resolveLlm(cfg: AppConfig, purpose: LlmPurpose): ResolvedLlm {
   };
 }
 
-/** 三个用途一次全解析出来（诊断页面 / 启动日志用） */
+/** 两个用途一次全解析出来（诊断页面 / 启动日志用） */
 export function resolveAllLlm(cfg: AppConfig): ResolvedLlm[] {
-  return (["story", "mark", "suggest"] as const).map((p) => resolveLlm(cfg, p));
+  return (["story", "suggest"] as const).map((p) => resolveLlm(cfg, p));
 }
 
 /* ------------------------------------------------------------ 文生图 */
@@ -600,35 +584,31 @@ export interface ResolvedImagegen {
   size: string;
   dir: string;
   timeoutMs: number;
-  /** Key 是从哪儿来的（诊断用：独立配置 / 复用判卷 Key） */
-  keyFrom: "own" | "mark" | "none";
+  /** Key 是否已配置（诊断用） */
+  keyFrom: "own" | "none";
   configured: boolean;
 }
 
 /**
  * 解析文生图该怎么调。
  *
- * Key 的优先级：imagegen.apiKey → mark（判卷）用途的 Key。
- * 判卷用的就是阿里云百炼，而千问文生图也在百炼上 —— 同一把 Key 通用，
- * 所以家长在后台填过判卷 Key 之后，画图功能不需要任何额外配置就能用。
+ * Key 独立配置：config.yaml 的 imagegen.apiKey 或环境变量 IMAGEGEN_API_KEY。
+ * 出图走阿里云百炼的同步文生图接口，与对话类模型不是一套 Key 体系。
  */
 export function resolveImagegen(cfg: AppConfig): ResolvedImagegen {
   const ig = cfg.imagegen;
-  const mark = resolveLlm(cfg, "mark");
   const ownKey = (ig.apiKey || "").trim();
-  const apiKey = ownKey || mark.apiKey;
-  const keyFrom: ResolvedImagegen["keyFrom"] = ownKey ? "own" : mark.apiKey ? "mark" : "none";
 
   return {
     enabled: ig.enabled,
     model: ig.model,
     url: (ig.baseUrl || DEFAULT_IMAGE_URL).trim(),
-    apiKey,
+    apiKey: ownKey,
     size: ig.size,
     dir: ig.dir,
     timeoutMs: ig.timeoutMs,
-    keyFrom,
-    configured: Boolean(ig.model && apiKey),
+    keyFrom: ownKey ? "own" : "none",
+    configured: Boolean(ig.model && ownKey),
   };
 }
 
@@ -641,7 +621,7 @@ export function imagegenSummary(cfg: AppConfig): Record<string, unknown> {
     url: r.url,
     size: r.size,
     timeoutMs: r.timeoutMs,
-    apiKey: r.apiKey ? `${maskKey(r.apiKey)} · ${r.keyFrom === "own" ? "独立" : "复用判卷 Key"}` : "(未配置)",
+    apiKey: r.apiKey ? `${maskKey(r.apiKey)}` : "(未配置)",
     ok: r.enabled && r.configured,
   };
 }
@@ -666,7 +646,7 @@ const MODEL_VENDORS: { re: RegExp; vendor: string; hosts: string[] }[] = [
 /** 找出「模型名属于 A 家、接口地址却是 B 家」的配置问题 */
 export function providerModelMismatches(cfg: AppConfig): string[] {
   const out: string[] = [];
-  const label: Record<LlmPurpose, string> = { story: "故事", mark: "判卷", suggest: "组词" };
+  const label: Record<LlmPurpose, string> = { story: "故事", suggest: "组词" };
 
   for (const p of resolveAllLlm(cfg)) {
     if (!p.model || !p.baseUrl) continue;

@@ -259,10 +259,11 @@ adminRouter.post(
 );
 
 /* ------------------------------------------------------------ 模型配置
- * 家长在后台「服务状态」里填故事/判卷的模型名与 API Key，保存即生效。
- * 接口地址已固定（story→DeepSeek、mark→阿里千问兼容模式），前端不再展示。
+ * 家长在后台「服务状态」里填故事/组词的模型名与 API Key，保存即生效。
+ * 接口地址已固定（story→DeepSeek，suggest 回落全局 baseUrl），前端不再展示。
  * 字段留空 = 不修改（保留原覆盖或回落 config.yaml / 环境变量），
- * 所以「只改模型名不动 key」或「只补 key 不动模型名」都成立。 */
+ * 所以「只改模型名不动 key」或「只补 key 不动模型名」都成立。
+ * 文生图（出图模型）不在这里：Key 走 config.yaml / 环境变量，模型在 imagegen.model。 */
 adminRouter.post(
   "/admin/llm",
   ah(async (req, res) => {
@@ -272,12 +273,8 @@ adminRouter.post(
 
     const storyModel = bStr(body.storyModel).trim();
     const storyApiKey = bStr(body.storyApiKey).trim();
-    const markModel = bStr(body.markModel).trim();
-    const markApiKey = bStr(body.markApiKey).trim();
     if (storyModel) next.storyModel = storyModel;
     if (storyApiKey) next.storyApiKey = storyApiKey;
-    if (markModel) next.markModel = markModel;
-    if (markApiKey) next.markApiKey = markApiKey;
 
     setLlmRuntimeOverride(next);
     await kvSet(0, "llmRuntime", next);

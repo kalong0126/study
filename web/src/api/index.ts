@@ -18,7 +18,6 @@ import {
   type LearnedWord,
   type Lesson,
   type LogRow,
-  type MarkTaskView,
   type MathQuestion,
   type MathSetState,
   type PointsLedgerEntry,
@@ -330,28 +329,6 @@ export const api = {
   listRedemptionHistory: (page = 1, pageSize = 10) =>
     request<RedemptionHistory>(`/points/history${qs({ page, pageSize })}`),
 
-  /* ---------------------------------------------------------------- 判卷 */
-
-  createMarkTask: (body: {
-    lessonId?: number | null;
-    mode: "composite" | "each";
-    targets: string[];
-    image?: string;
-    images?: string[];
-  }) =>
-    request<{ taskId: number; status: string; count: number; mode: string }>("/mark", {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
-  getMarkTask: (taskId: number) => request<{ task: MarkTaskView }>(`/mark/${taskId}`).then((r) => r.task),
-
-  reviewMarkTask: (taskId: number, items: { index: number; correct: boolean }[]) =>
-    request<{ task: MarkTaskView }>(`/mark/${taskId}/review`, {
-      method: "POST",
-      body: JSON.stringify({ items }),
-    }).then((r) => r.task),
-
   /* ------------------------------------------------------------------ 语音 */
 
   /** 直接当音频 URL 用（<audio src> 或 fetch 成 Blob） */
@@ -395,7 +372,7 @@ export const api = {
 
   diagLlm: () => request<DiagReport>("/diag/llm"),
 
-  diagLlmTest: (which: "story" | "mark" = "story") =>
+  diagLlmTest: (which: "story" | "suggest" = "story") =>
     request<{ which: string; model: string; reply: string; ms: number }>("/diag/llm-test", {
       method: "POST",
       body: JSON.stringify({ which }),
@@ -469,12 +446,10 @@ export const adminApi = {
   setVoice: (voice: string) =>
     request<{ voice: string }>("/admin/tts/voice", { method: "POST", body: JSON.stringify({ voice }) }),
 
-  /** 保存故事/判卷的模型名与 API Key（留空字段不修改；保存即生效并持久化） */
+  /** 保存故事模型的模型名与 API Key（留空字段不修改；保存即生效并持久化） */
   updateLlm: (body: {
     storyModel?: string;
     storyApiKey?: string;
-    markModel?: string;
-    markApiKey?: string;
   }) => request<{ saved: Record<string, unknown> }>("/admin/llm", { method: "POST", body: JSON.stringify(body) }),
 
   seed: (reset = false) => request<{ result: Record<string, unknown> }>("/admin/seed", {

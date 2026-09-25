@@ -11,8 +11,8 @@
  *      孩子第二天再打开看图题，图就变成裂图了。所以拿到地址后立刻下载到
  *      server/data/images/ 存起来，前端只访问我们自己的 /api/language/image/:date。
  *
- * Key 用的是「判卷（mark）」那把阿里云百炼 Key —— 同一个平台上，判卷能用的 Key
- * 画图也能用，家长不需要再申请一份。
+ * Key 独立配置：config.yaml 的 imagegen.apiKey（或环境变量 IMAGEGEN_API_KEY），
+ * 走阿里云百炼的文生图接口。
  */
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -126,8 +126,8 @@ export async function generateImage(
   if (!ig.configured) {
     throw new LlmError(
       "config",
-      "没有可用的文生图 API Key：它默认复用「判卷」那把阿里云百炼 Key，" +
-        "请先在后台「系统与数据」里填写判卷模型的 API Key，或单独配置 IMAGEGEN_API_KEY",
+      "没有可用的文生图 API Key：请在 config.yaml 的 imagegen.apiKey 里填写阿里云百炼 Key，" +
+        "或设置环境变量 IMAGEGEN_API_KEY",
       { purpose: "imagegen" },
     );
   }

@@ -758,7 +758,7 @@ function handleImageError(res: import("express").Response, e: unknown): boolean 
   const status = kind === "config" ? 400 : kind === "timeout" ? 504 : 502;
   const hint =
     kind === "config"
-      ? "（家长请在后台「系统与数据」里确认判卷模型的 API Key 已填写 —— 画图默认复用它那把阿里云百炼 Key；也可以单独配 IMAGEGEN_API_KEY）"
+      ? "（请在 config.yaml 的 imagegen.apiKey 里填写阿里云百炼 Key，或设置环境变量 IMAGEGEN_API_KEY）"
       : kind === "timeout"
         ? "（画图比较慢，可以再点一次试试）"
         : kind === "http" && Number((e.detail as { status?: number })?.status) === 401

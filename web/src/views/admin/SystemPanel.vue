@@ -27,8 +27,9 @@ const previewPlaying = ref("");
 const busy = ref("");
 const importInput = ref<HTMLInputElement | null>(null);
 
-/** 大模型配置表单（服务状态里可编辑保存）。model 预填生效值，key 留空表示不修改。 */
-const llmForm = ref({ storyModel: "", storyApiKey: "", markModel: "", markApiKey: "" });
+/** 大模型配置表单（服务状态里可编辑保存）。model 预填生效值，key 留空表示不修改。
+ *  出图模型不走这套运行时覆盖：Key 在 config.yaml / 环境变量里，模型在 imagegen.model。 */
+const llmForm = ref({ storyModel: "", storyApiKey: "" });
 
 /** 积分余额与兑换记录（家长查看孩子攒了多少分、换了什么） */
 const pointsBalance = ref(0);
@@ -51,7 +52,6 @@ async function loadHealth(): Promise<void> {
     // 预填模型名（生效值）；API Key 后端只给脱敏形态，无法回填完整值，留空 = 不修改
     if (health.value?.llm) {
       llmForm.value.storyModel = health.value.llm.storyModel || "";
-      llmForm.value.markModel = health.value.llm.markModel || "";
     }
   } catch (e) {
     ui.toast(describeApiError(e));
@@ -82,18 +82,15 @@ onMounted(() => {
   void loadPoints();
 });
 
-/** 保存故事/判卷的模型名与 API Key（留空字段不修改），保存即生效并持久化。 */
+/** 保存故事模型的模型名与 API Key（留空字段不修改），保存即生效并持久化。 */
 async function saveLlm(): Promise<void> {
   busy.value = "llm";
   try {
     await adminApi.updateLlm({
       storyModel: llmForm.value.storyModel,
       storyApiKey: llmForm.value.storyApiKey,
-      markModel: llmForm.value.markModel,
-      markApiKey: llmForm.value.markApiKey,
     });
     llmForm.value.storyApiKey = "";
-    llmForm.value.markApiKey = "";
     await loadHealth();
     ui.toast("模型配置已保存并生效");
   } catch (e) {
@@ -342,28 +339,42 @@ async function resetAll(): Promise<void> {
       </div>
 
       <div class="field">
-        <label>看图配图 · 语言强化「看图观察」（文生图）</label>
-        <div class="row" style="gap: 8px; flex-wrap: wrap; align-items: center">
-          <span class="badge-lite">{{ health.imagegen.enabled ? health.imagegen.model : "已关闭" }}</span>
-          <span class="badge-lite" :class="health.imagegen.ok ? '' : 'err'">{{ health.imagegen.ok ? "可用" : "不可用" }}</span>
-          <span style="font-size: 13px; color: var(--ink2)">已有 {{ health.imagegen.files }} 张图</span>
+        <label>AI 出图模型 · 语言强化「看图观察 / 看图说话」配图</label>
+        <div class="grid2">
+          <div class="field">
+            <label>模型</label>
+            <div class="badge-lite" style="font-family: ui-monospace, monospace">{{ health.imagegen.model }}</div>
+          </div>
+          <div class="field">
+            <label>状态</label>
+            <div class="row" style="gap: 8px; flex-wrap: wrap; align-items: center">
+              <span class="badge-lite" :class="health.imagegen.ok ? '' : 'err'">
+                {{ health.imagegen.ok ? "可用" : health.imagegen.enabled ? "不可用（缺 Key）" : "已关闭" }}
+              </span>
+              <span class="badge-lite">已画 {{ health.imagegen.files }} 张</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>输出尺寸</label>
+            <div class="badge-lite" style="font-family: ui-monospace, monospace">{{ health.imagegen.size }}</div>
+          </div>
+          <div class="field">
+            <label>单次超时</label>
+            <div class="badge-lite">{{ Math.round(health.imagegen.timeoutMs / 1000) }} 秒</div>
+          </div>
         </div>
         <div style="margin-top: 6px; font-size: 12.5px; color: var(--ink3)">
-          密钥 {{ health.imagegen.apiKey }}。
-          {{ health.imagegen.ok ? "孩子打开看图题时会自动画一张真图（约 7 秒），画好就存起来，不会再重复花钱。" : "没有可用密钥时，看图题会退回文字描述，不影响做题。" }}
+          密钥 {{ health.imagegen.apiKey }}（在 config.yaml 的 <code>imagegen.apiKey</code> 或环境变量
+          <code>IMAGEGEN_API_KEY</code> 里配置）。{{ health.imagegen.ok ? "孩子打开看图题时会自动画一张真图（约 7 秒），画好就存起来，不会再重复花钱。" : "没有可用密钥时，看图题会退回文字描述，不影响做题。" }}
         </div>
       </div>
 
       <div class="field" style="margin-top: 4px">
-        <label>大模型配置（保存即生效）</label>
+        <label>故事模型（保存即生效）</label>
         <div class="grid2">
           <div class="field">
             <label>故事模型名 · DeepSeek</label>
             <input v-model="llmForm.storyModel" class="inp" placeholder="deepseek-chat" />
-          </div>
-          <div class="field">
-            <label>判卷模型名 · 阿里千问（需看图）</label>
-            <input v-model="llmForm.markModel" class="inp" placeholder="qwen-vl-max" />
           </div>
           <div class="field">
             <label>故事 API Key</label>
@@ -375,19 +386,9 @@ async function resetAll(): Promise<void> {
               :placeholder="health.llm.storyApiKeyMasked ? `已配置 ${health.llm.storyApiKeyMasked}，留空则不修改` : 'sk-…'"
             />
           </div>
-          <div class="field">
-            <label>判卷 API Key</label>
-            <input
-              v-model="llmForm.markApiKey"
-              type="password"
-              class="inp"
-              autocomplete="off"
-              :placeholder="health.llm.markApiKeyMasked ? `已配置 ${health.llm.markApiKeyMasked}，留空则不修改` : 'sk-…'"
-            />
-          </div>
         </div>
         <div class="row" style="justify-content: space-between; align-items: center; gap: 12px">
-          <span class="tip" style="margin: 0; flex: 1">接口地址已固定：故事走 DeepSeek、判卷走阿里千问。</span>
+          <span class="tip" style="margin: 0; flex: 1">接口地址已固定：故事走 DeepSeek。组词建议跟随故事模型走同一把 Key。</span>
           <button class="btn primary sm" type="button" :disabled="busy === 'llm'" @click="saveLlm()">
             {{ busy === 'llm' ? '保存中…' : '保存配置' }}
           </button>

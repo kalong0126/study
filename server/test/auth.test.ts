@@ -126,11 +126,9 @@ llm:
   baseUrl: http://127.0.0.1:9/v1
   apiKey: sk-test-auth
   storyBaseUrl: http://127.0.0.1:9/v1
-  markBaseUrl: http://127.0.0.1:9/v1
   storyModel: mock-auth
-  markModel: mock-auth
   suggestModel: mock-auth
-  timeoutMs: { story: 2000, mark: 2000, suggest: 2000 }
+  timeoutMs: { story: 2000, suggest: 2000 }
 tts:
   provider: edge
   voice: zh-CN-XiaoyiNeural
@@ -416,7 +414,7 @@ db:
 llm:
   baseUrl: http://127.0.0.1:9/v1
   apiKey: sk-test
-  timeoutMs: { story: 2000, mark: 2000, suggest: 2000 }
+  timeoutMs: { story: 2000, suggest: 2000 }
 logging:
   level: warn
   dir: ./logs/_authtest

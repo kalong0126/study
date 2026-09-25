@@ -11,7 +11,7 @@ import Icon from "@/components/Icon.vue";
 import { useUiStore } from "@/stores/ui";
 
 const ui = useUiStore();
-const health = ref<{ db: { driver: string; lessons: number; chars: number }; llm: { storyModel: string; markModel: string }; tts: { voice: string; cacheCount: number } } | null>(null);
+const health = ref<{ db: { driver: string; lessons: number; chars: number }; imagegen: { model: string; ok: boolean }; tts: { voice: string; cacheCount: number } } | null>(null);
 
 onMounted(async () => {
   try {
@@ -36,7 +36,9 @@ onMounted(async () => {
       </RouterLink>
       <div class="spacer"></div>
       <span v-if="health" class="badge-lite">数据库 {{ health.db.driver }} · 课文 {{ health.db.lessons }} 篇 · 生字 {{ health.db.chars }}</span>
-      <span v-if="health" class="badge-lite">判卷模型 {{ health.llm.markModel || "未配置" }}</span>
+      <span v-if="health" class="badge-lite" :title="health.imagegen.ok ? '出图模型可用' : '出图模型缺 Key 或已关闭'">
+        出图模型 {{ health.imagegen.model || "未配置" }}{{ health.imagegen.ok ? "" : "（不可用）" }}
+      </span>
       <RouterLink class="btn ghost sm" to="/"><Icon name="back" :size="16" />回到孩子端</RouterLink>
     </header>
   </div>

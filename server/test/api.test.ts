@@ -34,7 +34,6 @@ const TSX = path.join(SERVER_ROOT, "node_modules", "tsx", "dist", "cli.mjs");
 //           video.mjs            8801 + mock 8802
 //           math-timer.mjs       8803
 //           nav.mjs              8804
-//           real-mark.mjs        8805
 //   其余脚本（smoke / layout）直接打 8788 上跑着的开发实例，不起新实例。
 //
 // ⚠️ 除了端口，这些「隔离实例」测试还不能**并行**跑。它们都要 spawn 一份
@@ -118,10 +117,6 @@ async function resetMock(): Promise<void> {
   await fetch(`${MOCK}/__reset`);
 }
 
-/** 一张 1x1 的透明 PNG，够用来冒充手写图（mock 不看图内容） */
-const TINY_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
-
 /* ------------------------------------------------------------------ 准备 */
 function prepare(): void {
   for (const f of [TEST_DB, `${TEST_DB}-wal`, `${TEST_DB}-shm`, SERVER_LOG]) {
@@ -153,13 +148,11 @@ llm:
   baseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   apiKey: sk-test-mock-key
   storyBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
-  markBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   storyModel: mock-story
-  markModel: mock-vision
   suggestModel: mock-story
-  timeoutMs: { story: 4000, mark: 4000, suggest: 4000 }
+  timeoutMs: { story: 4000, suggest: 4000 }
   retries: 1
-  temperature: { story: 0.9, mark: 0, suggest: 0.5 }
+  temperature: { story: 0.9, suggest: 0.5 }
 imagegen:
   enabled: true
   model: mock-image
@@ -775,112 +768,7 @@ async function main(): Promise<void> {
     const tstillOk = await api("GET", `/api/tts?text=${encodeURIComponent("好。")}&kind=sentence`, undefined, true);
     eq("D13 含可读字的一段仍然 200", tstillOk.status, 200);
 
-    /* ============================ E. 判卷 ============================ */
-    group("E. 手写判卷");
-    await resetMock();
-    await setMockMode("ok");
-    const targets = ["两", "哪", "宽"];
-    const mk1 = await api("POST", "/api/mark", {
-      lessonId: lesson1,
-      mode: "composite",
-      targets,
-      image: TINY_PNG,
-      images: targets.map(() => TINY_PNG),
-    });
-    eq("E1 提交判卷返回 taskId", mk1.status, 200);
-    const taskId1 = Number(mk1.json.taskId);
-    ok("E1b 立即返回 pending（异步任务）", mk1.json.status === "pending");
-
-    let task: Record<string, never> & Record<string, unknown> = {};
-    for (let i = 0; i < 40; i++) {
-      await sleep(400);
-      const r = await api("GET", `/api/mark/${taskId1}`);
-      task = r.json.task as typeof task;
-      if ((task as { status: string }).status === "done" || (task as { status: string }).status === "failed") break;
-    }
-    const items = (task as { items: { index: number; target: string; correct: boolean; comment: string }[] }).items;
-    eq("E2 任务完成", (task as { status: string }).status, "done");
-    eq("E3 结果项数与目标一致", items.length, 3);
-    eq("E4 序号严格对应 1,2,3", items.map((i) => i.index), [1, 2, 3]);
-    eq("E5 目标字对应正确", items.map((i) => i.target), targets);
-    eq("E6 未触发降级", (task as { degraded: boolean }).degraded, false);
-    calls = await mockCalls();
-    eq("E7 批量判卷只发 1 次请求（成本差 8 倍的关键）", calls.count, 1);
-    ok("E8 请求带图片（多模态）", calls.calls[0].hasImage === true);
-
-    const stM = await api("GET", "/api/state");
-    const masteryMap = stM.json.mastery as Record<string, Record<string, number>>;
-    eq("E9 判对的字写入掌握度=1", masteryMap[String(lesson1)]["两"], 1);
-    eq("E10 判错的字写入掌握度=0", masteryMap[String(lesson1)]["哪"], 0);
-    const wrongCn = (stM.json.wrong as { chinese: { refKey: string }[] }).chinese;
-    ok(
-      "E11 判错的字进入错字本",
-      wrongCn.some((w) => w.refKey === `${lesson1}:哪`),
-      JSON.stringify(wrongCn.map((w) => w.refKey)),
-    );
-    ok("E12 判对的字不在错字本", !wrongCn.some((w) => w.refKey === `${lesson1}:两`));
-
-    const rv = await api("POST", `/api/mark/${taskId1}/review`, { items: [{ index: 2, correct: true }] });
-    ok("E13 家长改判成功", rv.status === 200);
-    const stM2 = await api("GET", "/api/state");
-    const wrongCn2 = (stM2.json.wrong as { chinese: { refKey: string }[] }).chinese;
-    ok("E14 改判为对后从错字本移除", !wrongCn2.some((w) => w.refKey === `${lesson1}:哪`));
-    eq(
-      "E15 改判后掌握度同步为 1",
-      (stM2.json.mastery as Record<string, Record<string, number>>)[String(lesson1)]["哪"],
-      1,
-    );
-
-    await resetMock();
-    await setMockMode("wrongcount");
-    const mk2 = await api("POST", "/api/mark", {
-      lessonId: lesson1,
-      mode: "composite",
-      targets,
-      image: TINY_PNG,
-      images: targets.map(() => TINY_PNG),
-    });
-    const taskId2 = Number(mk2.json.taskId);
-    let task2: Record<string, unknown> = {};
-    for (let i = 0; i < 50; i++) {
-      await sleep(400);
-      const r = await api("GET", `/api/mark/${taskId2}`);
-      task2 = r.json.task as Record<string, unknown>;
-      if (task2.status === "done" || task2.status === "failed") break;
-    }
-    eq("E16 数量不符时自动降级逐字判卷", task2.status, "done");
-    eq("E17 降级标记为 true", task2.degraded, true);
-    eq("E18 降级后结果仍然完整", (task2.items as unknown[]).length, 3);
-    calls = await mockCalls();
-    eq("E19 降级后发起了逐字请求（1 批量 + 3 单字 = 4）", calls.count, 4);
-
-    await resetMock();
-    await setMockMode("ok");
-    const mk3 = await api("POST", "/api/mark", {
-      lessonId: lesson1,
-      mode: "each",
-      targets: ["两", "哪"],
-      images: [TINY_PNG, TINY_PNG],
-    });
-    const taskId3 = Number(mk3.json.taskId);
-    let task3: Record<string, unknown> = {};
-    for (let i = 0; i < 40; i++) {
-      await sleep(400);
-      const r = await api("GET", `/api/mark/${taskId3}`);
-      task3 = r.json.task as Record<string, unknown>;
-      if (task3.status === "done" || task3.status === "failed") break;
-    }
-    eq("E20 each 模式可用", task3.status, "done");
-    eq("E21 each 模式结果完整", (task3.items as { index: number }[]).map((i) => i.index), [1, 2]);
-
-    const mkBad = await api("POST", "/api/mark", { mode: "composite", targets: [], image: TINY_PNG });
-    eq("E22 空 targets 返回 400", mkBad.status, 400);
-    const mkBad2 = await api("POST", "/api/mark", { mode: "composite", targets: ["两"] });
-    eq("E23 composite 缺图返回 400", mkBad2.status, 400);
-    const mkBad3 = await api("POST", "/api/mark", { mode: "each", targets: ["两", "哪"], images: [TINY_PNG] });
-    eq("E24 each 图数不匹配返回 400", mkBad3.status, 400);
-    const notFound = await api("GET", "/api/mark/999999");
-    eq("E25 不存在的任务返回 404", notFound.status, 404);
+    // E 段（手写判卷 /api/mark/*）已随 AI 判卷功能下线整体移除；听写改由家长在屏上审核。
 
     /* ============================ F. 家长后台 ============================ */
     group("F. 家长内容后台");

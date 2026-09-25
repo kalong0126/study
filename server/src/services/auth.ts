@@ -287,7 +287,7 @@ const PUBLIC_PATHS = new Set([
  * 家长专属路径 —— 公网一律拒。
  *
  * 判据是「孩子端到底会不会调它」：只被家长后台 / 诊断抽屉调用的都归这里。
- * 孩子端要用的接口（答题、看题、朗读、看视频、判卷、读余额）全都不在表里。
+ * 孩子端要用的接口（答题、看题、朗读、看视频、读余额）全都不在表里。
  */
 function isParentOnly(method: string, p: string, body: unknown): boolean {
   if (p === "/admin" || p.startsWith("/admin/")) return true;

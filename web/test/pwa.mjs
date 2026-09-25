@@ -97,11 +97,10 @@ llm:
   baseUrl: https://api.deepseek.com
   apiKey: test-key-not-used
   storyModel: deepseek-chat
-  markModel: deepseek-chat
   suggestModel: deepseek-chat
-  timeoutMs: { story: 60000, mark: 90000, suggest: 45000 }
+  timeoutMs: { story: 60000, suggest: 45000 }
   retries: 0
-  temperature: { story: 0.9, mark: 0, suggest: 0.5 }
+  temperature: { story: 0.9, suggest: 0.5 }
 tts:
   provider: edge
   voice: zh-CN-XiaoyiNeural

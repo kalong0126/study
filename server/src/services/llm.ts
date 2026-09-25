@@ -40,7 +40,7 @@ export interface ChatMessage {
 export interface ChatOptions {
   /**
    * 用哪个用途的模型配置。它决定了 baseUrl / apiKey / 模型名 / 超时 / 温度。
-   * 传 resolveLlm(cfg, "story" | "mark" | "suggest") 的返回值。
+   * 传 resolveLlm(cfg, "story" | "suggest") 的返回值。
    */
   provider: ResolvedLlm;
   messages: ChatMessage[];
@@ -55,7 +55,7 @@ export interface ChatOptions {
    * 少数网关不支持这个字段（会返回 400），调用方应当捕获后去掉它再重试一次。
    */
   responseFormat?: "json_object";
-  /** 日志标签，例如 "story" / "mark" / "suggest" / "language" */
+  /** 日志标签，例如 "story" / "suggest" / "language" */
   tag: string;
 }
 
@@ -92,7 +92,7 @@ export function extractContent(data: unknown): string {
 /**
  * 判断这次响应是不是「推理型模型的思考内容」：
  * content 为空、但 reasoning_content 有内容。
- * 这类模型（deepseek-v4-pro / deepseek-reasoner 等）判卷、生成童话都不合适：
+ * 这类模型（deepseek-v4-pro / deepseek-reasoner 等）生成童话、组词都不合适：
  * 输出先进 reasoning_content，一旦 max_tokens 被思考过程吃光，content 就是空的。
  */
 export function isReasoningOnly(data: unknown): boolean {
@@ -215,7 +215,7 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
           throw new LlmError(
             "empty",
             "这个模型是「推理型」的，回复只写了思考过程（reasoning_content），没有给出正文。" +
-              "判卷 / 生成童话要用能直接输出的模型，例如 deepseek-chat。",
+              "生成童话 / 组词要用能直接输出的模型，例如 deepseek-chat。",
             { status: res.status, ms, model, bodyHead: raw.slice(0, 200) },
           );
         }
@@ -288,14 +288,13 @@ export async function chat(opts: ChatOptions): Promise<ChatResult> {
 
 /**
  * 自检用：把每个用途最终生效的 provider / 模型整理出来（密钥脱敏）。
- * 前端诊断页直接展示这份数据，用户就能一眼看出「故事走了哪家、判卷走了哪家」。
+ * 前端诊断页直接展示这份数据，用户就能一眼看出「故事走了哪家、组词走了哪家」。
  */
 export function llmConfigSummary(): Record<string, unknown> {
   const cfg = loadConfig();
   const story = resolveLlm(cfg, "story");
-  const mark = resolveLlm(cfg, "mark");
   const suggest = resolveLlm(cfg, "suggest");
-  const purposes = [story, mark, suggest].map((p) => ({
+  const purposes = [story, suggest].map((p) => ({
     purpose: p.purpose,
     model: p.model || "(未配置)",
     baseUrl: p.baseUrl,
@@ -316,11 +315,9 @@ export function llmConfigSummary(): Record<string, unknown> {
     purposes,
     // 为了兼容老前端的字段（这里返回「生效值」，已含运行时覆盖）
     storyModel: story.model,
-    markModel: mark.model,
     suggestModel: suggest.model,
     // 前端表单用：只给脱敏状态，用于「已配置，留空则不修改」的占位提示
     storyApiKeyMasked: story.apiKey ? maskKey(story.apiKey) : "",
-    markApiKeyMasked: mark.apiKey ? maskKey(mark.apiKey) : "",
     timeouts: cfg.llm.timeoutMs,
   };
 }

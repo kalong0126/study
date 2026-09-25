@@ -44,7 +44,7 @@ server:
   # 鉴权（端口暴露到公网时**必须**打开）
   # --------------------------------------------------------------------------
   # 规则一句话：内网照旧不打扰自己人，公网必须先输口令，而且**家长功能在公网一律拒绝**。
-  #   · 公网 + 孩子口令 → 能用孩子端全部功能（答题 / 朗读 / 看视频 / 判卷 / 兑换）
+  #   · 公网 + 孩子口令 → 能用孩子端全部功能（答题 / 朗读 / 看视频 / 兑换）
   #   · 公网 + 家长口令 → 拒绝（连试都不让试，否则公网就成了家长口令的猜解口）
   #   · 公网 + 内容后台 / 备份恢复 / 运行诊断 / 预生成音频 / 重置今日 → 一律 403
   # 想自己验证「公网那套锁生效没有」：临时把下面的 forcePublic 改成 true，本机也会被拦。
@@ -109,10 +109,11 @@ db:
 # ---------------------------------------------------------------------------
 # 大模型（OpenAI 兼容接口）
 # ---------------------------------------------------------------------------
-# 三个用途，各自可以指定不同的模型，甚至来自不同厂商：
+# 两个用途，各自可以指定不同的模型，甚至来自不同厂商：
 #   story   → 生成童话（纯文本模型即可，越便宜越好）
-#   mark    → 手写判卷（**必须支持视觉/看图**，纯文本模型会直接失败）
 #   suggest → 组词候选建议（纯文本）
+#
+# 出图模型不在这一段里：文生图走下面的 imagegen 配置（阿里云百炼同步接口）。
 #
 # 回落规则：某用途的 *BaseUrl / *ApiKey 留空 → 自动用下面的全局 baseUrl / apiKey。
 # 所以「同一家厂商换模型」只需改模型名；「不同厂商各用各的 key」才需要单独配。
@@ -120,7 +121,6 @@ db:
 # 对应的环境变量（写在 .env 里更方便，不用改这个文件）：
 #   LLM_BASE_URL / LLM_API_KEY
 #   LLM_STORY_MODEL / LLM_STORY_BASE_URL / LLM_STORY_API_KEY
-#   LLM_MARK_MODEL  / LLM_MARK_BASE_URL  / LLM_MARK_API_KEY
 #   LLM_SUGGEST_MODEL / LLM_SUGGEST_BASE_URL / LLM_SUGGEST_API_KEY
 # ---------------------------------------------------------------------------
 llm:
@@ -130,26 +130,20 @@ llm:
 
   # —— 各用途的模型名 ——
   storyModel: ${LLM_STORY_MODEL:-deepseek-chat}
-  # 可选视觉模型：qwen-vl-max / glm-4v-plus / gpt-4o / doubao-1.5-vision-pro
-  markModel: ${LLM_MARK_MODEL:-qwen-vl-max}
   suggestModel: ${LLM_SUGGEST_MODEL:-deepseek-chat}
 
   # —— 各用途可选的独立 provider（留空 = 回落到全局）——
   storyBaseUrl: ${LLM_STORY_BASE_URL:-}
   storyApiKey: ${LLM_STORY_API_KEY:-}
-  markBaseUrl: ${LLM_MARK_BASE_URL:-}
-  markApiKey: ${LLM_MARK_API_KEY:-}
   suggestBaseUrl: ${LLM_SUGGEST_BASE_URL:-}
   suggestApiKey: ${LLM_SUGGEST_API_KEY:-}
 
   timeoutMs:
     story: 60000
-    mark: 90000
     suggest: 45000
   retries: 1
   temperature:
     story: 0.9
-    mark: 0
     suggest: 0.5
 
 # ---------------------------------------------------------------------------
@@ -159,8 +153,7 @@ llm:
 #   一次请求直接返回图片 URL（约 6~15 秒），我们随即把图下载到本地存起来
 #   —— 厂商给的 URL 只有 24 小时有效期，绝不能直接下发给前端。
 #
-# apiKey 留空时自动回落 **mark（判卷）用途** 的 Key：判卷用的就是百炼，
-# 同一把 Key 既能判卷又能画图，家长不用再买一份。
+# apiKey 必填：阿里云百炼的 Key（config.yaml 或环境变量 IMAGEGEN_API_KEY）。
 #
 # 想关掉（不出图、退回纯文字画面描述）就把 enabled 改成 false。
 # 想更省钱可换 wan2.2-t2i-flash（万相极速版，另需改 baseUrl 为异步接口）。

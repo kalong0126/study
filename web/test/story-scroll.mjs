@@ -67,13 +67,11 @@ llm:
   baseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   apiKey: sk-test-mock-key
   storyBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
-  markBaseUrl: http://127.0.0.1:${MOCK_PORT}/v1
   storyModel: mock-story
-  markModel: mock-vision
   suggestModel: mock-story
-  timeoutMs: { story: 8000, mark: 8000, suggest: 8000 }
+  timeoutMs: { story: 8000, suggest: 8000 }
   retries: 0
-  temperature: { story: 0.9, mark: 0, suggest: 0.5 }
+  temperature: { story: 0.9, suggest: 0.5 }
 tts:
   provider: edge
   voice: zh-CN-XiaoyiNeural

@@ -36,7 +36,6 @@ import { fail } from "./routes/helpers.js";
 import { healthRouter } from "./routes/health.js";
 import { languageRouter } from "./routes/language.js";
 import { lessonsRouter } from "./routes/lessons.js";
-import { markRouter } from "./routes/mark.js";
 import { pointsRouter } from "./routes/points.js";
 import { stateRouter } from "./routes/state.js";
 import { storyRouter } from "./routes/story.js";
@@ -46,7 +45,6 @@ import { seedLessons } from "./seed/index.js";
 import { createGuard } from "./services/auth.js";
 import { scheduleDailyBackup, stopDailyBackup } from "./services/backup.js";
 import { currentChildId } from "./services/child.js";
-import { failStaleTasks } from "./services/mark.js";
 import { imagegenInfo } from "./services/imagegen.js";
 import { setRuntimeVoice, ttsInfo } from "./services/tts/index.js";
 
@@ -86,7 +84,7 @@ function createApp(): express.Express {
     }),
   );
 
-  // 手写判卷要传 base64 图片，8 张字图 + 1 张合成图，30MB 留足余量
+  // 家长后台恢复导入的备份 JSON 可能很大（含全部学习历史），给足余量
   app.use(express.json({ limit: "30mb" }));
   app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 
@@ -134,7 +132,6 @@ function createApp(): express.Express {
   api.use(languageRouter);
   api.use(videoRouter);
   api.use(ttsRouter);
-  api.use(markRouter);
   api.use(pointsRouter);
   api.use(stateRouter);
   api.use(adminRouter);
@@ -220,17 +217,12 @@ async function main(): Promise<void> {
     setLlmRuntimeOverride({
       storyModel: savedLlm.storyModel,
       storyApiKey: savedLlm.storyApiKey,
-      markModel: savedLlm.markModel,
-      markApiKey: savedLlm.markApiKey,
     });
     logSys.info({ keys: Object.keys(savedLlm).join("、") }, "已恢复上次填写的模型配置");
   }
 
   const childId = await currentChildId();
   logSys.info({ childId }, "当前孩子上下文就绪");
-
-  const cleaned = await failStaleTasks();
-  if (cleaned) logSys.warn({ cleaned }, "已把上次异常退出遗留的判卷任务标记为失败");
 
   const seed = await seedLessons();
   if (seed.created) logSys.info(seed, "首次启动，已导入课文种子数据");
@@ -255,14 +247,14 @@ async function main(): Promise<void> {
     );
   }
 
-  // 文生图（语言强化看图题的配图）。它默认复用判卷那把百炼 Key，配错了一看就知道
+  // 文生图（语言强化看图题的配图），Key 独立配置（imagegen.apiKey / IMAGEGEN_API_KEY）
   const ig = imagegenInfo();
   logSys.info(
     {
       enabled: ig.enabled,
       model: ig.model,
       size: ig.size,
-      key: ig.configured ? `已配置（${ig.keyFrom === "own" ? "独立" : "复用判卷 Key"}）` : "(未配置，看图题将退回文字描述)",
+      key: ig.configured ? "已配置" : "(未配置，看图题将退回文字描述)",
     },
     "文生图配置",
   );

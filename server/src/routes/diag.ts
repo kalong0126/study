@@ -124,7 +124,7 @@ diagRouter.get(
     }
 
     // 每个用途单独一行，能一眼看出来「谁走了哪家、哪个模型」
-    const purposeLabel: Record<string, string> = { story: "故事模型", mark: "判卷模型（需视觉）", suggest: "组词模型" };
+    const purposeLabel: Record<string, string> = { story: "故事模型", suggest: "组词模型" };
     const purposeChecks = resolved.map((p) => ({
       name: purposeLabel[p.purpose] ?? p.purpose,
       ok: p.configured,
@@ -145,7 +145,7 @@ diagRouter.get(
         return {
           name: "模型与厂商匹配",
           ok: mism.length === 0,
-          detail: mism.length ? mism.join("  ／  ") : "三个用途的模型名与接口地址一致",
+          detail: mism.length ? mism.join("  ／  ") : "各用途的模型名与接口地址一致",
         };
       })(),
       {
@@ -183,10 +183,10 @@ diagRouter.post(
   "/diag/llm-test",
   ah(async (req, res) => {
     const cfg = loadConfig();
-    const which = bStr(req.body?.which, "story") === "mark" ? "mark" : "story";
-    const model = which === "mark" ? cfg.llm.markModel : cfg.llm.storyModel;
+    const which: "story" | "suggest" = bStr(req.body?.which, "story") === "suggest" ? "suggest" : "story";
+    const model = which === "suggest" ? cfg.llm.suggestModel : cfg.llm.storyModel;
     if (!model) {
-      fail(res, 400, which === "mark" ? "未配置判卷模型 llm.markModel" : "未配置故事模型 llm.storyModel");
+      fail(res, 400, which === "suggest" ? "未配置组词模型 llm.suggestModel" : "未配置故事模型 llm.storyModel");
       return;
     }
     try {

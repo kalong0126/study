@@ -62,11 +62,11 @@ async function runDiag(): Promise<void> {
   }
 }
 
-async function testLlm(which: "story" | "mark"): Promise<void> {
-  busy.value = which;
+async function testLlm(): Promise<void> {
+  busy.value = "story";
   try {
-    const r = await api.diagLlmTest(which);
-    summarized.value = `大模型 ${which === "mark" ? "判卷" : "故事"}模型（${r.model}）调用成功，${r.ms}ms，回复「${r.reply}」`;
+    const r = await api.diagLlmTest("story");
+    summarized.value = `大模型 故事模型（${r.model}）调用成功，${r.ms}ms，回复「${r.reply}」`;
     ui.toast("大模型调用成功");
   } catch (e) {
     summarized.value = describeApiError(e);
@@ -152,8 +152,7 @@ onUnmounted(stopPoll);
     <div class="drawer-body">
       <div class="row" style="gap: 8px">
         <button class="btn sm ghost" type="button" :disabled="busy !== ''" @click="runDiag()">网络自检</button>
-        <button class="btn sm ghost" type="button" :disabled="busy !== ''" @click="testLlm('story')">测试故事模型</button>
-        <button class="btn sm ghost" type="button" :disabled="busy !== ''" @click="testLlm('mark')">测试判卷模型</button>
+        <button class="btn sm ghost" type="button" :disabled="busy !== ''" @click="testLlm()">测试故事模型</button>
         <button class="btn sm ghost" type="button" :disabled="busy !== ''" @click="testTts()">测试语音</button>
       </div>
 

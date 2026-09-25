@@ -5,7 +5,7 @@
  * 输出示例：
  *   [2026-09-12 21:30:11.123] INFO  [llm]  童话生成成功 model=deepseek-chat ms=4231 chars=582
  *   [2026-09-12 21:30:12.456] INFO  [tts]  合成完成 text="眼睛" voice=zh-CN-XiaoyiNeural cache=MISS ms=812
- *   [2026-09-12 21:30:15.789] ERROR [mark] 判卷失败 kind=timeout msg="请求超时"
+ *   [2026-09-12 21:30:15.789] ERROR [llm] 大模型调用失败 kind=timeout msg="请求超时"
  *
  * 三个出口：stdout（带颜色）、按天文件、内存环形缓冲（供 /api/diag/logs 读取）
  */
@@ -237,7 +237,7 @@ export const logHttp = mod("http");
 export const logDb = mod("db");
 export const logLlm = mod("llm");
 export const logTts = mod("tts");
-export const logMark = mod("mark");
+export const logStory = mod("story");
 export const logSeed = mod("seed");
 export const logVideo = mod("video");
 export const logBackup = mod("backup");

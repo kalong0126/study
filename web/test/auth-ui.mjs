@@ -64,11 +64,9 @@ llm:
   baseUrl: http://127.0.0.1:9/v1
   apiKey: sk-test-authui
   storyBaseUrl: http://127.0.0.1:9/v1
-  markBaseUrl: http://127.0.0.1:9/v1
   storyModel: mock-authui
-  markModel: mock-authui
   suggestModel: mock-authui
-  timeoutMs: { story: 2000, mark: 2000, suggest: 2000 }
+  timeoutMs: { story: 2000, suggest: 2000 }
   retries: 0
 tts:
   provider: edge

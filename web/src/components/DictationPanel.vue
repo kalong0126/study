@@ -22,8 +22,8 @@
  * 「结束听写」会 emit("close") 让父页面收起。
  *
  * 原来那条 AI 链路（拼网格图 + 一次多模态请求 + 轮询 taskId + 数量序号校验 +
- * 自动降级逐字判 + 家长改判）整套已从本组件删除；后端 `/api/mark/*` 接口保留未动，
- * 前端不再调用。所以这一页现在没有任何「等待模型」的阶段，写完就能判。
+ * 自动降级逐字判 + 家长改判）已随 AI 判卷功能整体下线（前后端一起删除）。
+ * 所以这一页现在没有任何「等待模型」的阶段，写完就交给大人审核。
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { describeApiError } from "@/api";
