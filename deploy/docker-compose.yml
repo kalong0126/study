@@ -65,6 +65,10 @@ services:
     image: grade2-app:1.0
     container_name: grade2-app
     restart: unless-stopped
+    # PID 1 信号转发：用 docker 内置的 docker-init（就是 tini，随 Docker 自带，零下载）。
+    # 作用：node 收得到 SIGTERM，docker compose stop / down 时秒退，不用干等 10 秒。
+    # 以前是镜像里 apt 装 tini —— 国内访问 debian 源每次构建白等 100 秒+，已去掉。
+    init: true
     # ---------------------------------------------------------------- 网络
     # **必须用 host 网络**。不是为了省事，而是 bridge 模式下鉴权判不出「家里」：
     #   · 公网访问走 IPv6（域名只有 AAAA），而 Docker 默认 bridge **不做 IPv6 NAT**，
