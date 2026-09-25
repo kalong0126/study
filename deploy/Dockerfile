@@ -24,15 +24,9 @@ RUN npm run build
 # ---------------------------------------------------------------- 2. 后端
 FROM node:22-bookworm-slim AS server-build
 WORKDIR /build/server
-# better-sqlite3 是原生模块：优先命中官方预编译包，命中不了就本地编译。
-# 这一层在 COPY 之前，package.json 不变就永远 CACHED（0 秒）；万一缓存失效，
-# 也先把 debian 源换成阿里云镜像（NAS 在国内访问 deb.debian.org 极慢，实测 100 秒+）。
-# ca-certificates 不用装：node 基础镜像自带（npm 本身就依赖它）。
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' \
-      /etc/apt/sources.list.d/debian.sources \
- && apt-get update \
- && apt-get install -y --no-install-recommends python3 make g++ \
- && rm -rf /var/lib/apt/lists/*
+# better-sqlite3 v13 用 N-API，npm 包里自带 linux-x64 预编译二进制，运行时直接
+# 加载 —— 不需要 python3/make/g++，也**没有任何 apt-get**（国内访问 debian 源
+# 要 100 秒+）。server/.npmrc 的 ignore-scripts=true 保证 npm 不会去编译它。
 COPY server/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY server/ ./
