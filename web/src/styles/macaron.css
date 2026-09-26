@@ -986,9 +986,10 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .lg-cell.done { border-color: var(--green-d); box-shadow: 0 0 0 2px rgba(63, 191, 143, .30), 0 5px 14px rgba(63, 191, 143, .22); }
 .lg-cell.wrong { border-color: var(--red-d); box-shadow: 0 0 0 2px rgba(233, 82, 82, .24), 0 5px 14px rgba(233, 82, 82, .18); }
 .lg-no { position: absolute; top: 7px; left: 10px; font-size: 11px; font-weight: 800; color: var(--ink3); }
-/* 图标位装的是 3D 成品图（public/lang 下按题型成套生成），不再垫白底方块 ——
-   白框套彩图是两层边界打架；改成半透明白圆角衬底，图本身带 drop-shadow。 */
-.lg-ico { width: 48px; height: 48px; border-radius: 15px; background: rgba(255, 255, 255, .66); border: 1px solid rgba(255, 255, 255, .92); display: flex; align-items: center; justify-content: center; }
+/* 图标位装的是 3D 成品图（public/lang 下按题型成套生成，PNG 自带透明底）。
+   不垫白底方块 —— 白框套在马卡龙底色上是两层背景打架；透明图直接落在卡片色上，
+   图标只留 drop-shadow 提立体感。 */
+.lg-ico { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; }
 .lg-ico-img { width: 42px; height: 42px; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 4px rgba(90, 115, 150, .20)); }
 .lg-name { font-size: 13.5px; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.25; }
 .lg-tag { font-size: 11px; font-weight: 700; color: var(--ink3); }
@@ -1161,7 +1162,7 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   /* 九宫格在窄屏依然是 3 列（它是「副目录」，不该变成一列） */
   .lg-grid { gap: 7px; }
   .lg-cell { min-height: 106px; padding: 13px 5px 9px; border-radius: 14px; }
-  .lg-ico { width: 44px; height: 44px; border-radius: 13px; }
+  .lg-ico { width: 44px; height: 44px; }
   .lg-ico-img { width: 38px; height: 38px; }
   .lg-name { font-size: 12.5px; }
   .lg-tag { font-size: 10.5px; }
