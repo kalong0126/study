@@ -107,6 +107,26 @@ function locked(id: number): boolean {
   return statusOf(id) === "done";
 }
 
+/**
+ * 九种题型的 3D 图标（public/lang 下，AI 按题型生成的成套素材）。
+ * 键是后端 LANGUAGE_TYPES 里的 type，顺序与九宫格一一对应。
+ */
+const LANG_ICONS: Record<string, string> = {
+  word: "/lang/word.png",
+  word_collocation: "/lang/collocation.png",
+  sentence_expand: "/lang/expand.png",
+  sentence_correction: "/lang/correction.png",
+  sentence_detail: "/lang/detail.png",
+  sentence_order: "/lang/order.png",
+  image_observation: "/lang/observe.png",
+  image_speaking: "/lang/speak.png",
+  short_writing: "/lang/writing.png",
+};
+
+function langIcon(type: string): string {
+  return LANG_ICONS[type] ?? "";
+}
+
 function modeLabel(item: LanguageQuestion): string {
   if (item.mode === "choice") return "选择 · 自动判";
   if (item.mode === "fill") return "填空 · 自动判";
@@ -489,7 +509,7 @@ onUnmounted(() => stopAudio());
           @click="openQ(i)"
         >
           <span class="lg-no">{{ i + 1 }}</span>
-          <span class="lg-ico"><Icon :name="item.icon" :size="20" /></span>
+          <span class="lg-ico"><img class="lg-ico-img" :src="langIcon(item.type)" :alt="item.typeName" draggable="false" /></span>
           <span class="lg-name">{{ item.typeName }}</span>
           <span class="lg-tag">{{ modeLabel(item) }}</span>
           <span class="lg-st">{{ statusText(item) }}</span>

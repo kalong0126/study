@@ -966,14 +966,30 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
 .lg-theme { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .lg-theme-t { font-size: 15px; font-weight: 800; color: var(--ink); }
 .lg-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
-.lg-cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 108px; padding: 14px 8px 10px; border-radius: 16px; border: 1.5px solid var(--line2); background: #FAFCFF; cursor: pointer; font-family: inherit; transition: .18s; }
-.lg-cell:hover { transform: translateY(-2px); box-shadow: var(--shadow-s); border-color: #DDEDFA; }
-.lg-cell.done { background: #F1FDF8; border-color: #B7EBD6; }
-.lg-cell.wrong { background: #FFF7F7; border-color: #FFD5D5; }
+.lg-cell { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 116px; padding: 14px 8px 10px; border-radius: 16px; border: 1.5px solid var(--line2); background: #FAFCFF; cursor: pointer; font-family: inherit; transition: .18s; }
+.lg-cell:hover { transform: translateY(-2px); }
+/* 未完成态悬停才换描边/投影：done / wrong 的状态描边是信息，不能一悬停就被盖掉 */
+.lg-cell:not(.done):not(.wrong):hover { box-shadow: var(--shadow-s); }
+/* 九张卡的马卡龙底色：按系统主题色系（蓝/粉/绿/黄/紫/桃/青/樱/莱姆）逐卡轮转，
+   border 是同色系深一档的描边 —— 底色负责「不单调」，描边负责卡片轮廓还看得清 */
+.lg-grid .lg-cell:nth-child(1) { background: #EAF6FF; border-color: #C9E4F8; }
+.lg-grid .lg-cell:nth-child(2) { background: #FFEFF4; border-color: #FFD6E3; }
+.lg-grid .lg-cell:nth-child(3) { background: #EAF9F1; border-color: #C4EDD9; }
+.lg-grid .lg-cell:nth-child(4) { background: #FFF7DC; border-color: #F7E7AC; }
+.lg-grid .lg-cell:nth-child(5) { background: #F2EFFF; border-color: #DBD2F8; }
+.lg-grid .lg-cell:nth-child(6) { background: #FFF0E6; border-color: #FFD9C2; }
+.lg-grid .lg-cell:nth-child(7) { background: #E8F7F9; border-color: #C3E8ED; }
+.lg-grid .lg-cell:nth-child(8) { background: #FBEDFF; border-color: #E9D2F4; }
+.lg-grid .lg-cell:nth-child(9) { background: #F3F9E8; border-color: #DCECBE; }
+/* 完成态：**只加绿边**（描边换成主绿 + 外圈光晕），马卡龙底色保留 ——
+   以前整卡变绿会把底色盖掉，九宫格完成一半时绿成一片。 */
+.lg-cell.done { border-color: var(--green-d); box-shadow: 0 0 0 2px rgba(63, 191, 143, .30), 0 5px 14px rgba(63, 191, 143, .22); }
+.lg-cell.wrong { border-color: var(--red-d); box-shadow: 0 0 0 2px rgba(233, 82, 82, .24), 0 5px 14px rgba(233, 82, 82, .18); }
 .lg-no { position: absolute; top: 7px; left: 10px; font-size: 11px; font-weight: 800; color: var(--ink3); }
-.lg-ico { width: 34px; height: 34px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; color: var(--blue-d); }
-.lg-cell.done .lg-ico { color: var(--green-d); border-color: #B7EBD6; }
-.lg-cell.wrong .lg-ico { color: var(--red-d); border-color: #FFD5D5; }
+/* 图标位装的是 3D 成品图（public/lang 下按题型成套生成），不再垫白底方块 ——
+   白框套彩图是两层边界打架；改成半透明白圆角衬底，图本身带 drop-shadow。 */
+.lg-ico { width: 48px; height: 48px; border-radius: 15px; background: rgba(255, 255, 255, .66); border: 1px solid rgba(255, 255, 255, .92); display: flex; align-items: center; justify-content: center; }
+.lg-ico-img { width: 42px; height: 42px; object-fit: contain; display: block; user-select: none; -webkit-user-drag: none; filter: drop-shadow(0 2px 4px rgba(90, 115, 150, .20)); }
 .lg-name { font-size: 13.5px; font-weight: 800; color: var(--ink); text-align: center; line-height: 1.25; }
 .lg-tag { font-size: 11px; font-weight: 700; color: var(--ink3); }
 .lg-st { font-size: 11.5px; font-weight: 800; color: #C97F00; }
@@ -1144,7 +1160,9 @@ textarea.inp { padding: 11px 14px; line-height: 1.7; resize: vertical; min-heigh
   .row-edit { grid-template-columns: 48px 1fr 1fr 36px; gap: 6px; }
   /* 九宫格在窄屏依然是 3 列（它是「副目录」，不该变成一列） */
   .lg-grid { gap: 7px; }
-  .lg-cell { min-height: 100px; padding: 13px 5px 9px; border-radius: 14px; }
+  .lg-cell { min-height: 106px; padding: 13px 5px 9px; border-radius: 14px; }
+  .lg-ico { width: 44px; height: 44px; border-radius: 13px; }
+  .lg-ico-img { width: 38px; height: 38px; }
   .lg-name { font-size: 12.5px; }
   .lg-tag { font-size: 10.5px; }
   .lg-st { font-size: 11px; }
