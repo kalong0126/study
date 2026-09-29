@@ -230,20 +230,20 @@ async function main(): Promise<void> {
 
     const lessonsRes = await api("GET", "/api/lessons");
     const lessons = (lessonsRes.json.lessons ?? []) as { id: number; title: string; chars: { ch: string; word: string; pinyin: string }[] }[];
-    eq("A2 课文数量为 14", lessons.length, 14);
-    eq("A3 生字总数为 153", lessons.reduce((n, l) => n + l.chars.length, 0), 153);
+    eq("A2 课文数量为 27", lessons.length, 27);
+    eq("A3 生字总数为 232", lessons.reduce((n, l) => n + l.chars.length, 0), 232);
     ok("A4 所有生字都有组词", lessons.every((l) => l.chars.every((c) => c.word && c.word.length > 0)));
     ok("A5 所有生字都有拼音", lessons.every((l) => l.chars.every((c) => /[a-zāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜü]/i.test(c.pinyin))));
 
     const findChar = (title: string, ch: string): { pinyin: string; word: string } | undefined =>
       lessons.find((l) => l.title === title)?.chars.find((c) => c.ch === ch);
-    eq("A6 多音字「发」按组词读轻声(头发)", findChar("《妈妈睡了》", "发")?.pinyin, "fa");
-    eq("A7 多音字「哄」读 hǒng(哄睡)", findChar("《妈妈睡了》", "哄")?.pinyin, "hǒng");
-    eq("A8 多音字「朝」读 cháo(朝向)", findChar("《一封信》", "朝")?.pinyin, "cháo");
-    eq("A9 多音字「重」读 zhòng(重量)", findChar("《曹冲称象》", "重")?.pinyin, "zhòng");
-    eq("A10 多音字「杆」读 gǎn(秤杆)", findChar("《曹冲称象》", "杆")?.pinyin, "gǎn");
-    eq("A11 多音字「盛」读 shèng(盛开)", findChar("《日月潭》", "盛")?.pinyin, "shèng");
-    eq("A12 多音字「省」读 shěng(省份)", findChar("《黄山奇石》", "省")?.pinyin, "shěng");
+    eq("A6 多音字「数」读 shǔ(数不清)", findChar("《数星星的孩子》", "数")?.pinyin, "shǔ");
+    eq("A7 多音字「曲」读 qǔ(歌曲)", findChar("《去外婆家》", "曲")?.pinyin, "qǔ");
+    eq("A8 多音字「种」读 zhòng(种地)", findChar("《我要的是葫芦》", "种")?.pinyin, "zhòng");
+    eq("A9 多音字「切」读 qiè(一切)", findChar("《雾在哪里》", "切")?.pinyin, "qiè");
+    eq("A10 多音字「散」读 sàn(散步)", findChar("《雾在哪里》", "散")?.pinyin, "sàn");
+    eq("A11 多音字「似」读 sì(相似)", findChar("《古诗二首（江雪/敕勒歌）》", "似")?.pinyin, "sì");
+    eq("A12 多音字「区」读 qū(地区)", findChar("《日月潭》", "区")?.pinyin, "qū");
 
     /* ============================ B. 学习数据 ============================ */
     group("B. 学习数据");
@@ -791,16 +791,16 @@ async function main(): Promise<void> {
     const tian = (p1.json.lesson as { chars: { ch: string; word: string; pinyin: string }[] }).chars.find((c) => c.ch === "天");
     eq("F7 组词保存成功", tian?.word, "天空");
 
-    // 用「发」验证多音字重算（在《妈妈睡了》那课）
-    const mlId = lessons.find((l) => l.title === "《妈妈睡了》")!.id;
-    await api("PUT", `/api/admin/lessons/${mlId}/chars/${encodeURIComponent("发")}`, { word: "发现" });
+    // 用「数」验证多音字重算（在《数星星的孩子》那课）
+    const mlId = lessons.find((l) => l.title === "《数星星的孩子》")!.id;
+    await api("PUT", `/api/admin/lessons/${mlId}/chars/${encodeURIComponent("数")}`, { word: "数字" });
     const lr1 = await api("GET", `/api/admin/lessons/${mlId}`);
-    const fa1 = (lr1.json.lesson as { chars: { ch: string; pinyin: string }[] }).chars.find((c) => c.ch === "发");
-    eq("F8 改组词后拼音重算（发现 → fā）", fa1?.pinyin, "fā");
-    await api("PUT", `/api/admin/lessons/${mlId}/chars/${encodeURIComponent("发")}`, { word: "头发" });
+    const fa1 = (lr1.json.lesson as { chars: { ch: string; pinyin: string }[] }).chars.find((c) => c.ch === "数");
+    eq("F8 改组词后拼音重算（数字 → shù）", fa1?.pinyin, "shù");
+    await api("PUT", `/api/admin/lessons/${mlId}/chars/${encodeURIComponent("数")}`, { word: "数不清" });
     const lr2 = await api("GET", `/api/admin/lessons/${mlId}`);
-    const fa2 = (lr2.json.lesson as { chars: { ch: string; pinyin: string }[] }).chars.find((c) => c.ch === "发");
-    eq("F9 改回头发 → 轻声 fa（多音字消歧生效）", fa2?.pinyin, "fa");
+    const fa2 = (lr2.json.lesson as { chars: { ch: string; pinyin: string }[] }).chars.find((c) => c.ch === "数");
+    eq("F9 改回数不清 → shǔ（多音字消歧生效）", fa2?.pinyin, "shǔ");
 
     const delRes = await api("DELETE", `/api/admin/lessons/${newId}/chars/${encodeURIComponent("宽")}`);
     const left = (delRes.json.lesson as { chars: { ch: string; sortNo: number }[] }).chars;
@@ -812,11 +812,11 @@ async function main(): Promise<void> {
 
     const seedAgain = await api("POST", "/api/admin/seed", {});
     eq("F13 种子导入幂等（已存在则跳过）", (seedAgain.json.result as { created: number }).created, 0);
-    eq("F14 种子跳过数量为 14", (seedAgain.json.result as { skipped: number }).skipped, 14);
+    eq("F14 种子跳过数量为 27", (seedAgain.json.result as { skipped: number }).skipped, 27);
 
     await api("DELETE", `/api/admin/lessons/${newId}`);
     const afterDel = await api("GET", "/api/lessons");
-    eq("F15 删除课文", ((afterDel.json.lessons ?? []) as unknown[]).length, 14);
+    eq("F15 删除课文", ((afterDel.json.lessons ?? []) as unknown[]).length, 27);
 
     /* ============================ G. 备份与恢复 ============================ */
     group("G. 备份与恢复");
